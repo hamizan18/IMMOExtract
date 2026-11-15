@@ -1,20 +1,20 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1 selesai; tugas pertama M2 (pilih gambar dan preview lokal) selesai serta terverifikasi pada 2026-11-15. M2 secara keseluruhan belum selesai; tidak ada model AI.
+> **Status aktual:** M1 selesai; M2 memiliki input file, kamera ke preview lokal, dan upload/validasi server Express, semuanya terverifikasi. M2 keseluruhan belum selesai; kamera fisik dan model AI belum tersedia.
 
 ## Ringkasan
 
 - **Current milestone:** M2 — Input gambar — In progress.
-- **Current task:** Pemilihan gambar dan preview lokal selesai; belum ada upload server atau kamera.
-- **Overall status:** Fondasi layanan dan preview lokal berjalan; pipeline ekstraksi belum tersedia.
-- **Last verification:** 2026-11-15 — build frontend; browser: file valid/tidak valid, hapus/pilih ulang, race decode, cleanup URL, tanpa upload HTTP, desktop/mobile, serta tombol health.
+- **Current task:** Upload/validasi server selesai dan terverifikasi; tugas berikutnya menghubungkan upload ke frontend dan UI feedback.
+- **Overall status:** Fondasi layanan, input file, kamera lokal, dan upload server berjalan; pipeline ekstraksi belum tersedia.
+- **Last verification:** 2026-11-15 — node --test test/uploads.test.js: 24/24 PASS (upload valid PNG/JPEG/WebP, 17 kasus penolakan defensif, batas byte, abort koneksi, storage failure).
 
 ## Milestone
 
 | Milestone | Cakupan | Status | Kriteria selesai |
 | --- | --- | --- | --- |
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
-| M2 | Upload, kamera, validasi, preview input | In progress | Pemilihan/preview lokal teruji; kamera dan validasi upload server belum tersedia |
+| M2 | Upload, kamera, validasi, preview input | In progress | File dan kamera sintetis ke preview teruji; upload/validasi server teruji (24/24); kamera fisik dan frontend upload belum teruji |
 | M3 | POC SCHP, label/mask, PNG transparan | ⬜ Not started | Contoh foto diproses lokal; hasil transparan dapat diperiksa |
 | M4 | Job, object gallery, download individual/ZIP | ⬜ Not started | Job status & unduhan end-to-end teruji |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
@@ -34,10 +34,12 @@
 - Tugas pertama M2: input satu JPG/PNG/WebP, preview lokal, metadata, hapus/pilih ulang, pesan error, batas ukuran/dimensi sementara; tidak mengirim foto ke server.
 - Perubahan tugas M2 ini: `frontend/index.html`, `frontend/src/main.js`, modul baru `frontend/src/image-input.js`; `README.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`. Backend, FastAPI, dependensi, dan spesifikasi produk tidak diubah.
 - Inspeksi Git tugas M2: branch `main...origin/main`, perubahan awal hanya `docs/PROGRESS.md` dan `docs/HANDOFF.md`, tidak ada staged diff. Perubahan awal dipertahankan; tidak menjalankan staging/commit.
+- Tugas kamera M2: live view, capture PNG ke preview yang sama, pesan izin/perangkat, pembatalan dan penghentian stream; tanpa upload server atau AI.
+- Perubahan tugas kamera: `frontend/index.html`, `frontend/src/image-input.js`, `README.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`. Git awal bersih pada `main...origin/main`; tanpa staging/commit.
 
 ## In progress
 
-- M2 masih parsial: kamera serta penerimaan/validasi upload server belum dikerjakan. Tugas preview lokal selesai.
+- M2 masih parsial: frontend belum mengirim gambar ke endpoint server; kamera fisik belum diuji. Upload/validasi server selesai dan terverifikasi penuh.
 
 ## Blockers / risks
 
@@ -46,12 +48,13 @@
 - Pengujian Windows lokal saja; Linux/macOS dan deployment produksi belum diuji.
 - Checkpoint model belum dipilih/diunduh/diuji.
 - Batas dimensi preview diperiksa setelah decode browser; bukan perlindungan decompression bomb atau pengganti validasi server. Batas sementara dicatat di D-011, bukan benchmark.
+- Kamera/mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state tidak muncul lewat perpindahan tab headless; handler diuji lewat injeksi. Navigasi `pagehide` diuji nyata.
 - Setelah verifikasi awal, supervisor Express/Vite melaporkan exit 127 tanpa penyebab pada log. Keduanya dijalankan ulang; smoke HTTP kembali PASS. Wrapper backend baru exit 0 meskipun endpoint masih berfungsi. Keberlangsungan proses tool lintas sesi tidak dijamin; startup terminal pengguna tersedia di README.
 - Jangan menandai fitur M3–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Tambahkan pengambilan gambar kamera browser dengan izin pengguna ke preview lokal M2, termasuk penanganan izin ditolak dan penghentian stream; jangan mulai upload server/model AI pada tugas tersebut.
+Hubungkan upload server ke frontend: `frontend/src/image-input.js` mengirim `POST /api/uploads` setelah preview lokal, tampilkan `upload_id` atau pesan error server ke UI; tanpa model AI atau pipeline ekstraksi.
 
 ## Verification log
 
@@ -77,6 +80,21 @@ Tambahkan pengambilan gambar kamera browser dengan izin pengguna ke preview loka
 | 2026-11-15 | Browser: tunda penyelesaian decode asli, ganti gambar/hapus; lacak create/revoke object URL | PASS | Pilihan terbaru menang, hasil lama tidak muncul lagi, URL dibebaskan |
 | 2026-11-15 | Screenshot desktop 1365×768 dan mobile 390×844; tombol Periksa ulang | PASS | Preview terlihat, mobile tanpa overflow horizontal, health tetap terhubung |
 | 2026-11-15 | Kamera, upload server, model AI dan pipeline ekstraksi | NOT RUN | Di luar tugas preview; belum diimplementasikan |
+| 2026-11-15 | Kamera: `npm run build --prefix frontend` | PASS | Vite, 6 modul; tanpa dependensi tambahan |
+| 2026-11-15 | Chromium terisolasi `--use-fake-device-for-media-stream`; Buka kamera → Ambil foto | PASS | PNG 1280×720/nonuniform dari device sintetis; tanpa audio; track ended setelah capture |
+| 2026-11-15 | Tutup/hapus/berganti file; file invalid | PASS | Track dihentikan; preview file valid berfungsi, invalid ditolak |
+| 2026-11-15 | Browser permission denied → granted | PASS | Pesan penolakan dan pemulihan kamera |
+| 2026-11-15 | Tunda hasil getUserMedia dan callback toBlob asli | PASS | Stream terlambat dihentikan; file baru tidak ditimpa PNG lama |
+| 2026-11-15 | Injeksi NotFoundError, NotReadableError, API kamera tidak tersedia | PASS | Pesan sesuai, file fallback tetap tersedia |
+| 2026-11-15 | Perpindahan tab headless; observasi console pagehide awal | ERROR harness | Tidak menjadi hidden (timeout); console kosong. Dilanjutkan dengan injeksi hidden dan observasi sessionStorage pada navigasi nyata |
+| 2026-11-15 | Injeksi visibilitychange/hidden; navigasi nyata | PASS | Track ended; srcObject dilepas; listener pagehide mencatat ended sebelum dokumen dibuang |
+| 2026-11-15 | Screenshot live/capture viewport 390×844; tombol health | PASS | Tanpa overflow horizontal; preview dan health tampil |
+| 2026-11-15 | Pantau request selama skenario kamera/file | PASS | Tidak ada request HTTP selama skenario |
+| 2026-11-15 | Kamera/mobile fisik, background tab non-headless | NOT RUN | Memakai perangkat sintetis/viewport; tidak mengakses kamera pribadi |
+| 2026-11-15 | Upload server: `node --test test/uploads.test.js` (Antigravity) | PASS | 24/24 test: 3 format valid (PNG/JPEG/WebP), 17 kasus penolakan defensif (signature, MIME mismatch, corrupt, dimensi, animasi, ukuran berlebih, field salah, multipart tidak valid), batas byte exact, abort koneksi tanpa artefak, storage failure → 500 aman; tidak ada path bocor |
+| 2026-11-15 | Frontend upload ke server | NOT RUN | Frontend belum mengirim ke /api/uploads |
+
+Browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
 Fixture sintetis sementara di folder temp telah dihapus. Pengujian browser dijalankan melalui harness sesi, bukan test suite permanen baru.
 

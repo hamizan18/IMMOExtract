@@ -87,6 +87,17 @@
 - **Konsekuensi:** Pemeriksaan dimensi baru dilakukan setelah decode; tidak menjamin keamanan dekompresi. Validasi server tetap wajib sebelum menerima upload. Belum ada dependensi tambahan.
 - **Bukti tes:** Build frontend PASS; preview JPEG/PNG/WebP, tujuh penolakan input, hapus/pilih ulang, race decode terkendali, cleanup URL, dan tampilan mobile PASS; tidak ada request HTTP selama pengujian pemilihan gambar.
 
+## D-012 — Kamera lokal memakai lifecycle preview yang sama
+
+- **Tanggal:** 2026-11-15.
+- **Status:** Accepted untuk tugas kamera M2; upload server belum tersedia.
+- **Keputusan:** `getUserMedia` setelah tindakan pengguna, `audio: false`, preferensi ideal kamera belakang/1280×720. Canvas menghasilkan PNG yang masuk `showImage` dan batas D-011. Dimensi diperiksa sebelum alokasi canvas; tanpa dependensi baru.
+- **Lifecycle:** Semua track dihentikan setelah frame disalin, saat tutup/hapus/pilih file, `visibilitychange` ke hidden, dan `pagehide`. Nomor sesi membatalkan hasil izin/encoding usang; stream yang diterima setelah pembatalan langsung dihentikan.
+- **Alasan:** Menjaga privasi dan mencegah foto async lama menimpa pilihan terbaru tanpa membuat pipeline upload.
+- **Alternatif:** Atribut file input `capture` saja tidak menyediakan kontrol live view, izin, dan penghentian stream yang konsisten.
+- **Konsekuensi:** Memerlukan secure context; dialog izin tidak selalu bisa ditutup programatis. Tes sintetis tidak membuktikan kompatibilitas kamera fisik.
+- **Bukti tes:** Build PASS; kamera sintetis → PNG 1280×720/nonuniform; penolakan/pemulihan izin, track shutdown, race async, file fallback, navigasi aktual, dan viewport mobile PASS. Hidden handler diuji lewat injeksi karena tab headless tetap visible.
+
 ## Keputusan yang masih terbuka
 
 - [ ] Versi runtime dan dependensi AI M3 setelah tes kompatibilitas (web/health M1 sudah diputuskan pada D-010).
@@ -96,4 +107,4 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-012 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-013 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

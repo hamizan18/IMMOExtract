@@ -4,60 +4,59 @@
 
 ## Last agent
 
-OMP — tugas pertama M2: pemilihan gambar dan preview lokal, 2026-11-15.
+Antigravity — verifikasi upload server M2, 2026-11-15.
 
 ## Current milestone
 
-**M2 — Input gambar — In progress.** M1 selesai; M2 belum memenuhi seluruh acceptance criteria.
+**M2 — Input gambar — In progress.** M1 selesai; M2 memiliki upload/validasi server yang sudah terverifikasi penuh, tapi frontend belum mengirim ke server.
 
 ## Last completed task
 
-Pemilihan satu JPG/PNG/WebP dan preview lokal dibuat serta diuji. Ada metadata, hapus/pilih ulang, penolakan input invalid, pembatasan ukuran/dimensi sementara, cleanup object URL, dan proteksi hasil decode usang. Tidak ada pengiriman foto ke server, kamera, atau model AI.
+Upload/validasi server Express terverifikasi: `node --test test/uploads.test.js` → 24/24 PASS. Mencakup penerimaan PNG/JPEG/WebP valid, 17 kasus penolakan defensif (signature, MIME mismatch, file corrupt, dimensi berlebih, animasi, file terlalu besar, field salah, multipart tidak valid), batas byte yang dikonfigurasi, abort koneksi tanpa artefak tersisa, dan storage failure yang mengembalikan JSON aman tanpa path bocor. Implementasi OMP diverifikasi tanpa modifikasi.
 
 ## Current task
 
-Tugas preview lokal selesai. Berikutnya hanya kamera browser ke preview lokal, bukan seluruh sisa M2 sekaligus.
+Upload server selesai dan terverifikasi. Berikutnya: hubungkan frontend ke endpoint server sehingga M2 menjadi end-to-end.
 
 ## Working components
 
-- Frontend `http://127.0.0.1:5173`: input gambar dan preview lokal serta health checks lama. Hanya object URL browser; tidak ada request upload/persistensi gambar.
+- Frontend `http://127.0.0.1:5173`: input file, kamera ke preview lokal, dan health checks. Upload ke server belum terhubung dari frontend.
 - Express `http://127.0.0.1:3000/api/health`: HTTP 200, independen dari FastAPI.
+- Express `POST /api/uploads`: menerima dan memvalidasi satu gambar, menyimpan ke `storage/uploads/<uuid>/`, mengembalikan `{upload_id, status, image}`. Terverifikasi 24/24 test.
 - FastAPI `http://127.0.0.1:8000/health`: HTTP 200, `model_loaded: false`.
 - Express `/api/health/ai`: health FastAPI sungguhan via HTTP; timeout 3 detik; HTTP 503 saat upstream gagal.
-- Proxy `/api` Vite bekerja; build frontend berhasil. `storage/` tidak disajikan publik dan belum digunakan.
-- Setelah handoff awal, supervisor melaporkan proses Express dan Vite berhenti dengan exit 127; log tidak menjelaskan penyebabnya. Keduanya dijalankan ulang melalui perintah npm README. `node scripts/smoke.mjs` sesudah restart kembali PASS (7 pemeriksaan). Supervisor proses backend baru melaporkan exit 0, meskipun endpoint Express tetap merespons dalam smoke test; jangan menyamakan status wrapper proses dengan ketersediaan HTTP.
-- Pemeriksaan browser tugas M2 menunjukkan health Express/FastAPI tetap terhubung. Ketersediaan proses lintas sesi tidak dijamin; bila endpoint tidak tersedia, jalankan layanan dari terminal pengguna sesuai README.
+- Proxy `/api` Vite bekerja; build frontend berhasil. `storage/` tidak disajikan publik.
+- Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint tidak tersedia, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
-- Tugas ini: `frontend/index.html`, `frontend/src/main.js`, modul baru `frontend/src/image-input.js`.
-- Dokumentasi: `README.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`.
-- Backend, FastAPI, package/lockfile, AGENTS, serta spesifikasi produk tidak diubah.
-- `frontend/dist/` dihasilkan ulang oleh build dan diabaikan Git. Fixture sintetis sementara telah dihapus; tidak ada foto pribadi/model.
+- Tugas ini: `docs/PROGRESS.md`, `docs/HANDOFF.md` (hanya dokumentasi; implementasi OMP tidak diubah).
+- File untracked OMP yang sudah ada: `backend/src/app.js`, `backend/src/uploads.js`, `backend/test/uploads.test.js`.
+- Backend package dimodifikasi OMP: `backend/package.json`, `backend/package-lock.json`, `backend/.env.example`, `backend/src/server.js`.
+- Frontend OMP: `frontend/index.html`, `frontend/src/image-input.js`.
 
 ## Uncommitted changes / Git status
 
-Saat mulai tugas ini, Git sudah berada di branch `main...origin/main`; hanya `docs/PROGRESS.md` dan `docs/HANDOFF.md` yang modified, staged diff kosong. Ini memperbarui catatan lama bahwa repo belum memiliki commit. Perubahan awal dipertahankan. Agent tidak menjalankan `git add` atau commit. Daftar perubahan tugas ini ada di atas; status akhir tidak diperiksa ulang.
+10 file tracked dimodifikasi (OMP + tugas ini), 3 lokasi untracked (`backend/src/app.js`, `backend/src/uploads.js`, `backend/test/`). Belum ada commit sejak M2 dimulai. Jangan commit tanpa instruksi pengguna.
 
 ## Current errors
 
-Tidak ditemukan error aplikasi pada skenario preview yang diuji. Batas 10 MiB, sisi 8192, dan 24 megapiksel sementara; dimensi dicek setelah decode, bukan proteksi dekompresi penuh. Validasi frontend tidak menggantikan validasi server. Riwayat supervisor exit 127 belum diketahui penyebabnya (lihat Working components). Python 3.14.3 belum diuji untuk model AI. Tes browser memakai browser desktop headless dan viewport mobile, bukan perangkat mobile fisik.
+Tidak ada error. Test suite berjalan bersih. Frontend belum mengirim ke `/api/uploads` (NOT RUN dari sisi browser).
 
 ## Tests performed
 
-- **PASS:** `npm run build --prefix frontend`.
-- **PASS:** browser aktual JPEG/PNG/WebP 160×100; metadata dan preview sesuai.
-- **PASS:** penolakan file teks `.png`, MIME/signature berbeda, kosong, PNG rusak, >10 MiB, sisi 8193, dan 5000×5000 piksel.
-- **PASS:** hapus/pilih ulang file yang sama; tidak ada request HTTP selama pemilihan gambar.
-- **PASS:** race dengan decode asli ditunda oleh harness: pilihan terbaru menang, hapus saat decode tidak memunculkan gambar lama, object URL dibebaskan.
-- **PASS:** screenshot desktop/mobile 390×844 tanpa overflow; tombol health lama tetap bekerja.
-- Percobaan harness race pertama memakai helper wait yang keliru (selector, bukan ekspresi); setelah dikoreksi ke `page.waitForFunction`, pengujian PASS tanpa perubahan source.
-- Fixture sintetis telah dihapus; tidak ada test suite browser permanen baru. Tes M1 historis tetap dicatat di `PROGRESS.md`.
-- **NOT RUN:** kamera, upload server, model AI (belum tersedia).
+- **PASS:** `node --test test/uploads.test.js` — 24/24 subtest, duration ~2.3 detik.
+  - accept PNG, JPEG, WebP dengan path klien diabaikan, file tersimpan privat
+  - tolak: missing file, file kosong, fake PNG, MIME mismatch, MIME tidak didukung
+  - tolak: file corrupt setelah metadata valid, sisi >8192px, >24MP, animated WebP, APNG
+  - tolak: >10 MiB, field tidak dikenal, banyak file, field teks tambahan, JSON request, boundary hilang, multipart terpotong
+  - batas byte yang dikonfigurasi (exact limit pass, +1 byte reject)
+  - abort koneksi tidak meninggalkan file
+  - storage failure → HTTP 500 JSON aman, tidak ada path bocor, backend tetap sehat
 
 ## Next action (only one)
 
-**Tambahkan pengambilan gambar kamera browser dengan izin pengguna ke preview lokal M2**, termasuk kondisi izin ditolak dan penghentian stream. Jangan mulai upload server/model AI pada tugas tersebut. Reuse batas input serta lifecycle preview; LSP belum dikonfigurasi pada inspeksi tugas ini.
+**Hubungkan upload frontend ke server**: modifikasi `frontend/src/image-input.js` untuk mengirim `POST /api/uploads` (multipart) setelah preview lokal berhasil, tampilkan `upload_id` atau pesan error server ke UI; jangan mulai job processing atau pipeline AI.
 
 ## Handoff rules
 

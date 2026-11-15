@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1 tersedia dan teruji. Tugas pertama M2 menambahkan pemilihan gambar dan preview lokal; belum ada pengiriman gambar ke server, kamera, ekstraksi, atau model AI. Lihat `docs/PROGRESS.md` untuk bukti verifikasi.
+> **Status proyek:** M1 tersedia dan teruji. M2 memiliki pemilihan gambar serta kamera ke preview lokal; belum ada upload server, ekstraksi, atau model AI. Kamera diuji dengan perangkat sintetis Chromium, belum kamera fisik. Lihat `docs/PROGRESS.md`.
 
 ## Gambaran fitur
 
@@ -50,11 +50,19 @@ IMMOExtract/
 
 ## Preview lokal (M2, sebagian)
 
-Pada halaman utama, pilih satu JPG/JPEG, PNG, atau WebP. Preview menampilkan gambar, nama file, dimensi, dan ukuran. **Hapus pilihan** mengosongkan preview; gambar lain dapat dipilih tanpa reload. Data gambar hanya menjadi object URL di browser, tidak dikirim ke server atau disimpan oleh aplikasi.
+Pada halaman utama, pilih satu JPG/JPEG, PNG, atau WebP, atau gunakan **Buka kamera → Ambil foto**. Preview menampilkan gambar, nama file, dimensi, dan ukuran. **Hapus pilihan** mengosongkan preview; gambar lain dapat dipilih tanpa reload. Data gambar hanya menjadi object URL di browser, tidak dikirim ke server atau disimpan oleh aplikasi.
 
 Batas sementara preview: **10 MiB (10.485.760 byte)**, maksimal **8192 piksel per sisi** dan **24.000.000 piksel**. File kosong, signature/MIME tidak sesuai, atau gagal decode ditolak dengan pesan. Dimensi diperiksa **setelah decode browser**, bukan perlindungan penuh terhadap decompression bomb. Pemeriksaan ini hanya UX frontend; validasi server defensif belum tersedia. Tidak ada tombol ekstraksi atau hasil AI palsu.
 
 Uji manual: pilih JPG/PNG/WebP valid; ganti gambar; hapus lalu pilih file yang sama; coba file rusak, teks berekstensi `.png`, file >10 MiB, atau dimensi melebihi batas. Preview lama harus hilang saat pilihan baru diproses/gagal. Pengujian aktual desktop/mobile dan race decode dicatat di `PROGRESS.md`.
+
+### Kamera lokal
+
+Kamera memerlukan **HTTPS atau localhost** serta izin browser. Aplikasi meminta video saja (tanpa mikrofon) setelah **Buka kamera** ditekan; preferensi kamera belakang dan ukuran 1280×720 bersifat ideal, bukan syarat perangkat. Penolakan izin, perangkat tidak ditemukan/sibuk, atau API tidak tersedia menghasilkan pesan; pemilihan file tetap tersedia.
+
+**Ambil foto** menyalin frame ke PNG lokal dengan validasi/preview yang sama. Stream dihentikan setelah frame disalin, saat **Tutup kamera**, **Hapus pilihan**, berganti file, halaman tersembunyi, atau navigasi keluar. Pembatalan tidak selalu menutup dialog izin browser, tetapi stream yang terlambat diberikan langsung dihentikan. Capture lama tidak boleh menimpa file baru.
+
+Uji otomatis memakai kamera sintetis Chromium, bukan kamera/foto pribadi. Izin ditolak diuji lewat kebijakan browser; error perangkat dan hidden-state diuji lewat injeksi harness. Kamera/mobile fisik serta perpindahan tab di browser non-headless belum diuji.
 
 ## Menjalankan M1
 
