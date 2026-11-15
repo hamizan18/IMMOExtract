@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** Fondasi M1 tersedia: halaman status Vite, backend Express, dan health service FastAPI tanpa model AI. Fitur produk di bawah belum tersedia. Hasil verifikasi aktual dicatat di `docs/PROGRESS.md`.
+> **Status proyek:** M1 tersedia dan teruji. Tugas pertama M2 menambahkan pemilihan gambar dan preview lokal; belum ada pengiriman gambar ke server, kamera, ekstraksi, atau model AI. Lihat `docs/PROGRESS.md` untuk bukti verifikasi.
 
 ## Gambaran fitur
 
@@ -47,6 +47,14 @@ IMMOExtract/
 ```
 
 `frontend/`, `backend/`, dan `ai-service/` berisi fondasi M1. `storage/` tetap privat, diabaikan Git, dan belum digunakan.
+
+## Preview lokal (M2, sebagian)
+
+Pada halaman utama, pilih satu JPG/JPEG, PNG, atau WebP. Preview menampilkan gambar, nama file, dimensi, dan ukuran. **Hapus pilihan** mengosongkan preview; gambar lain dapat dipilih tanpa reload. Data gambar hanya menjadi object URL di browser, tidak dikirim ke server atau disimpan oleh aplikasi.
+
+Batas sementara preview: **10 MiB (10.485.760 byte)**, maksimal **8192 piksel per sisi** dan **24.000.000 piksel**. File kosong, signature/MIME tidak sesuai, atau gagal decode ditolak dengan pesan. Dimensi diperiksa **setelah decode browser**, bukan perlindungan penuh terhadap decompression bomb. Pemeriksaan ini hanya UX frontend; validasi server defensif belum tersedia. Tidak ada tombol ekstraksi atau hasil AI palsu.
+
+Uji manual: pilih JPG/PNG/WebP valid; ganti gambar; hapus lalu pilih file yang sama; coba file rusak, teks berekstensi `.png`, file >10 MiB, atau dimensi melebihi batas. Preview lama harus hilang saat pilihan baru diproses/gagal. Pengujian aktual desktop/mobile dan race decode dicatat di `PROGRESS.md`.
 
 ## Menjalankan M1
 

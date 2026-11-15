@@ -1,4 +1,5 @@
 import './style.css';
+import './image-input.js';
 
 const button = document.querySelector('#check-status');
 const backendStatus = document.querySelector('#backend-status');

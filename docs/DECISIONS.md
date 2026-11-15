@@ -76,6 +76,17 @@
 - **Konsekuensi:** Python 3.14.3 hanya terbukti untuk health service; kompatibilitas AI harus dievaluasi pada M3. Kontrak health perlu diperbarui saat model benar-benar tersedia. Dependensi transitif Python belum dikunci penuh. Proxy dev/preview bukan deployment produksi.
 - **Bukti tes:** build Vite PASS; smoke nyata 7 pemeriksaan PASS; FastAPI dihentikan menghasilkan 503 dengan 6 pemeriksaan PASS; browser desktop/mobile dan pemulihan setelah restart FastAPI PASS. Detail di `PROGRESS.md`.
 
+## D-011 — Preview gambar lokal sebelum upload server
+
+- **Tanggal:** 2026-11-15.
+- **Status:** Accepted untuk tugas pertama M2; M2 belum selesai.
+- **Keputusan:** File input satu gambar dengan object URL, tanpa request upload atau penyimpanan. Terima JPEG/PNG/WebP setelah pemeriksaan signature, MIME jika tersedia, dan decode browser. URL lama dicabut ketika diganti, dihapus, atau gagal; hasil async yang usang tidak boleh mengganti pilihan terbaru.
+- **Batas sementara:** Maksimal 10 MiB (10 × 1024 × 1024 byte), sisi 8192 piksel, total 24.000.000 piksel. Batas ini keputusan konservatif preview, bukan hasil benchmark atau batas inferensi final.
+- **Alasan:** Memberikan preview yang jujur dan terbatas tanpa memulai endpoint upload, job, kamera, atau AI sekaligus.
+- **Alternatif:** Data URL tidak dipilih agar tidak menyalin seluruh gambar menjadi string base64 di aplikasi.
+- **Konsekuensi:** Pemeriksaan dimensi baru dilakukan setelah decode; tidak menjamin keamanan dekompresi. Validasi server tetap wajib sebelum menerima upload. Belum ada dependensi tambahan.
+- **Bukti tes:** Build frontend PASS; preview JPEG/PNG/WebP, tujuh penolakan input, hapus/pilih ulang, race decode terkendali, cleanup URL, dan tampilan mobile PASS; tidak ada request HTTP selama pengujian pemilihan gambar.
+
 ## Keputusan yang masih terbuka
 
 - [ ] Versi runtime dan dependensi AI M3 setelah tes kompatibilitas (web/health M1 sudah diputuskan pada D-010).
@@ -85,4 +96,4 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-011 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-012 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

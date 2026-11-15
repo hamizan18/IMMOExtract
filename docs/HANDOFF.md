@@ -4,60 +4,60 @@
 
 ## Last agent
 
-OMP — implementasi dan verifikasi M1 pada 2026-11-15.
+OMP — tugas pertama M2: pemilihan gambar dan preview lokal, 2026-11-15.
 
 ## Current milestone
 
-**M1 — Project scaffold & service connectivity — selesai.** M2 belum dimulai.
+**M2 — Input gambar — In progress.** M1 selesai; M2 belum memenuhi seluruh acceptance criteria.
 
 ## Last completed task
 
-Fondasi Vite + Vanilla JS + Tailwind, Express, dan FastAPI dibuat serta diuji secara lokal. Koneksi Express → FastAPI sukses; kondisi FastAPI mati dan pulih juga diuji. Tidak ada model AI diunduh/dipasang.
+Pemilihan satu JPG/PNG/WebP dan preview lokal dibuat serta diuji. Ada metadata, hapus/pilih ulang, penolakan input invalid, pembatasan ukuran/dimensi sementara, cleanup object URL, dan proteksi hasil decode usang. Tidak ada pengiriman foto ke server, kamera, atau model AI.
 
 ## Current task
 
-Tidak ada pekerjaan implementasi aktif. Tugas berikutnya dibatasi pada input upload dan preview lokal frontend M2.
+Tugas preview lokal selesai. Berikutnya hanya kamera browser ke preview lokal, bukan seluruh sisa M2 sekaligus.
 
 ## Working components
 
-- Frontend `http://127.0.0.1:5173`: halaman status layanan, tombol periksa ulang, pesan jujur bahwa fitur AI/produk belum tersedia.
+- Frontend `http://127.0.0.1:5173`: input gambar dan preview lokal serta health checks lama. Hanya object URL browser; tidak ada request upload/persistensi gambar.
 - Express `http://127.0.0.1:3000/api/health`: HTTP 200, independen dari FastAPI.
 - FastAPI `http://127.0.0.1:8000/health`: HTTP 200, `model_loaded: false`.
 - Express `/api/health/ai`: health FastAPI sungguhan via HTTP; timeout 3 detik; HTTP 503 saat upstream gagal.
 - Proxy `/api` Vite bekerja; build frontend berhasil. `storage/` tidak disajikan publik dan belum digunakan.
-- Saat handoff, proses tool `immo-m1-frontend`, `immo-m1-backend`, `immo-m1-ai-restored` masih berjalan. Jika sesi tool sudah berakhir, jalankan kembali sesuai README; jangan menganggap proses lintas sesi tetap hidup.
+- Setelah handoff awal, supervisor melaporkan proses Express dan Vite berhenti dengan exit 127; log tidak menjelaskan penyebabnya. Keduanya dijalankan ulang melalui perintah npm README. `node scripts/smoke.mjs` sesudah restart kembali PASS (7 pemeriksaan). Supervisor proses backend baru melaporkan exit 0, meskipun endpoint Express tetap merespons dalam smoke test; jangan menyamakan status wrapper proses dengan ketersediaan HTTP.
+- Pemeriksaan browser tugas M2 menunjukkan health Express/FastAPI tetap terhubung. Ketersediaan proses lintas sesi tidak dijamin; bila endpoint tidak tersedia, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
-- Baru: `.gitignore`, `scripts/smoke.mjs`.
-- Baru: `frontend/package.json`, `frontend/package-lock.json`, `frontend/.env.example`, `frontend/vite.config.js`, `frontend/index.html`, `frontend/src/main.js`, `frontend/src/style.css`.
-- Baru: `backend/package.json`, `backend/package-lock.json`, `backend/.env.example`, `backend/src/server.js`.
-- Baru: `ai-service/requirements.txt`, `ai-service/main.py`.
-- Diperbarui: `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`.
-- Artefak lokal diabaikan Git: `frontend/node_modules/`, `backend/node_modules/`, `frontend/dist/`, `ai-service/.venv/`, cache Python. Tidak ada foto/hasil/model.
-- `AGENTS.md` dan `docs/PROJECT_SPEC.md` tidak diubah.
+- Tugas ini: `frontend/index.html`, `frontend/src/main.js`, modul baru `frontend/src/image-input.js`.
+- Dokumentasi: `README.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`.
+- Backend, FastAPI, package/lockfile, AGENTS, serta spesifikasi produk tidak diubah.
+- `frontend/dist/` dihasilkan ulang oleh build dan diabaikan Git. Fixture sintetis sementara telah dihapus; tidak ada foto pribadi/model.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal gagal karena `.git` belum ada. `git init` kemudian berhasil. Tidak ada `git add` atau commit yang dijalankan; seluruh source/dokumentasi belum dicommit. Status akhir tidak diperiksa ulang; agent berikutnya wajib memeriksa Git sebelum mengedit.
+Saat mulai tugas ini, Git sudah berada di branch `main...origin/main`; hanya `docs/PROGRESS.md` dan `docs/HANDOFF.md` yang modified, staged diff kosong. Ini memperbarui catatan lama bahwa repo belum memiliki commit. Perubahan awal dipertahankan. Agent tidak menjalankan `git add` atau commit. Daftar perubahan tugas ini ada di atas; status akhir tidak diperiksa ulang.
 
 ## Current errors
 
-Tidak ada error runtime pada skenario M1 yang diuji. HTTP 503 saat FastAPI sengaja dihentikan adalah hasil yang diharapkan. Python 3.14.3 belum diuji dengan PyTorch/SCHP; jangan menganggap runtime model sudah diputuskan. Linux/macOS dan deployment produksi belum diuji.
+Tidak ditemukan error aplikasi pada skenario preview yang diuji. Batas 10 MiB, sisi 8192, dan 24 megapiksel sementara; dimensi dicek setelah decode, bukan proteksi dekompresi penuh. Validasi frontend tidak menggantikan validasi server. Riwayat supervisor exit 127 belum diketahui penyebabnya (lihat Working components). Python 3.14.3 belum diuji untuk model AI. Tes browser memakai browser desktop headless dan viewport mobile, bukan perangkat mobile fisik.
 
 ## Tests performed
 
 - **PASS:** `npm run build --prefix frontend`.
-- **PASS:** `node scripts/smoke.mjs` — 7 pemeriksaan HTTP/JSON pada layanan nyata dan proxy Vite.
-- **PASS:** `node scripts/smoke.mjs --ai-unavailable` setelah FastAPI dihentikan — 6 pemeriksaan, integrasi 503 dan Express tetap 200.
-- **PASS:** browser aktual desktop/mobile; klik Periksa ulang pada kondisi sukses, gagal, dan pulih setelah FastAPI dijalankan kembali tanpa restart Express.
-- **PASS:** startup `npm start --prefix backend`, `npm run dev --prefix frontend`, dan `ai-service/.venv/Scripts/python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8000`.
-- Detail instalasi dan inspeksi Git ada di `PROGRESS.md`; langkah menjalankan ada di README.
-- **NOT RUN:** model AI dan fitur M2–M7 (belum diimplementasikan).
+- **PASS:** browser aktual JPEG/PNG/WebP 160×100; metadata dan preview sesuai.
+- **PASS:** penolakan file teks `.png`, MIME/signature berbeda, kosong, PNG rusak, >10 MiB, sisi 8193, dan 5000×5000 piksel.
+- **PASS:** hapus/pilih ulang file yang sama; tidak ada request HTTP selama pemilihan gambar.
+- **PASS:** race dengan decode asli ditunda oleh harness: pilihan terbaru menang, hapus saat decode tidak memunculkan gambar lama, object URL dibebaskan.
+- **PASS:** screenshot desktop/mobile 390×844 tanpa overflow; tombol health lama tetap bekerja.
+- Percobaan harness race pertama memakai helper wait yang keliru (selector, bukan ekspresi); setelah dikoreksi ke `page.waitForFunction`, pengujian PASS tanpa perubahan source.
+- Fixture sintetis telah dihapus; tidak ada test suite browser permanen baru. Tes M1 historis tetap dicatat di `PROGRESS.md`.
+- **NOT RUN:** kamera, upload server, model AI (belum tersedia).
 
 ## Next action (only one)
 
-**Implementasikan input upload gambar dan preview lokal frontend sebagai tugas kecil pertama M2.** Jangan mulai model AI atau pipeline ekstraksi.
+**Tambahkan pengambilan gambar kamera browser dengan izin pengguna ke preview lokal M2**, termasuk kondisi izin ditolak dan penghentian stream. Jangan mulai upload server/model AI pada tugas tersebut. Reuse batas input serta lifecycle preview; LSP belum dikonfigurasi pada inspeksi tugas ini.
 
 ## Handoff rules
 
