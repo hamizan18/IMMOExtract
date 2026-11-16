@@ -4,69 +4,78 @@
 
 ## Last agent
 
-Antigravity CLI — adaptasi arsitektur SCHP ATR-18 ke CPU murni & verifikasi forward pass, 2026-11-16.
+Antigravity CLI — unduh dan verifikasi checkpoint resmi SCHP ATR-18 pada CPU, 2026-11-16.
 
 ## Current milestone
 
-**M3 — POC human parsing — In progress.** M1/M2 selesai. Arsitektur model ResNet-101 AugmentCE2P CPU (`ai-service/schp_cpu`) terverifikasi lulus pengujian forward pass (1.98 detik pada AMD Ryzen 5 7430U, ~255 MB RAM). Checkpoint model belum diunduh.
+**M3 — POC human parsing — In progress.** M1/M2 selesai. Model ResNet-101 CPU (`ai-service/schp_cpu`) dan checkpoint resmi `exp-schp-201908301523-atr.pth` (255.06 MB, 603 keys) terverifikasi 100% cocok dan forward pass CPU berjalan lancar (1.86 detik pada AMD Ryzen 5 7430U). Pipeline ekstraksi gambar ke PNG transparan berikutnya.
 
 ## Last completed task
 
-Adaptasi arsitektur model SCHP ATR-18 ke CPU murni (pure PyTorch):
-- Dibuat modul `ai-service/schp_cpu/abn.py` yang mengimplementasikan `ABN` berbasis `F.batch_norm` dan `F.leaky_relu(slope=0.01)`, mempertahankan kompatibilitas 100% parameter `weight`, `bias`, `running_mean`, `running_var` tanpa memerlukan ekstensi CUDA C++ atau Ninja compiler.
-- Dibuat modul `ai-service/schp_cpu/model.py` dan `__init__.py` yang mengadopsi ResNet-101 AugmentCE2P (CE2P parsing branch, Edge module, PSPModule, dan Fusion branch) untuk label 18 kelas ATR.
-- Dibuat dan dijalankan `ai-service/test_schp_cpu.py` di `.venv-test`:
-  - 66.722.900 parameter terinstansiasi (~254.53 MB RAM).
-  - 603 state_dict keys terverifikasi dengan 119 buffer running_mean/running_var ABN.
-  - Forward pass CPU pada tensor `[1, 3, 512, 512]` selesai dalam 1.977 detik tanpa error atau NaN/Inf.
-  - Pipeline upsample bilinear ke 512×512 dan argmax ke map kelas 0..17 terverifikasi PASS.
+Unduh dan verifikasi checkpoint resmi SCHP ATR-18 pada model CPU:
+- File checkpoint resmi `exp-schp-201908301523-atr.pth` (267.445.237 bytes / 255.06 MB) diunduh ke `ai-service/models/` (diabaikan Git) via `ai-service/download_model.py` setelah izin eksplisit pengguna.
+- Script `ai-service/load_checkpoint_cpu.py` membuktikan:
+  - Checksum SHA-256 valid: `e9d7c91ce3b4e7133df56b599fc817b533e3439c5e8d282a59126d2fda339a2a`.
+  - 603/603 keys state dict cocok sempurna secara strictly valid (`<All keys matched successfully>`, 0 missing, 0 unexpected).
+  - Forward pass CPU dengan bobot terlatih asli dieksekusi dalam 1.857 detik dengan rentang logits valid [-2.12, 8.87].
 - Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS).
-- Keputusan dicatat di D-016.
+- Keputusan dicatat di D-017.
 
 ## Current task
 
-Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), simpan di direktori yang diabaikan git (`ai-service/models/`), verifikasi integritas file/hash, dan uji pemuatan bobot (`model.load_state_dict`) secara aman ke model CPU.
+Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`): menerima path file gambar input (JPG/PNG/WebP), melakukan preprocessing resize/pad/normalize 512×512, forward pass model ResNet-101 dengan bobot terlatih asli, menghasilkan binary mask alpha foreground manusia utuh dan multi-label segmentasi, serta mengekspor objek PNG transparan (RGBA) yang dapat diunduh. Uji dengan fixture sintetis.
 
 ## Working components
 
 - Frontend file/kamera → preview → upload server dan validasi backend teruji pada M2.
 - `ai-service/main.py` masih `/health` dengan `model_loaded: false` di `.venv` utama.
-- `ai-service/.venv-test` memuat runtime PyTorch CPU 2.15.0+cpu dan paket model mandiri `schp_cpu`.
-- Arsitektur model SCHP ATR-18 CPU terbukti dapat diinstansiasi dan dieksekusi via forward pass di CPU dalam ~1.98 detik.
-- Checkpoint resmi bobot belum diunduh; tidak ada mock inferensi AI palsu.
+- `ai-service/.venv-test` memuat runtime PyTorch CPU 2.15.0+cpu, arsitektur model mandiri `schp_cpu`, dan checkpoint resmi terverifikasi di `ai-service/models/exp-schp-201908301523-atr.pth`.
+- Model CPU dengan bobot resmi terbukti mengeksekusi inferensi dalam 1.857 detik.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint diperlukan, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
 - Tugas ini:
-  - `ai-service/schp_cpu/__init__.py` (ekspor paket model SCHP CPU)
-  - `ai-service/schp_cpu/abn.py` (implementasi pure-PyTorch ABN CPU)
-  - `ai-service/schp_cpu/model.py` (definisi ResNet-101 AugmentCE2P ATR-18 CPU)
-  - `ai-service/test_schp_cpu.py` (test suite verifikasi model & forward pass CPU)
-  - `docs/DECISIONS.md` (D-016)
+  - `ai-service/download_model.py` (script download streaming dengan progress)
+  - `ai-service/load_checkpoint_cpu.py` (script verifikasi SHA-256 dan pemuatan state dict CPU)
+  - `docs/DECISIONS.md` (D-017)
   - `docs/PROGRESS.md`
   - `docs/HANDOFF.md`
 
 ## Uncommitted changes / Git status
 
-Perubahan belum di-commit: file baru di `ai-service/schp_cpu/`, `ai-service/test_schp_cpu.py`, serta dokumen yang diperbarui (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Sesuai aturan, tidak melakukan commit otomatis.
+Perubahan belum di-commit: script baru di `ai-service/` (`download_model.py`, `load_checkpoint_cpu.py`), dokumen diperbarui (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Catatan: file bobot `ai-service/models/` otomatis diabaikan Git oleh `.gitignore`. Sesuai aturan, tidak melakukan commit otomatis.
 
 ## Current errors
 
-- **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint hanya disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit (D-014).
-- Tidak ada error teknis yang menghambat eksekusi CPU.
+- **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit ke repository (D-014).
+- Tidak ada error teknis yang menghambat eksekusi CPU atau pemuatan bobot.
 
 ## Tests performed
 
-- **PASS test_schp_cpu.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_schp_cpu.py` → 66.7M parameter, 603 keys, forward pass CPU 1.977s pada `[1, 3, 512, 512]`, upsample/argmax 18 kelas PASS.
+- **PASS download_model.py:** Download 267.445.237 bytes (255.06 MB) dari Hugging Face selesai tanpa error.
+- **PASS load_checkpoint_cpu.py:** SHA-256 match, 603/603 keys match strictly (0 missing, 0 unexpected), forward pass CPU 1.857s dengan logits valid.
 - **PASS backend suite:** `npm test --prefix backend` → 24/24 unit/integration tests PASS.
-- **PASS frontend build:** `npm run build --prefix frontend` → Vite 6 modules transformed, dist generated.
-- **NOT RUN:** unduh checkpoint SCHP ATR (`exp-schp-201908301523-atr.pth`), forward pass dengan bobot terlatih asli, masking PNG transparan, integrasi Express ↔ FastAPI.
+- **PASS frontend build:** `npm run build --prefix frontend` → Vite build PASS.
+- **NOT RUN:** pipeline ekstraksi foto input nyata ke file PNG transparan (RGBA), endpoint integrasi FastAPI ↔ Express.
 
 ## Next action (only one)
 
-**Unduh checkpoint resmi SCHP ATR-18 dan uji pemuatan bobot (load state_dict):**
-Buat folder `ai-service/models/` (sudah diabaikan Git), unduh file checkpoint resmi `exp-schp-201908301523-atr.pth`, catat ukuran dan sha256 checksum-nya, lalu tulis script verifikasi pemuatan bobot (`torch.load` dengan `map_location='cpu'` dan `weights_only=True` jika didukung) ke dalam `model = resnet101(num_classes=18)` untuk memastikan kecocokan semua 603 keys tanpa missing/unexpected keys.
+**Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`):**
+Buat modul ekstraksi mandiri yang memuat model SCHP ATR-18 terverifikasi, memproses gambar input (baca image dengan Pillow/NumPy, resize/letterbox 512×512, normalisasi mean/std ATR), menjalankan inferensi CPU, menghasilkan mask alpha foreground (semua kelas ATR foreground > 0), dan mengekstrak objek manusia ke format RGBA PNG transparan. Uji pipeline secara end-to-end dengan fixture gambar sintetis dan verifikasi kanal alpha (transparan di background, opaque di objek).
+
+## Handoff rules
+
+1. Jangan langsung membuat ulang folder/berkas yang ternyata sudah ada; inspeksi dulu.
+2. Jangan menghapus perubahan agent sebelumnya atau melakukan reset destruktif.
+3. Ubah file sesedikit mungkin dan kerjakan satu milestone pada satu waktu.
+4. Tulis semua hasil tes yang benar-benar dieksekusi.
+5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
+6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
+
+## Template perbaruan berikutnya
+
+Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.
 
 ## Handoff rules
 

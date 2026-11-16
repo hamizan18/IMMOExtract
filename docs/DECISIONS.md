@@ -147,15 +147,26 @@
 - **Konsekuensi:** Model ResNet-101 AugmentCE2P (66,722,900 parameter, ~254.5 MB RAM) dapat diinstansiasi dan dieksekusi murni di CPU. Forward pass untuk 1 gambar (512×512) selesai dalam ~1.98 detik di AMD Ryzen 5 7430U. Checkpoint resmi `exp-schp-201908301523-atr.pth` siap diunduh dan dimuat secara aman (`weights_only=True` / `map_location='cpu'`).
 - **Bukti tes:** `test_schp_cpu.py` PASS pada CPython 3.14.3 (`ALL SCHP CPU TESTS PASSED`): parameter count 66.7M, 603 state_dict keys, 119 ABN running_mean/var buffers, forward pass CPU 1.977 detik menghasilkan tensor valid tanpa NaN, upsample 512×512 dan argmax map 18 kelas terverifikasi.
 
+## D-017 — Pemuatan dan verifikasi checkpoint resmi SCHP ATR-18 pada CPU
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted; bobot model resmi terverifikasi 100% cocok dengan arsitektur CPU dan inferensi valid.
+- **Keputusan:** Mengunduh dan memverifikasi checkpoint resmi `exp-schp-201908301523-atr.pth` (255.06 MB, 267.445.237 bytes, SHA-256: `e9d7c91ce3b4e7133df56b599fc817b533e3439c5e8d282a59126d2fda339a2a`) ke folder `ai-service/models/` (diabaikan Git). Pemuatan bobot dilakukan menggunakan `torch.load(..., map_location='cpu')` dengan normalisasi prefix `module.` ke dalam model `resnet101(num_classes=18)` CPU.
+- **Alasan:** Izin eksplisit pengguna telah diperoleh sebelum pengunduhan. Seluruh 603 keys dari state_dict checkpoint upstream cocok persis (`<All keys matched successfully>`, 0 missing keys, 0 unexpected keys) ke dalam arsitektur pure-PyTorch CPU yang diadaptasi pada D-016.
+- **Konsekuensi:** Model AI lokal siap digunakan untuk tugas inferensi human parsing sesungguhnya (ekstraksi mask foreground, multi-label clothing segmentation, dan pembuatan PNG transparan). Forward pass CPU dengan bobot terlatih asli membutuhkan waktu 1.857 detik pada Ryzen 5 7430U dengan logits range [-2.12, 8.87].
+- **Bukti tes:** `ai-service/load_checkpoint_cpu.py` PASS (`=== ALL CHECKPOINT VERIFICATIONS PASSED ===`): ukuran file 267.445.237 bytes, SHA-256 match, 603 keys matched strictly, forward pass CPU 1.857s.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
 - [x] Adaptasi arsitektur SCHP ATR-18 ke CPU murni (D-016: pure PyTorch ABN + AugmentCE2P ResNet-101 di `ai-service/schp_cpu`).
-- [ ] Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), verifikasi keutuhan/hash, dan uji pemuatan bobot aman ke model CPU.
+- [x] Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), verifikasi keutuhan/hash, dan uji pemuatan bobot aman ke model CPU (D-017).
+- [ ] Pipeline inferensi gambar nyata (preprocessing BGR, forward pass, upsampling, pembuatan mask alpha, dan penyimpanan objek PNG transparan).
+- [ ] Integrasi AI service FastAPI (`POST /extract` atau `/infer`) dengan Express backend.
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-017 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-018 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
