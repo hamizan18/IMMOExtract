@@ -4,65 +4,68 @@
 
 ## Last agent
 
-Antigravity CLI — unduh dan verifikasi checkpoint resmi SCHP ATR-18 pada CPU, 2026-11-16.
+Antigravity CLI — implementasi pipeline ekstraksi gambar ke PNG transparan (`extractor.py`), 2026-11-16.
 
 ## Current milestone
 
-**M3 — POC human parsing — In progress.** M1/M2 selesai. Model ResNet-101 CPU (`ai-service/schp_cpu`) dan checkpoint resmi `exp-schp-201908301523-atr.pth` (255.06 MB, 603 keys) terverifikasi 100% cocok dan forward pass CPU berjalan lancar (1.86 detik pada AMD Ryzen 5 7430U). Pipeline ekstraksi gambar ke PNG transparan berikutnya.
+**M3 — POC human parsing — In progress.** M1/M2 selesai. Pipeline ekstraksi human parsing mandiri (`ai-service/extractor.py`) terverifikasi end-to-end pada CPU (1.90 detik pada AMD Ryzen 5 7430U), menghasilkan mask alpha foreground manusia utuh dan PNG transparan RGBA dengan preservasi pixel RGB asli tanpa ketergantungan OpenCV. Integrasi endpoint AI service berikutnya.
 
 ## Last completed task
 
-Unduh dan verifikasi checkpoint resmi SCHP ATR-18 pada model CPU:
-- File checkpoint resmi `exp-schp-201908301523-atr.pth` (267.445.237 bytes / 255.06 MB) diunduh ke `ai-service/models/` (diabaikan Git) via `ai-service/download_model.py` setelah izin eksplisit pengguna.
-- Script `ai-service/load_checkpoint_cpu.py` membuktikan:
-  - Checksum SHA-256 valid: `e9d7c91ce3b4e7133df56b599fc817b533e3439c5e8d282a59126d2fda339a2a`.
-  - 603/603 keys state dict cocok sempurna secara strictly valid (`<All keys matched successfully>`, 0 missing, 0 unexpected).
-  - Forward pass CPU dengan bobot terlatih asli dieksekusi dalam 1.857 detik dengan rentang logits valid [-2.12, 8.87].
+Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`):
+- Kelas `HumanExtractor` dan dataclass `ExtractionResult` mengadopsi model ResNet-101 CPU dengan bobot terlatih resmi ATR-18.
+- Preprocessing letterbox aspect-preserving ke 512×512, konversi RGB→BGR, normalisasi ATR.
+- Inferensi forward pass CPU (1.901 detik), un-padding cropping area valid, dan interpolasi kembali ke dimensi asli `(W_orig, H_orig)`.
+- Pembuatan binary mask alpha foreground (`class > 0`) dan ekspor gambar RGBA dengan latar belakang sepenuhnya transparan (`alpha=0` pada background, `alpha=255` pada foreground manusia/pakaian, pixel RGB asli utuh).
+- Script pengujian `ai-service/test_extractor.py` lulus 100%:
+  - Verifikasi letterbox pada 3 aspect ratio (persegi, potret, lanskap).
+  - Ekstraksi gambar sintetis manusia: terdeteksi kategori pakaian ATR (`Hat`, `Upper-clothes`, `Pants`, `Left-shoe`, `Bag`).
+  - Verifikasi transparansi alpha: background alpha=0, foreground alpha=255, RGB match.
+  - Export & reload PNG RGBA dan mask PNG valid.
 - Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS).
-- Keputusan dicatat di D-017.
+- Keputusan dicatat di D-018.
 
 ## Current task
 
-Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`): menerima path file gambar input (JPG/PNG/WebP), melakukan preprocessing resize/pad/normalize 512×512, forward pass model ResNet-101 dengan bobot terlatih asli, menghasilkan binary mask alpha foreground manusia utuh dan multi-label segmentasi, serta mengekspor objek PNG transparan (RGBA) yang dapat diunduh. Uji dengan fixture sintetis.
+Integrasikan pipeline ekstraksi ke FastAPI AI service (`ai-service/main.py`): inisialisasi `HumanExtractor` saat startup AI service (`model_loaded: true`), buat endpoint `POST /extract` yang menerima request ekstraksi gambar (path file lokal atau multipart) dan mengembalikan mask serta objek transparan PNG, lalu uji endpoint secara langsung via HTTP request loopback.
 
 ## Working components
 
 - Frontend file/kamera → preview → upload server dan validasi backend teruji pada M2.
-- `ai-service/main.py` masih `/health` dengan `model_loaded: false` di `.venv` utama.
-- `ai-service/.venv-test` memuat runtime PyTorch CPU 2.15.0+cpu, arsitektur model mandiri `schp_cpu`, dan checkpoint resmi terverifikasi di `ai-service/models/exp-schp-201908301523-atr.pth`.
-- Model CPU dengan bobot resmi terbukti mengeksekusi inferensi dalam 1.857 detik.
+- `ai-service/extractor.py` memuat pipeline inferensi dan ekstraksi PNG transparan RGBA mandiri berbasis PyTorch CPU + Pillow + NumPy.
+- Checkpoint resmi bobot ATR-18 tersimpan di `ai-service/models/` (diabaikan Git).
+- Model CPU dengan bobot resmi terbukti mengeksekusi ekstraksi dalam ~1.90 detik.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint diperlukan, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
 - Tugas ini:
-  - `ai-service/download_model.py` (script download streaming dengan progress)
-  - `ai-service/load_checkpoint_cpu.py` (script verifikasi SHA-256 dan pemuatan state dict CPU)
-  - `docs/DECISIONS.md` (D-017)
+  - `ai-service/extractor.py` (pipeline ekstraksi gambar ke PNG transparan)
+  - `ai-service/test_extractor.py` (test suite verifikasi pipeline ekstraksi)
+  - `docs/DECISIONS.md` (D-018)
   - `docs/PROGRESS.md`
   - `docs/HANDOFF.md`
 
 ## Uncommitted changes / Git status
 
-Perubahan belum di-commit: script baru di `ai-service/` (`download_model.py`, `load_checkpoint_cpu.py`), dokumen diperbarui (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Catatan: file bobot `ai-service/models/` otomatis diabaikan Git oleh `.gitignore`. Sesuai aturan, tidak melakukan commit otomatis.
+Perubahan belum di-commit: `ai-service/extractor.py`, `ai-service/test_extractor.py`, dan dokumen yang diperbarui (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Sesuai aturan, tidak melakukan commit otomatis.
 
 ## Current errors
 
 - **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit ke repository (D-014).
-- Tidak ada error teknis yang menghambat eksekusi CPU atau pemuatan bobot.
+- Tidak ada error teknis yang menghambat eksekusi CPU atau pipeline ekstraksi.
 
 ## Tests performed
 
-- **PASS download_model.py:** Download 267.445.237 bytes (255.06 MB) dari Hugging Face selesai tanpa error.
-- **PASS load_checkpoint_cpu.py:** SHA-256 match, 603/603 keys match strictly (0 missing, 0 unexpected), forward pass CPU 1.857s dengan logits valid.
+- **PASS test_extractor.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_extractor.py` → letterbox 3 rasio aspek, ekstraksi CPU 1.901s, deteksi kategori pakaian ATR, transparansi alpha 0/255, save & reload PNG RGBA PASS.
 - **PASS backend suite:** `npm test --prefix backend` → 24/24 unit/integration tests PASS.
 - **PASS frontend build:** `npm run build --prefix frontend` → Vite build PASS.
-- **NOT RUN:** pipeline ekstraksi foto input nyata ke file PNG transparan (RGBA), endpoint integrasi FastAPI ↔ Express.
+- **NOT RUN:** endpoint integrasi FastAPI `POST /extract`, orchestrator Express job M4.
 
 ## Next action (only one)
 
-**Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`):**
-Buat modul ekstraksi mandiri yang memuat model SCHP ATR-18 terverifikasi, memproses gambar input (baca image dengan Pillow/NumPy, resize/letterbox 512×512, normalisasi mean/std ATR), menjalankan inferensi CPU, menghasilkan mask alpha foreground (semua kelas ATR foreground > 0), dan mengekstrak objek manusia ke format RGBA PNG transparan. Uji pipeline secara end-to-end dengan fixture gambar sintetis dan verifikasi kanal alpha (transparan di background, opaque di objek).
+**Integrasikan pipeline ekstraksi ke FastAPI AI service (`ai-service/main.py`):**
+Impor `HumanExtractor` di `ai-service/main.py`, inisialisasi extractor saat startup aplikasi FastAPI sehingga `GET /health` mengembalikan `model_loaded: true`, tambahkan endpoint `POST /extract` yang menerima request ekstraksi gambar (menerima upload multipart atau JSON payload berisi path file upload yang sudah divalidasi server) dan menghasilkan file PNG transparan (RGBA) serta metadata kelas yang terdeteksi. Uji endpoint secara langsung menggunakan script tes HTTP loopback.
 
 ## Handoff rules
 
@@ -72,6 +75,10 @@ Buat modul ekstraksi mandiri yang memuat model SCHP ATR-18 terverifikasi, mempro
 4. Tulis semua hasil tes yang benar-benar dieksekusi.
 5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
 6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
+
+## Template perbaruan berikutnya
+
+Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.
 
 ## Template perbaruan berikutnya
 

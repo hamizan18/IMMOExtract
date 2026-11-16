@@ -156,17 +156,31 @@
 - **Konsekuensi:** Model AI lokal siap digunakan untuk tugas inferensi human parsing sesungguhnya (ekstraksi mask foreground, multi-label clothing segmentation, dan pembuatan PNG transparan). Forward pass CPU dengan bobot terlatih asli membutuhkan waktu 1.857 detik pada Ryzen 5 7430U dengan logits range [-2.12, 8.87].
 - **Bukti tes:** `ai-service/load_checkpoint_cpu.py` PASS (`=== ALL CHECKPOINT VERIFICATIONS PASSED ===`): ukuran file 267.445.237 bytes, SHA-256 match, 603 keys matched strictly, forward pass CPU 1.857s.
 
+## D-018 — Pipeline ekstraksi human parsing dan pembuatan RGBA PNG transparan
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted; pipeline ekstraksi lokal terverifikasi end-to-end tanpa error atau distorsi aspect ratio.
+- **Keputusan:** Mengimplementasikan `ai-service/extractor.py` dengan kelas `HumanExtractor` dan dataclass `ExtractionResult`. Pipeline melakukan:
+  1. Preprocessing letterboxing ke 512×512 dengan preservasi rasio aspek gambar asli, konversi RGB→BGR, dan normalisasi ATR.
+  2. Inferensi forward pass model SCHP ATR-18 pada CPU.
+  3. Upsampling bilinear logits ke 512×512, cropping un-padding area valid, dan interpolasi kembali ke resolusi asli gambar `(W_orig, H_orig)`.
+  4. Argmax label kelas 18 ATR dan pembuatan mask binary foreground (`class_map > 0`).
+  5. Pembuatan gambar RGBA dengan transparansi alpha (`alpha=0` pada background, `alpha=255` pada foreground manusia/pakaian) dan penyimpanan PNG murni tanpa dependensi OpenCV (menggunakan Pillow dan NumPy).
+- **Alasan:** Menyediakan pipeline ekstraksi mandiri yang tidak bergantung pada dependensi biner OpenCV (`cv2`), menjaga resolusi asli gambar input tanpa distorsi regangan aspek rasio, dan menghasilkan file PNG RGBA transparan sesuai kebutuhan MVP (D-001, D-007).
+- **Konsekuensi:** Waktu proses ekstraksi per gambar adalah ~1.90 detik pada AMD Ryzen 5 7430U. Output pixel RGB asli di area foreground terjaga 100%, background sepenuhnya transparan (alpha 0). Siap diintegrasikan ke endpoint FastAPI (`POST /extract`).
+- **Bukti tes:** `test_extractor.py` PASS (`=== ALL EXTRACTOR TESTS PASSED ===`): letterbox valid di 3 rasio aspek, deteksi kategori pakaian/bagian tubuh pada fixture sintetis, foreground ratio 21.1%, alpha transparency verification PASS, save/reload PNG RGBA PASS.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
 - [x] Adaptasi arsitektur SCHP ATR-18 ke CPU murni (D-016: pure PyTorch ABN + AugmentCE2P ResNet-101 di `ai-service/schp_cpu`).
 - [x] Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), verifikasi keutuhan/hash, dan uji pemuatan bobot aman ke model CPU (D-017).
-- [ ] Pipeline inferensi gambar nyata (preprocessing BGR, forward pass, upsampling, pembuatan mask alpha, dan penyimpanan objek PNG transparan).
-- [ ] Integrasi AI service FastAPI (`POST /extract` atau `/infer`) dengan Express backend.
+- [x] Pipeline inferensi gambar nyata (D-018: letterbox aspect-preserving, forward pass CPU, un-padding, mask alpha, RGBA PNG transparan di `ai-service/extractor.py`).
+- [ ] Integrasi AI service FastAPI (`POST /extract`) dengan Express backend (`/api/jobs` atau proxy ekstraksi).
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-018 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-019 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

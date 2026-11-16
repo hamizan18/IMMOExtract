@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. M3 sedang berjalan: checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`, 255.06 MB) berhasil diunduh dan 100% dari 603 keys state dict terverifikasi cocok secara strictly valid ke model pure-PyTorch CPU ResNet-101. Forward pass CPU dengan bobot terlatih berjalan dalam 1.857 detik. Pipeline ekstraksi PNG transparan foto nyata berikutnya.
+> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. M3 sedang berjalan: pipeline ekstraksi human parsing mandiri `HumanExtractor` (`ai-service/extractor.py`) telah diimplementasikan dan terverifikasi end-to-end via `test_extractor.py` (1.90 detik pada AMD Ryzen 5 7430U). Menghasilkan binary mask alpha foreground manusia utuh dan PNG transparan RGBA dengan preservasi pixel RGB dan rasio aspek asli tanpa ketergantungan OpenCV. Integrasi endpoint AI service berikutnya.
 
 ## Ringkasan
 
-- **Current milestone:** M3 — POC human parsing — In progress (model CPU + bobot resmi terverifikasi).
-- **Current task:** Pemuatan bobot resmi checkpoint selesai (PASS); berikutnya implementasi pipeline ekstraksi gambar input (preprocessing BGR, forward pass, upsampling logits, ekstraksi mask alpha foreground, dan penyimpanan PNG objek transparan).
-- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; AI model + bobot terlatih ATR-18 siap di CPU lokal (`ai-service/schp_cpu`).
-- **Last verification:** 2026-11-16 — `ai-service/load_checkpoint_cpu.py` (PASS, 603/603 keys match, forward pass 1.857s, SHA-256 match); `npm test --prefix backend` (PASS 24/24); `npm run build --prefix frontend` (PASS).
+- **Current milestone:** M3 — POC human parsing — In progress (pipeline ekstraksi PNG transparan terverifikasi).
+- **Current task:** Pipeline ekstraksi gambar ke PNG transparan selesai (PASS); berikutnya integrasikan pipeline ekstraksi ke AI service FastAPI (`POST /extract` di `ai-service/main.py`) dan perbarui endpoint health (`model_loaded: true`).
+- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; AI model + bobot resmi + pipeline ekstraksi PNG transparan siap di CPU lokal (`ai-service/extractor.py`).
+- **Last verification:** 2026-11-16 — `ai-service/test_extractor.py` (PASS, letterbox 3 rasio aspek, inferensi 1.901s, deteksi kategori pakaian ATR, alpha transparency 0/255, PNG save/reload); `npm test --prefix backend` (PASS 24/24); `npm run build --prefix frontend` (PASS).
 
 ## Milestone
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
-| M3 | POC SCHP, label/mask, PNG transparan | In progress | Model CPU + bobot resmi ATR-18 terverifikasi (1.86s/forward); pipeline inferensi gambar nyata dan ekstraksi PNG transparan belum diuji |
+| M3 | POC SCHP, label/mask, PNG transparan | In progress | Pipeline ekstraksi PNG transparan RGBA terverifikasi (1.90s/ekstraksi); integrasi endpoint FastAPI & Express berikutnya |
 | M4 | Job, object gallery, download individual/ZIP | ⬜ Not started | Job status & unduhan end-to-end teruji |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
@@ -47,17 +47,18 @@
 - Pembaruan CLI Antigravity (2026-11-16): `agy update` dijalankan, mengonfirmasi CLI telah berada pada versi terbaru (1.5.9).
 - Adaptasi arsitektur model SCHP ATR-18 ke CPU murni (2026-11-16): paket `ai-service/schp_cpu/` dibuat (`abn.py`, `model.py`, `__init__.py`). Modul `InPlaceABNSync` digantikan dengan implementasi pure-PyTorch `ABN` (`F.batch_norm` + `F.leaky_relu(slope=0.01)`) yang mempertahankan layout parameter `weight`, `bias`, `running_mean`, `running_var` identik dengan upstream. `test_schp_cpu.py` membuktikan: instansiasi ResNet-101 (66.722.900 parameter, ~254.5 MB), 603 state_dict keys, 119 buffer running_mean/var, dan forward pass dummy `[1, 3, 512, 512]` dieksekusi dalam 1.977 detik pada CPU Ryzen 5 7430U menghasilkan tensor valid (tanpa NaN/Inf) serta upsample bilinear 512×512 dan argmax map 18 kelas PASS. Keputusan dicatat di D-016.
 - Unduh dan verifikasi checkpoint resmi SCHP ATR-18 (2026-11-16): setelah izin eksplisit pengguna, file `exp-schp-201908301523-atr.pth` diunduh dari mirror resmi Hugging Face ke folder terisolasi `ai-service/models/` (diabaikan Git). Ukuran file 267.445.237 bytes (255.06 MB), checksum SHA-256 `e9d7c91ce3b4e7133df56b599fc817b533e3439c5e8d282a59126d2fda339a2a`. `load_checkpoint_cpu.py` membuktikan: 603/603 keys state dict cocok sempurna (0 missing, 0 unexpected), dan forward pass CPU dengan bobot asli selesai dalam 1.857 detik dengan output logits valid range [-2.12, 8.87]. Keputusan dicatat di D-017.
+- Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`, 2026-11-16): kelas `HumanExtractor` dan dataclass `ExtractionResult` memproses gambar (baca image, letterbox aspect-preserving 512×512, normalisasi ATR BGR), mengeksekusi inferensi model ResNet-101 bobot resmi di CPU, melakukan un-padding & interpolasi ke resolusi asli, menghasilkan binary mask alpha foreground (`class > 0`) dan mengekspor gambar RGBA dengan latar transparan (alpha=0 background, alpha=255 foreground, RGB pixel intact). Pengujian `test_extractor.py` lulus 100% (1.90 detik). Keputusan dicatat di D-018.
 - Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS) terkonfirmasi tidak mengalami regresi.
 
 ## In progress
 
-- M3: checkpoint dan model CPU siap. Berikutnya membuat modul pipeline inferensi ekstraksi gambar (preprocessing input, forward inferensi, pembuatan mask alpha foreground dan segmentasi kelas ATR, output PNG transparan RGBA).
+- M3: pipeline ekstraksi RGBA PNG transparan selesai dan terverifikasi. Berikutnya integrasi pipeline ke FastAPI AI service (`ai-service/main.py`) dengan endpoint `POST /extract` dan pengujian HTTP.
 
 ## Blockers / risks
 
-- Latensi model forward pass CPU terukur ~1.86 detik pada AMD Ryzen 5 7430U dengan ukuran RAM model ~255 MB; inferensi CPU terbukti realistis dan tidak melebihi kapasitas RAM bebas.
-- Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; adaptasi model pure-PyTorch berhasil tanpa ketergantungan ekstensi CUDA atau Ninja compiler.
-- Checkpoint ATR resmi sudah diunduh dan diverifikasi hash-nya. Hak redistribusi bobot/dataset komersial tetap perlu diperhatikan; checkpoint disimpan di folder lokal yang diabaikan Git (`ai-service/models/`) dan tidak di-bundle ke repository.
+- Latensi pipeline ekstraksi CPU terukur ~1.90 detik per gambar pada AMD Ryzen 5 7430U dengan ukuran RAM model ~255 MB; inferensi dan post-processing CPU terbukti sangat responsif dan tidak membebani memori laptop.
+- Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; seluruh pipeline berjalan pure-PyTorch + Pillow + NumPy tanpa ketergantungan ekstensi C++/CUDA atau OpenCV (`cv2`).
+- Checkpoint ATR resmi sudah diunduh dan diverifikasi hash-nya. Checkpoint disimpan di folder lokal yang diabaikan Git (`ai-service/models/`) dan tidak di-bundle ke repository.
 - Pengujian Windows lokal saja; Linux/macOS dan deployment produksi belum diuji.
 - Batas dimensi preview diperiksa setelah decode browser; bukan perlindungan decompression bomb atau pengganti validasi server. Batas sementara dicatat di D-011, bukan benchmark.
 - Kamera fisik desktop PC Camera sudah diuji. Kamera mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state sebelumnya diuji lewat injeksi; navigasi `pagehide` diuji nyata pada tugas kamera sintetis.
@@ -67,7 +68,7 @@
 
 ## Next task — satu tugas saja
 
-Buat modul pipeline ekstraksi gambar input (`ai-service/extractor.py`): menerima file gambar lokal (JPG/PNG/WebP), lakukan preprocessing resize/letterbox/normalize 512×512, jalankan inferensi model SCHP ATR-18 CPU dengan bobot terlatih asli, hasilkan binary mask alpha foreground manusia utuh dan crop RGBA PNG transparan, serta uji end-to-end dengan fixture gambar sintetis. Jangan menghubungkan ke endpoint FastAPI sebelum pipeline extractor lokal diverifikasi.
+Integrasikan pipeline ekstraksi ke FastAPI AI service (`ai-service/main.py`): inisialisasi `HumanExtractor` saat startup AI service (`model_loaded: true`), buat endpoint `POST /extract` yang menerima request ekstraksi gambar (path file lokal atau multipart) dan mengembalikan mask serta objek transparan PNG, lalu uji endpoint secara langsung via HTTP request loopback. Jangan memodifikasi backend Express sebelum endpoint FastAPI teruji mandiri.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -157,7 +158,8 @@ Buat modul pipeline ekstraksi gambar input (`ai-service/extractor.py`): menerima
 | 2026-11-16 | `npm run build --prefix frontend` | PASS | Bundle Vite 6 modul berhasil dibangun tanpa regresi |
 | 2026-11-16 | `ai-service/.venv-test/Scripts/python.exe ai-service/download_model.py` | PASS | Download checkpoint resmi `exp-schp-201908301523-atr.pth` (267.445.237 bytes / 255.06 MB) dari Hugging Face ke `ai-service/models/` setelah izin pengguna |
 | 2026-11-16 | `ai-service/.venv-test/Scripts/python.exe ai-service/load_checkpoint_cpu.py` | PASS | Checksum SHA-256 diverifikasi (`e9d7c91c...`), pemuatan 603 keys ke `resnet101(num_classes=18)` strictly match (0 missing, 0 unexpected), forward pass CPU 1.857s dengan logits valid [-2.12, 8.87] |
-| 2026-11-16 | Pipeline ekstraksi input foto nyata, masking alpha foreground, penyimpanan RGBA PNG transparan, integrasi Express | NOT RUN | Model & bobot resmi siap; pipeline ekstraksi gambar input ke PNG transparan belum diuji |
+| 2026-11-16 | `ai-service/.venv-test/Scripts/python.exe ai-service/test_extractor.py` | PASS | Preprocessing letterbox 3 rasio aspek, ekstraksi model SCHP ATR-18 dalam 1.901s, deteksi kategori pakaian (hat, upper, pants, shoes, bag), alpha transparency 0/255 verification PASS, RGBA PNG save & reload verified |
+| 2026-11-16 | Integrasi endpoint FastAPI `POST /extract`, orchestrator Express job M4, galeri objek, download ZIP | NOT RUN | Pipeline ekstraksi lokal siap; endpoint FastAPI dan integrasi Express belum diimplementasikan |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
