@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. Input file serta kamera fisik → preview → upload lokal terverifikasi. Ekstraksi dan model AI belum tersedia; M3 belum dimulai. Lihat `docs/PROGRESS.md`.
+> **Status proyek:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. Input file serta kamera fisik → preview → upload lokal terverifikasi. M3 baru pemeriksaan kesiapan CPU; belum ada model atau ekstraksi. Hambatan kompatibilitas dan lisensi dicatat di `docs/DECISIONS.md` D-014; bukti aktual di `docs/PROGRESS.md`.
 
 ## Gambaran fitur
 

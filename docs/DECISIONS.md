@@ -36,6 +36,7 @@
 - **Keputusan:** Mulai proof-of-concept dengan SCHP ATR-18 untuk parsing pakaian/manusia.
 - **Alasan:** Kategori human parsing lebih relevan daripada deteksi objek umum.
 - **Konsekuensi:** Evaluasi akurasi, label, dependensi, lisensi, dan kelayakan CPU sebelum dianggap pilihan final.
+- **Pemeriksaan 2026-11-16:** Tetap kandidat, belum final. Hambatan CPU/Windows dan batas lisensi checkpoint dicatat di D-014; belum ada model diunduh atau inferensi dijalankan.
 
 ## D-006 — Tidak ada login/database pada MVP
 
@@ -111,13 +112,28 @@
 - **Bukti tes:** Build frontend dan browser melalui Vite → Express PASS: tiga format, penolakan animasi, offline/pemulihan, race ganti/hapus, MIME kosong, kamera stream canvas sintetis, serta tampilan mobile.
 - **Bukti tambahan 2026-11-16:** PC Camera USB pada Windows/Chrome 158, tanpa injeksi stream: capture PNG 1280×720, preview terdecode, upload HTTP 201 dan ID tampil, track ended serta srcObject dilepas. Default browser awal memilih kamera virtual; memilih PC Camera melalui pengaturan profil uji menyelesaikan penerimaan fisik tanpa perubahan kode.
 
+## D-014 — Kesiapan M3: CPU dahulu, tanpa mengubah environment health
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted untuk arah pemeriksaan runtime; versi paket, adaptasi SCHP, dan kualitas model belum terbukti.
+- **Keputusan:** Target pertama CPU lokal, satu gambar/worker; pertahankan `.venv` health yang bekerja. Uji runtime di environment terpisah sebelum integrasi atau download checkpoint. Tidak memasang CUDA, mengganti model, atau menambah layanan cloud.
+- **Alasan hardware:** Ryzen 5 7430U (6 core/12 thread), AMD Radeon terintegrasi; tidak ada NVIDIA pada enumerasi GPU dan `nvidia-smi` tidak ditemukan di PATH. RAM tersedia saat pemeriksaan hanya sekitar 1,45 GiB; belum ada benchmark atau bukti cukupnya memori untuk SCHP.
+- **Runtime:** Hanya Python 3.14.3 terdaftar oleh `py --list-paths`; torch/torchvision/NumPy/Pillow/OpenCV belum ada pada `.venv` AI. Tidak otomatis downgrade Python: [matriks TorchVision](https://github.com/pytorch/vision#installation) mencantumkan torch 2.13 + torchvision 0.28 untuk Python 3.10–3.14; [metadata PyPI torch](https://pypi.org/pypi/torch/json) memuat wheel `torch-2.13.0-cp314-cp314-win_amd64.whl`. Ini hanya bukti metadata, bukan tes instalasi/CPU/SCHP. Pin final harus berdasarkan smoke runtime; jangan menganggap wheel Windows PyPI otomatis bukti konfigurasi CPU yang dipilih.
+- **Hambatan upstream terbukti:** [environment.yaml](https://github.com/GoGoDuck912/Self-Correction-Human-Parsing/blob/master/environment.yaml) mengunci Python 3.8.5, torch 1.5.1, torchvision 0.6.1, CUDA 10.1 dan paket Linux. [simple_extractor.py](https://github.com/GoGoDuck912/Self-Correction-Human-Parsing/blob/master/simple_extractor.py) memanggil `model.cuda()`/`image.cuda()` dan `torch.load` tanpa `map_location`; `--gpu None` juga diparse menjadi integer sebelum percabangan. [modules/functions.py](https://github.com/GoGoDuck912/Self-Correction-Human-Parsing/blob/master/modules/functions.py) mengompilasi sumber `.cu` saat import. Mengganti `.cuda()` saja atau downgrade Python bukan solusi CPU lengkap.
+- **Prasyarat adaptasi, belum implementasi:** Hilangkan ketergantungan ekstensi CUDA dari jalur inferensi; pertahankan parameter/statistik/aktivasi normalisasi dan validasi kesetaraan, bukan mengganti InPlaceABN sembarangan dengan BatchNorm. [Upstream InPlaceABN](https://github.com/mapillary/inplace_abn) menjelaskan perbedaan parameter skala dan dukungan Linux/CUDA. Gunakan pemuatan checkpoint tepercaya ke CPU dengan mode aman yang kompatibel; kegagalan loader bukan alasan otomatis menonaktifkan proteksi pickle.
+- **Kontrak model yang harus dijaga:** ATR memakai ResNet-101, input 512×512 dan 18 label termasuk background; ada Bag/Scarf dan sepatu kiri/kanan, tetapi tidak ada label Coat tersendiri atau instance “manusia utuh”. Mask manusia utuh perlu gabungan foreground; tidak menjamin instance terpisah. [Preprocessing upstream](https://github.com/GoGoDuck912/Self-Correction-Human-Parsing/blob/master/datasets/simple_extractor_dataset.py) membaca BGR dengan OpenCV, warp affine, lalu normalisasi mean `[0.406,0.456,0.485]`/std `[0.225,0.224,0.229]` pada extractor. Output upstream adalah PNG label berpalet, bukan otomatis PNG objek RGBA.
+- **Lisensi kode:** [SCHP LICENSE](https://github.com/GoGoDuck912/Self-Correction-Human-Parsing/blob/master/LICENSE) adalah MIT, copyright 2020 Peike Li; pertahankan notice saat mengambil kode. InPlaceABN upstream berlisensi BSD-3-Clause; audit notice komponen yang benar-benar diadaptasi, jangan menganggap semua sumber pihak ketiga otomatis MIT.
+- **Checkpoint/dataset:** [README SCHP](https://github.com/GoGoDuck912/Self-Correction-Human-Parsing#simple-out-of-box-extractor) menunjuk checkpoint resmi `exp-schp-201908301523-atr.pth` di [Google Drive](https://drive.google.com/file/d/1ruJg4lqR_jgQPj-9K0PP-L2vJERYOxLP/view); hanya halaman metadata dibaca, bukan binary. Ukuran/hash/isi checkpoint belum diverifikasi. [Repositori ATR asli](https://github.com/lemondan/HumanParsing-Dataset) meminta sitasi untuk riset akademik maupun komersial, tetapi tidak menyediakan LICENSE terpisah pada root yang diperiksa. Tidak menemukan ketentuan khusus redistribusi bobot pada sumber tersebut; MIT kode tidak dijadikan bukti hak redistribusi checkpoint/dataset. Klarifikasi sebelum bundling/distribusi/komersialisasi; izin download besar tetap harus diminta.
+- **Alternatif:** Environment lama Linux/CUDA tidak dipilih untuk laptop ini. ONNX baru dipertimbangkan sesudah model PyTorch CPU dan kesetaraan output terbukti, sesuai arsitektur yang ada.
+- **Bukti aktual:** Inventaris CIM, disk, launcher Python, metadata paket lokal, serta inspeksi sumber primer selesai; tidak install/download model, tidak ada tes forward, akurasi, RAM puncak, atau latensi. Detail angka dan error harness di `PROGRESS.md`.
+
 ## Keputusan yang masih terbuka
 
-- [ ] Versi runtime dan dependensi AI M3 setelah tes kompatibilitas (web/health M1 sudah diputuskan pada D-010).
-- [ ] Lisensi model/checkpoint tertentu sebelum distribusi.
+- [ ] Versi runtime dan dependensi AI M3 setelah smoke CPU; arah isolasi/CPU dan kandidat metadata di D-014, bukan bukti kompatibilitas SCHP.
+- [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-014 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-015 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

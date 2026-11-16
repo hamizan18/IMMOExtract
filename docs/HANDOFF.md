@@ -4,59 +4,57 @@
 
 ## Last agent
 
-OMP — penerimaan kamera fisik dan penutupan M2, 2026-11-16.
+OMP — pemeriksaan kesiapan M3 (hardware/runtime/lisensi), 2026-11-16.
 
 ## Current milestone
 
-**M2 — Input gambar — Complete pada Windows/Chrome yang diuji.** M1 selesai; file/kamera fisik → preview → upload server terverifikasi. M3 belum dimulai.
+**M3 — POC human parsing — In progress, kesiapan saja.** M1/M2 selesai berdasarkan tes sebelumnya. Runtime inferensi, checkpoint dan ekstraksi belum tersedia.
 
 ## Last completed task
 
-Uji kamera fisik dengan izin pengguna: Chrome 158, PC Camera USB, capture PNG 1280×720 (1.411.950 byte), preview terdecode, upload HTTP 201 dan ID tampil. Satu track video tanpa audio; setelah capture track ended dan `video.srcObject` null. Tidak ada injeksi stream/fake-device atau perubahan source. Default browser awal memilih REDMI Windows Virtual Camera; hasil awal dicatat terpisah, lalu kamera USB dipilih di pengaturan profil uji setelah izin capture tambahan.
+Inventaris lokal dan inspeksi sumber primer selesai tanpa instalasi/download model. Laptop memakai Ryzen 5 7430U, AMD iGPU, RAM terlihat OS 7,40 GiB (bebas 1,45 GiB saat pemeriksaan), disk D: bebas 27,17 GiB; hanya Python 3.14.3 terdaftar. `.venv` masih berisi runtime health, tanpa torch/torchvision/NumPy/Pillow/OpenCV. SCHP upstream mengunci environment Linux/CUDA lama dan memanggil CUDA secara eksplisit. D-014 menetapkan arah CPU/environment uji terpisah; versi final serta port model belum terbukti.
 
 ## Current task
 
-Penerimaan kamera fisik selesai dan M2 ditutup. Berikutnya: pemeriksaan kesiapan POC M3 tanpa instalasi/download model.
+Readiness selesai. Berikutnya hanya membuktikan runtime PyTorch CPU terisolasi tanpa checkpoint; jangan menganggap inventaris/metadata wheel sebagai tes inferensi.
 
 ## Working components
 
-- Input file, preview, upload otomatis, validasi server, dan feedback error/sukses sudah teruji pada tugas sebelumnya.
-- Kamera fisik PC Camera pada Windows/Chrome 158 terverifikasi sesi ini, termasuk preview/upload dan penghentian stream.
-- Express `POST /api/uploads`: multipart field `image`, respons HTTP 201 `{upload_id, status: "uploaded", image}`; input/manifest privat, bukan job ekstraksi.
-- Pengujian memakai Vite 5174 → Express 3100, folder upload temp, dan profil Chrome temp. Port normal tetap 5173 → 3000.
-- FastAPI/model tidak dijalankan pada tugas penerimaan ini; tidak ada pipeline ekstraksi.
-- Browser dan seluruh layanan uji dihentikan; kedua foto uji serta profil browser temp dihapus. Profil browser utama dan storage pengguna tidak diubah.
+- Frontend file/kamera → preview → upload server dan validasi backend sudah teruji pada M2; tidak diuji ulang pada tugas readiness.
+- `ai-service/main.py` masih hanya `/health` dengan `model_loaded: false`; requirements hanya FastAPI 0.163.0 dan Uvicorn 0.54.0.
+- Tidak ada runtime/model AI baru dipasang; `.venv` health tidak diubah.
+- Kandidat tetap SCHP ATR-18: ResNet-101, input 512×512, output label 18 kelas, bukan langsung PNG objek transparan.
+- Semua temuan hardware serta pemeriksaan nyata ada di `PROGRESS.md`; sumber primer/kontrak dan batas lisensi ada di `DECISIONS.md` D-014.
+- Tidak memulai server/browser, memproses foto, atau membuat artefak uji pada tugas ini.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint tidak tersedia, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
-- Tugas ini: `README.md`, `docs/DECISIONS.md` (tambahan bukti D-013, tanpa keputusan baru), `docs/PROGRESS.md`, `docs/HANDOFF.md`.
-- Source aplikasi, dependensi, dan konfigurasi repo tidak diubah.
-- Perubahan frontend dari tugas sebelumnya tetap dipertahankan: `frontend/index.html`, `frontend/src/image-input.js`.
+- Tugas ini: `README.md`, `docs/DECISIONS.md` (D-014), `docs/PROGRESS.md`, `docs/HANDOFF.md`.
+- Source aplikasi, requirements/lockfile, environment health, dan struktur repo tidak diubah.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal menunjukkan enam file modified: README, DECISIONS, PROGRESS, HANDOFF, frontend/index.html, frontend/src/image-input.js; staged diff kosong. Empat dokumen diperbarui tugas ini, dua source frontend tidak disentuh. Tidak melakukan staging/commit atau inspeksi Git ulang setelah edit.
+Inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached` bersih; daftar uncommitted pada handoff sebelumnya sudah kedaluwarsa. Empat dokumen di atas diubah tugas ini tanpa staging/commit. Tidak memeriksa Git ulang setelah edit.
 
 ## Current errors
 
-Tidak ada kegagalan aplikasi pada pengujian kamera fisik. Harness sempat tetap berada di halaman settings sehingga `#clear-image` tidak ditemukan; navigasi eksplisit ke aplikasi memperbaikinya tanpa perubahan kode. Browser dapat memilih kamera virtual secara default; pilih kamera fisik melalui settings jika diperlukan. Kamera mobile, perpindahan tab non-headless, dan dialog izin manual OS/browser belum diuji. Retensi/penghapusan otomatis upload server belum tersedia.
+- **Kompatibilitas:** `simple_extractor.py` memakai `model.cuda()`/`image.cuda()`; `modules/functions.py` mengompilasi `.cu` ketika import. Jangan mencoba menyelesaikannya hanya dengan downgrade Python atau mengganti satu `.cuda()`. Adaptasi normalisasi perlu kesetaraan parameter/statistik/aktivasi, bukan BatchNorm pengganti sembarang.
+- **Memori:** RAM bebas saat pemeriksaan rendah; kebutuhan/latensi SCHP belum diukur. GPU AMD bukan perangkat CUDA NVIDIA.
+- **Lisensi:** Kode SCHP MIT; ATR asli meminta sitasi riset akademik/komersial tetapi tidak mempunyai LICENSE terpisah pada root yang diperiksa. Hak redistribusi checkpoint/dataset belum dikonfirmasi; jangan bundling atau menyimpulkan bobot otomatis MIT. Checkpoint resmi `exp-schp-201908301523-atr.pth` hanya diidentifikasi, belum diunduh/diukur/dihash.
+- **Harness:** Query CIM disk awal gagal karena kutip filter hilang (`DeviceID=D:`); diganti `Get-Volume -DriveLetter D`, berhasil. Tidak ada error aplikasi yang disebabkan tugas ini.
 
 ## Tests performed
 
-- **PASS:** PowerShell enumerasi perangkat: PC Camera berstatus OK.
-- **EXIT 1 (discovery):** pencarian proses chrome/msedge mengembalikan path Chrome; bukan hasil tes aplikasi.
-- **PASS terbatas:** capture awal REDMI Windows Virtual Camera → PNG 1280×720 → HTTP 201 → track ended. Tidak dianggap bukti kamera USB.
-- **ERROR harness, resolved:** selector `#clear-image` tidak ditemukan karena tab masih di settings; navigasi kembali ke aplikasi sebelum capture fisik.
-- **PASS:** Chrome 158 pada Windows, profil terisolasi tanpa fake-device/injeksi: PC Camera USB → frame live 1280×720, hanya video → tombol Ambil foto → PNG 1.411.950 byte → HTTP 201.
-- **PASS:** UI menampilkan ID upload `8379ad08-8578-4940-a9df-05fd173aabfc`; preview terlihat dan terdecode; track kamera ended dan srcObject null sesudah capture.
-- **PASS:** layanan/profil browser uji dihentikan; kedua foto/manifest dan profil temp dihapus dengan izin pengguna. Tidak melampirkan foto ke percakapan.
-- **NOT RUN:** build/suite backend pada tugas ini (tidak ada perubahan source), kamera mobile, background tab non-headless, dialog izin manual. Permission browser diberikan lewat automation setelah persetujuan pengguna.
-- Bukti integrasi sebelumnya (build, tiga format, error/offline, race, MIME kosong, kamera sintetis/mobile viewport) dan backend 24/24 tetap tersimpan di `PROGRESS.md`; tidak diulang untuk tugas ini.
+- **PASS inventaris:** CIM `Win32_Processor`, `Win32_OperatingSystem`, `Win32_VideoController` dan pencarian `nvidia-smi`: CPU 6 core/12 thread, Windows 11 Pro x64, AMD Radeon; tidak ada NVIDIA terdeteksi, `nvidia-smi` tidak ditemukan di PATH.
+- **ERROR harness, resolved:** filter CIM disk Invalid query; **PASS** `Get-Volume -DriveLetter D` → NTFS, 29.175.590.912 byte bebas.
+- **PASS inventaris:** `py --list-paths` → hanya 3.14; `ai-service/.venv/Scripts/python.exe -c` dengan sys/platform/importlib → CPython 3.14.3 AMD64, paket health ada, paket inferensi belum ada.
+- **PASS pemeriksaan sumber:** README/LICENSE/environment/extractor/modul SCHP, ATR asli, InPlaceABN, matriks TorchVision, metadata PyPI. Kandidat torch 2.13/torchvision 0.28 mendukung Python 3.14 menurut metadata; wheel torch Windows cp314 ditemukan. Belum membuktikan instalasi, build CPU yang dipilih, atau kompatibilitas SCHP.
+- **NOT RUN:** instalasi runtime, download checkpoint, forward/inferensi, mask/PNG transparan, benchmark CPU/RAM, build/suite aplikasi. Tugas hanya readiness; tidak mengulang tes M1/M2 atau membuat hasil AI palsu.
 
 ## Next action (only one)
 
-**Periksa kesiapan POC M3:** inventaris hardware/runtime lokal dan prasyarat kompatibilitas/lisensi kandidat SCHP ATR-18. Laporkan pilihan serta kendala sebelum instalasi atau download checkpoint besar; jangan download model tanpa izin pengguna. M3 belum diimplementasikan.
+**Buktikan runtime PyTorch CPU pada Python 3.14.3 di environment uji terpisah:** pilih/pin wheel CPU torch/torchvision yang cocok, lakukan import dan operasi tensor kecil. Jangan mengubah `.venv` health, mengunduh checkpoint, atau mengklaim smoke tensor sebagai keberhasilan SCHP. Lihat kandidat dan prasyarat D-014; pin final mengikuti hasil eksekusi, bukan tebakan.
 
 ## Handoff rules
 
