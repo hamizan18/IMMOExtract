@@ -127,13 +127,24 @@
 - **Alternatif:** Environment lama Linux/CUDA tidak dipilih untuk laptop ini. ONNX baru dipertimbangkan sesudah model PyTorch CPU dan kesetaraan output terbukti, sesuai arsitektur yang ada.
 - **Bukti aktual:** Inventaris CIM, disk, launcher Python, metadata paket lokal, serta inspeksi sumber primer selesai; tidak install/download model, tidak ada tes forward, akurasi, RAM puncak, atau latensi. Detail angka dan error harness di `PROGRESS.md`.
 
+## D-015 — Runtime PyTorch CPU terisolasi pada Python 3.14.3
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted untuk runtime dasar CPU terisolasi; adaptasi arsitektur SCHP dan checkpoint model belum diuji.
+- **Keputusan:** Menggunakan PyTorch CPU `torch==2.15.0+cpu` dan `torchvision==0.29.2+cpu` dengan `numpy==2.5.4` dan `pillow==13.0.0` dari index wheel PyTorch CPU (`https://download.pytorch.org/whl/cpu`). Environment health `.venv` tetap utuh; runtime inferensi diuji dalam `.venv-test` terisolasi.
+- **Alasan:** Terbukti dapat diinstal dan dieksekusi langsung pada Python 3.14.3 AMD64 Windows 11 tanpa kompilasi C/CUDA lokal. Operasi tensor CPU, forward Conv2d+BatchNorm2d+ReLU, interoperabilitas PIL/NumPy/Tensor, dan transform Resize(512,512)/ToTensor/Normalize lulus pengujian smoke tanpa error.
+- **Alternatif:** Downgrade Python (misal ke 3.10 atau 3.8) tidak diperlukan untuk runtime inferensi dasar CPU karena wheel resmi PyTorch 2.15 CPU untuk cp314 tersedia dan stabil.
+- **Konsekuensi:** Runtime siap sebagai fondasi adaptasi kode model SCHP ATR-18 (ResNet-101 CPU) dan penggantian ketergantungan ekstensi CUDA InPlaceABN. Checkpoint model belum diunduh dan belum diuji.
+- **Bukti tes:** Eksekusi `ai-service/smoke_cpu.py` menghasilkan `ALL SMOKE TESTS PASSED` pada CPython 3.14.3 (AMD64) Windows 11.
+
 ## Keputusan yang masih terbuka
 
-- [ ] Versi runtime dan dependensi AI M3 setelah smoke CPU; arah isolasi/CPU dan kandidat metadata di D-014, bukan bukti kompatibilitas SCHP.
+- [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
+- [ ] Adaptasi arsitektur SCHP ATR-18 ke CPU murni (penghapusan kompilasi ekstensi CUDA InPlaceABN dan kesetaraan aktivasi/normalisasi).
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-015 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-016 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

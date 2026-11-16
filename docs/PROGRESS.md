@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. M3 dimulai sebatas pemeriksaan kesiapan CPU/runtime/lisensi; belum ada dependensi AI dipasang, model diunduh, atau inferensi dijalankan.
+> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. M3 sedang berjalan: runtime dasar PyTorch CPU (torch 2.15.0+cpu, torchvision 0.29.2+cpu) pada Python 3.14.3 terverifikasi via smoke test di `.venv-test` terisolasi. Model checkpoint belum diunduh dan inferensi SCHP belum diuji.
 
 ## Ringkasan
 
-- **Current milestone:** M3 — POC human parsing — In progress (kesiapan saja).
-- **Current task:** Inventaris dan kajian sumber primer selesai; berikutnya smoke runtime PyTorch CPU terisolasi, tanpa checkpoint.
-- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; AI service masih health-only, `model_loaded: false`.
-- **Last verification:** 2026-11-16 — CIM hardware, disk, `py --list-paths`, metadata paket `.venv`, dan inspeksi sumber resmi SCHP/ATR/PyTorch. Tidak ada klaim PASS inferensi.
+- **Current milestone:** M3 — POC human parsing — In progress (runtime CPU terverifikasi).
+- **Current task:** Smoke runtime PyTorch CPU terisolasi selesai (PASS); berikutnya adaptasi kode arsitektur SCHP ATR-18 ke CPU murni (menghilangkan ekstensi CUDA InPlaceABN) sebelum mengunduh checkpoint.
+- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; AI service masih health-only (`model_loaded: false`); runtime CPU terbukti di `.venv-test`.
+- **Last verification:** 2026-11-16 — `agy update` (PASS, 1.5.9), instalasi PyTorch CPU di `.venv-test`, dan eksekusi `ai-service/smoke_cpu.py` (PASS, import, matmul, Conv+BN+ReLU, PIL/tensor, transforms 512×512).
 
 ## Milestone
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
-| M3 | POC SCHP, label/mask, PNG transparan | In progress — readiness | Hardware/runtime dan sumber primer ditelaah; runtime CPU, checkpoint, inferensi dan PNG transparan belum diuji |
+| M3 | POC SCHP, label/mask, PNG transparan | In progress | Runtime PyTorch CPU terverifikasi via smoke test; adaptasi arsitektur CPU, checkpoint, inferensi dan PNG transparan belum diuji |
 | M4 | Job, object gallery, download individual/ZIP | ⬜ Not started | Job status & unduhan end-to-end teruji |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
@@ -43,10 +43,12 @@
 - Tugas penerimaan hanya memperbarui `README.md`, `docs/DECISIONS.md` (bukti tambahan, bukan keputusan baru), `docs/PROGRESS.md`, `docs/HANDOFF.md`. Enam perubahan belum commit dari tugas sebelumnya dipertahankan; tidak staging/commit.
 - Kesiapan M3: hardware/runtime diinventarisasi; source AI lokal masih health-only. SCHP upstream punya dependensi CUDA eksplisit dan environment Linux lama; kode MIT, hak redistribusi checkpoint ATR belum terkonfirmasi. Arah CPU/environment terpisah dicatat di D-014.
 - Git awal tugas readiness bersih (termasuk staged diff), berbeda dari handoff sebelumnya. Hanya README/DECISIONS/PROGRESS/HANDOFF diperbarui; tanpa perubahan source, instalasi, download binary, staging, atau commit.
+- Pembuktian runtime PyTorch CPU terisolasi pada Python 3.14.3 (2026-11-16): venv terpisah `ai-service/.venv-test` dibuat tanpa menyentuh `.venv` health. Dipasang wheel CPU resmi `torch-2.15.0+cpu`, `torchvision-0.29.2+cpu`, `numpy-2.5.4`, `pillow-13.0.0` dari index PyTorch CPU (`https://download.pytorch.org/whl/cpu`). Pengujian smoke via `ai-service/smoke_cpu.py` berhasil: verifikasi CPU-only (`cuda.is_available() == False`), matmul float32, Conv2d+BatchNorm2d+ReLU forward ([1,3,64,64] -> [1,16,64,64]), interoperabilitas PIL/NumPy/Tensor, dan transform torchvision Resize(512,512)/Normalize ATR PASS. Keputusan dicatat di D-015.
+- Pembaruan CLI Antigravity (2026-11-16): `agy update` dijalankan, mengonfirmasi CLI telah berada pada versi terbaru (1.5.9).
 
 ## In progress
 
-- M3: belum ada runtime inferensi terpasang atau port SCHP CPU. Berikutnya hanya membuktikan runtime CPU terisolasi; tidak mengubah `.venv` health atau mulai pipeline job.
+- M3: runtime dasar CPU terverifikasi. Berikutnya adaptasi kode arsitektur SCHP ATR-18 ke CPU murni (mengeliminasi dependensi ekstensi CUDA InPlaceABN) sebelum mengunduh checkpoint. Tidak mengubah `.venv` health.
 
 ## Blockers / risks
 
@@ -63,7 +65,7 @@
 
 ## Next task — satu tugas saja
 
-Buktikan runtime PyTorch CPU pada Python 3.14.3 di environment uji terpisah: pilih/pin wheel CPU torch/torchvision yang cocok, lakukan import dan operasi tensor kecil. Jangan mengubah `.venv` health, mengunduh checkpoint, atau mengklaim smoke tensor sebagai keberhasilan SCHP.
+Adaptasi arsitektur model SCHP ATR-18 ke CPU murni: buat definisi model ResNet-101 yang mengganti ketergantungan ekstensi CUDA InPlaceABN dengan normalisasi dan aktivasi yang setara secara statistik pada CPU, serta buktikan instansiasi model dan forward pass tensor dummy [1, 3, 512, 512] di CPU tanpa error. Jangan mengunduh checkpoint sebelum arsitektur model CPU siap.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -145,6 +147,10 @@ Buktikan runtime PyTorch CPU pada Python 3.14.3 di environment uji terpisah: pil
 | 2026-11-16 | `py --list-paths`; `.venv/Scripts/python.exe -c` memakai sys/platform/importlib | PASS inventaris | CPython 3.14.3, health deps tersedia, dependensi inferensi belum ada |
 | 2026-11-16 | Baca sumber primer SCHP/ATR, metadata PyPI dan matriks TorchVision | PASS pemeriksaan | Dependensi CUDA/legacy terbukti; kode MIT, hak redistribusi checkpoint belum jelas. URL/bukti spesifik di D-014 |
 | 2026-11-16 | Install runtime, download checkpoint, forward CPU, kualitas mask, latency/RAM peak, build/test aplikasi | NOT RUN | Tugas dibatasi readiness tanpa instalasi/model; source aplikasi tidak berubah. Tidak mengulang tes M1/M2 |
+| 2026-11-16 | `py -3.14 -m venv ai-service/.venv-test` lalu pip install torch torchvision dari `https://download.pytorch.org/whl/cpu` | PASS | `torch-2.15.0+cpu`, `torchvision-0.29.2+cpu`, `numpy-2.5.4`, `pillow-13.0.0` terpasang di venv uji terisolasi; `.venv` health tetap utuh |
+| 2026-11-16 | `ai-service/.venv-test/Scripts/python.exe ai-service/smoke_cpu.py` | PASS | 7 pengujian: verifikasi CPU device, matmul, Conv2d+BatchNorm2d+ReLU forward, PIL<->numpy<->tensor, torchvision transform 512×512 normalisasi ATR |
+| 2026-11-16 | `agy update` | PASS | Antigravity CLI terverifikasi pada versi terbaru 1.5.9 |
+| 2026-11-16 | Download checkpoint resmi SCHP ATR, forward pass SCHP ResNet-101, segmentasi mask, Express integration | NOT RUN | Belum diimplementasikan; arsitektur model SCHP CPU perlu diadaptasi sebelum unduh checkpoint |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
