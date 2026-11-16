@@ -4,61 +4,69 @@
 
 ## Last agent
 
-Antigravity CLI — pembuktian runtime PyTorch CPU terisolasi pada Python 3.14.3 & agy update check, 2026-11-16.
+Antigravity CLI — adaptasi arsitektur SCHP ATR-18 ke CPU murni & verifikasi forward pass, 2026-11-16.
 
 ## Current milestone
 
-**M3 — POC human parsing — In progress.** M1/M2 selesai. Runtime PyTorch CPU terverifikasi lulus smoke test di environment terpisah (`.venv-test`). Adaptasi arsitektur model SCHP ATR-18 ke CPU, checkpoint, dan pipeline ekstraksi belum diimplementasikan.
+**M3 — POC human parsing — In progress.** M1/M2 selesai. Arsitektur model ResNet-101 AugmentCE2P CPU (`ai-service/schp_cpu`) terverifikasi lulus pengujian forward pass (1.98 detik pada AMD Ryzen 5 7430U, ~255 MB RAM). Checkpoint model belum diunduh.
 
 ## Last completed task
 
-Pembuktian runtime PyTorch CPU pada Python 3.14.3 di environment uji terpisah (`ai-service/.venv-test`):
-- Wheel CPU resmi terpasang: `torch==2.15.0+cpu`, `torchvision==0.29.2+cpu`, `numpy==2.5.4`, `pillow==13.0.0` dari index `https://download.pytorch.org/whl/cpu`.
-- `.venv` health tetap utuh (`model_loaded: false`, FastAPI + Uvicorn).
-- `ai-service/smoke_cpu.py` dieksekusi dan PASS: verifikasi device CPU (`cuda.is_available() == False`), matmul float32, forward Conv2d+BatchNorm2d+ReLU ([1,3,64,64] -> [1,16,64,64]), interoperabilitas PIL/NumPy/Tensor, dan transform torchvision Resize(512,512)/Normalize ATR.
-- `agy update` dijalankan dan mengonfirmasi CLI pada versi terbaru 1.5.9.
-- Keputusan dicatat di D-015.
+Adaptasi arsitektur model SCHP ATR-18 ke CPU murni (pure PyTorch):
+- Dibuat modul `ai-service/schp_cpu/abn.py` yang mengimplementasikan `ABN` berbasis `F.batch_norm` dan `F.leaky_relu(slope=0.01)`, mempertahankan kompatibilitas 100% parameter `weight`, `bias`, `running_mean`, `running_var` tanpa memerlukan ekstensi CUDA C++ atau Ninja compiler.
+- Dibuat modul `ai-service/schp_cpu/model.py` dan `__init__.py` yang mengadopsi ResNet-101 AugmentCE2P (CE2P parsing branch, Edge module, PSPModule, dan Fusion branch) untuk label 18 kelas ATR.
+- Dibuat dan dijalankan `ai-service/test_schp_cpu.py` di `.venv-test`:
+  - 66.722.900 parameter terinstansiasi (~254.53 MB RAM).
+  - 603 state_dict keys terverifikasi dengan 119 buffer running_mean/running_var ABN.
+  - Forward pass CPU pada tensor `[1, 3, 512, 512]` selesai dalam 1.977 detik tanpa error atau NaN/Inf.
+  - Pipeline upsample bilinear ke 512×512 dan argmax ke map kelas 0..17 terverifikasi PASS.
+- Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS).
+- Keputusan dicatat di D-016.
 
 ## Current task
 
-Adaptasi kode arsitektur model SCHP ATR-18 ke CPU murni: buat definisi model ResNet-101 yang mengganti ketergantungan ekstensi CUDA InPlaceABN dengan normalisasi dan aktivasi yang setara secara statistik pada CPU, serta uji instansiasi model dan forward pass tensor dummy [1, 3, 512, 512] di CPU tanpa error. Jangan mengunduh checkpoint sebelum arsitektur model CPU siap.
+Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), simpan di direktori yang diabaikan git (`ai-service/models/`), verifikasi integritas file/hash, dan uji pemuatan bobot (`model.load_state_dict`) secara aman ke model CPU.
 
 ## Working components
 
 - Frontend file/kamera → preview → upload server dan validasi backend teruji pada M2.
 - `ai-service/main.py` masih `/health` dengan `model_loaded: false` di `.venv` utama.
-- `ai-service/.venv-test` memuat runtime PyTorch CPU 2.15.0+cpu teruji lewat `smoke_cpu.py`.
-- Tidak ada checkpoint model diunduh; tidak ada mock inferensi AI.
+- `ai-service/.venv-test` memuat runtime PyTorch CPU 2.15.0+cpu dan paket model mandiri `schp_cpu`.
+- Arsitektur model SCHP ATR-18 CPU terbukti dapat diinstansiasi dan dieksekusi via forward pass di CPU dalam ~1.98 detik.
+- Checkpoint resmi bobot belum diunduh; tidak ada mock inferensi AI palsu.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint diperlukan, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
 - Tugas ini:
-  - `.gitignore` (tambah `.venv*/`)
-  - `ai-service/smoke_cpu.py` (script verifikasi smoke runtime CPU)
-  - `docs/DECISIONS.md` (D-015)
+  - `ai-service/schp_cpu/__init__.py` (ekspor paket model SCHP CPU)
+  - `ai-service/schp_cpu/abn.py` (implementasi pure-PyTorch ABN CPU)
+  - `ai-service/schp_cpu/model.py` (definisi ResNet-101 AugmentCE2P ATR-18 CPU)
+  - `ai-service/test_schp_cpu.py` (test suite verifikasi model & forward pass CPU)
+  - `docs/DECISIONS.md` (D-016)
   - `docs/PROGRESS.md`
   - `docs/HANDOFF.md`
 
 ## Uncommitted changes / Git status
 
-Perubahan belum di-commit: `.gitignore`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`, dan file untracked `ai-service/smoke_cpu.py`. Sesuai aturan, tidak melakukan commit otomatis.
+Perubahan belum di-commit: file baru di `ai-service/schp_cpu/`, `ai-service/test_schp_cpu.py`, serta dokumen yang diperbarui (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Sesuai aturan, tidak melakukan commit otomatis.
 
 ## Current errors
 
-- **Kompabilitas SCHP Upstream:** Kode SCHP upstream (`modules/functions.py`) mengompilasi ekstensi `.cu` (CUDA) saat import InPlaceABN, dan `simple_extractor.py` memanggil `.cuda()` secara eksplisit. Tugas berikutnya adalah menyediakan arsitektur CPU murni yang mengganti modul InPlaceABN tersebut dengan modul kompatibel CPU (misal `BatchNorm2d` + `LeakyReLU(0.01)` atau implementasi pure-PyTorch ABN) dengan statistik dan parameter yang setara saat memuat checkpoint.
-- **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi/komersial (D-014).
+- **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint hanya disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit (D-014).
+- Tidak ada error teknis yang menghambat eksekusi CPU.
 
 ## Tests performed
 
-- **PASS smoke PyTorch CPU:** `ai-service/.venv-test/Scripts/python.exe ai-service/smoke_cpu.py` → CPython 3.14.3 AMD64, torch 2.15.0+cpu, cuda.is_available()=False, matmul float32 CPU, Conv+BN+ReLU forward pass, PIL<->numpy<->tensor, transform Resize(512,512)/Normalize mean/std ATR.
-- **PASS agy update:** `agy update` → "✓ You are already on the latest version" (1.5.9).
-- **NOT RUN:** unduh checkpoint SCHP ATR (`exp-schp-201908301523-atr.pth`), forward pass arsitektur ResNet-101 lengkap, inferensi human parsing, pipeline masking/PNG transparan, integrasi Express ↔ AI service.
+- **PASS test_schp_cpu.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_schp_cpu.py` → 66.7M parameter, 603 keys, forward pass CPU 1.977s pada `[1, 3, 512, 512]`, upsample/argmax 18 kelas PASS.
+- **PASS backend suite:** `npm test --prefix backend` → 24/24 unit/integration tests PASS.
+- **PASS frontend build:** `npm run build --prefix frontend` → Vite 6 modules transformed, dist generated.
+- **NOT RUN:** unduh checkpoint SCHP ATR (`exp-schp-201908301523-atr.pth`), forward pass dengan bobot terlatih asli, masking PNG transparan, integrasi Express ↔ FastAPI.
 
 ## Next action (only one)
 
-**Adaptasi arsitektur model SCHP ATR-18 ke CPU murni:**
-Buat file modul model PyTorch CPU (misal di `ai-service/schp_cpu/`) yang mengadopsi definisi ResNet-101 / InPlaceABN CPU-compatible dari SCHP tanpa ketergantungan ekstensi CUDA (`modules/functions.py`), lalu uji forward pass dengan dummy tensor `torch.randn(1, 3, 512, 512)` di `.venv-test`. Jangan mengunduh checkpoint sebelum arsitektur model dapat diinstansiasi dan dijalankan di CPU.
+**Unduh checkpoint resmi SCHP ATR-18 dan uji pemuatan bobot (load state_dict):**
+Buat folder `ai-service/models/` (sudah diabaikan Git), unduh file checkpoint resmi `exp-schp-201908301523-atr.pth`, catat ukuran dan sha256 checksum-nya, lalu tulis script verifikasi pemuatan bobot (`torch.load` dengan `map_location='cpu'` dan `weights_only=True` jika didukung) ke dalam `model = resnet101(num_classes=18)` untuk memastikan kecocokan semua 603 keys tanpa missing/unexpected keys.
 
 ## Handoff rules
 
@@ -69,14 +77,9 @@ Buat file modul model PyTorch CPU (misal di `ai-service/schp_cpu/`) yang mengado
 5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
 6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
 
-## Handoff rules
+## Template perbaruan berikutnya
 
-1. Jangan langsung membuat ulang folder/berkas yang ternyata sudah ada; inspeksi dulu.
-2. Jangan menghapus perubahan agent sebelumnya atau melakukan reset destruktif.
-3. Ubah file sesedikit mungkin dan kerjakan satu milestone pada satu waktu.
-4. Tulis semua hasil tes yang benar-benar dieksekusi.
-5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
-6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
+Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.
 
 ## Template perbaruan berikutnya
 

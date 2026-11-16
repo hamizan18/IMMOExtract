@@ -137,14 +137,25 @@
 - **Konsekuensi:** Runtime siap sebagai fondasi adaptasi kode model SCHP ATR-18 (ResNet-101 CPU) dan penggantian ketergantungan ekstensi CUDA InPlaceABN. Checkpoint model belum diunduh dan belum diuji.
 - **Bukti tes:** Eksekusi `ai-service/smoke_cpu.py` menghasilkan `ALL SMOKE TESTS PASSED` pada CPython 3.14.3 (AMD64) Windows 11.
 
+## D-016 — Adaptasi arsitektur SCHP ATR-18 ke CPU murni (pure PyTorch)
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted; arsitektur model dan forward pass CPU terverifikasi tanpa error atau dependensi CUDA. Checkpoint bobot resmi belum diunduh.
+- **Keputusan:** Mengimplementasikan `ai-service/schp_cpu/abn.py` dan `ai-service/schp_cpu/model.py` secara pure PyTorch. Modul `InPlaceABNSync` yang sebelumnya membutuhkan ekstensi CUDA C++ (`modules/functions.py`) digantikan oleh `ABN` berbasis `F.batch_norm` dan `F.leaky_relu(slope=0.01)`. Parameter state_dict (`weight`, `bias`, `running_mean`, `running_var`) dipertahankan 100% identik sehingga checkpoint upstream dapat dimuat langsung tanpa manipulasi key.
+- **Alasan:** Pada tahap inferensi (eval mode), backward pass in-place tidak dieksekusi. `F.batch_norm` dengan statistik running dan `F.leaky_relu` secara matematis identik dengan InPlaceABN upstream saat inferensi. Hal ini menghilangkan 100% ketergantungan pada Ninja, MSVC, CUDA compiler, dan `.cu` kernel.
+- **Alternatif:** Mengganti sembarangan dengan `nn.BatchNorm2d` standar tanpa `LeakyReLU(0.01)` ditolak karena akan merusak aktivasi terpadu InPlaceABN pada branch PSPModule, Decoder, Edge, dan Fusion. Mengompilasi InPlaceABN CPU C++ via Ninja ditolak karena menambah dependensi build tools C++ eksternal di Windows.
+- **Konsekuensi:** Model ResNet-101 AugmentCE2P (66,722,900 parameter, ~254.5 MB RAM) dapat diinstansiasi dan dieksekusi murni di CPU. Forward pass untuk 1 gambar (512×512) selesai dalam ~1.98 detik di AMD Ryzen 5 7430U. Checkpoint resmi `exp-schp-201908301523-atr.pth` siap diunduh dan dimuat secara aman (`weights_only=True` / `map_location='cpu'`).
+- **Bukti tes:** `test_schp_cpu.py` PASS pada CPython 3.14.3 (`ALL SCHP CPU TESTS PASSED`): parameter count 66.7M, 603 state_dict keys, 119 ABN running_mean/var buffers, forward pass CPU 1.977 detik menghasilkan tensor valid tanpa NaN, upsample 512×512 dan argmax map 18 kelas terverifikasi.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
-- [ ] Adaptasi arsitektur SCHP ATR-18 ke CPU murni (penghapusan kompilasi ekstensi CUDA InPlaceABN dan kesetaraan aktivasi/normalisasi).
+- [x] Adaptasi arsitektur SCHP ATR-18 ke CPU murni (D-016: pure PyTorch ABN + AugmentCE2P ResNet-101 di `ai-service/schp_cpu`).
+- [ ] Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), verifikasi keutuhan/hash, dan uji pemuatan bobot aman ke model CPU.
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-016 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-017 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

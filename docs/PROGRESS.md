@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. M3 sedang berjalan: runtime dasar PyTorch CPU (torch 2.15.0+cpu, torchvision 0.29.2+cpu) pada Python 3.14.3 terverifikasi via smoke test di `.venv-test` terisolasi. Model checkpoint belum diunduh dan inferensi SCHP belum diuji.
+> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. M3 sedang berjalan: arsitektur SCHP ATR-18 (ResNet-101 + CE2P) pure-PyTorch CPU terbukti berhasil diinstansiasi dan dieksekusi via forward pass (1.98 detik, ~255 MB RAM) di `.venv-test`. Checkpoint resmi belum diunduh.
 
 ## Ringkasan
 
-- **Current milestone:** M3 — POC human parsing — In progress (runtime CPU terverifikasi).
-- **Current task:** Smoke runtime PyTorch CPU terisolasi selesai (PASS); berikutnya adaptasi kode arsitektur SCHP ATR-18 ke CPU murni (menghilangkan ekstensi CUDA InPlaceABN) sebelum mengunduh checkpoint.
-- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; AI service masih health-only (`model_loaded: false`); runtime CPU terbukti di `.venv-test`.
-- **Last verification:** 2026-11-16 — `agy update` (PASS, 1.5.9), instalasi PyTorch CPU di `.venv-test`, dan eksekusi `ai-service/smoke_cpu.py` (PASS, import, matmul, Conv+BN+ReLU, PIL/tensor, transforms 512×512).
+- **Current milestone:** M3 — POC human parsing — In progress (arsitektur model CPU terverifikasi).
+- **Current task:** Adaptasi arsitektur model SCHP ATR-18 ke CPU murni selesai (PASS); berikutnya unduh checkpoint resmi SCHP ATR (`exp-schp-201908301523-atr.pth`), simpan ke `ai-service/models/`, dan uji pemuatan bobot (load state_dict) ke model CPU.
+- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; arsitektur model AI CPU mandiri (`ai-service/schp_cpu`) siap dieksekusi tanpa CUDA/C++ build tools.
+- **Last verification:** 2026-11-16 — `ai-service/test_schp_cpu.py` (PASS, 66.7M parameter, forward CPU 1.977s, upsample/argmax 18 kelas); `npm test --prefix backend` (PASS 24/24); `npm run build --prefix frontend` (PASS).
 
 ## Milestone
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
-| M3 | POC SCHP, label/mask, PNG transparan | In progress | Runtime PyTorch CPU terverifikasi via smoke test; adaptasi arsitektur CPU, checkpoint, inferensi dan PNG transparan belum diuji |
+| M3 | POC SCHP, label/mask, PNG transparan | In progress | Arsitektur ResNet-101 CPU terverifikasi (1.98s/forward); checkpoint, inferensi foto nyata, dan PNG transparan belum diuji |
 | M4 | Job, object gallery, download individual/ZIP | ⬜ Not started | Job status & unduhan end-to-end teruji |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
@@ -45,27 +45,28 @@
 - Git awal tugas readiness bersih (termasuk staged diff), berbeda dari handoff sebelumnya. Hanya README/DECISIONS/PROGRESS/HANDOFF diperbarui; tanpa perubahan source, instalasi, download binary, staging, atau commit.
 - Pembuktian runtime PyTorch CPU terisolasi pada Python 3.14.3 (2026-11-16): venv terpisah `ai-service/.venv-test` dibuat tanpa menyentuh `.venv` health. Dipasang wheel CPU resmi `torch-2.15.0+cpu`, `torchvision-0.29.2+cpu`, `numpy-2.5.4`, `pillow-13.0.0` dari index PyTorch CPU (`https://download.pytorch.org/whl/cpu`). Pengujian smoke via `ai-service/smoke_cpu.py` berhasil: verifikasi CPU-only (`cuda.is_available() == False`), matmul float32, Conv2d+BatchNorm2d+ReLU forward ([1,3,64,64] -> [1,16,64,64]), interoperabilitas PIL/NumPy/Tensor, dan transform torchvision Resize(512,512)/Normalize ATR PASS. Keputusan dicatat di D-015.
 - Pembaruan CLI Antigravity (2026-11-16): `agy update` dijalankan, mengonfirmasi CLI telah berada pada versi terbaru (1.5.9).
+- Adaptasi arsitektur model SCHP ATR-18 ke CPU murni (2026-11-16): paket `ai-service/schp_cpu/` dibuat (`abn.py`, `model.py`, `__init__.py`). Modul `InPlaceABNSync` digantikan dengan implementasi pure-PyTorch `ABN` (`F.batch_norm` + `F.leaky_relu(slope=0.01)`) yang mempertahankan layout parameter `weight`, `bias`, `running_mean`, `running_var` identik dengan upstream. `test_schp_cpu.py` membuktikan: instansiasi ResNet-101 (66.722.900 parameter, ~254.5 MB), 603 state_dict keys, 119 buffer running_mean/var, dan forward pass dummy `[1, 3, 512, 512]` dieksekusi dalam 1.977 detik pada CPU Ryzen 5 7430U menghasilkan tensor valid (tanpa NaN/Inf) serta upsample bilinear 512×512 dan argmax map 18 kelas PASS. Keputusan dicatat di D-016.
+- Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS) terkonfirmasi tidak mengalami regresi.
 
 ## In progress
 
-- M3: runtime dasar CPU terverifikasi. Berikutnya adaptasi kode arsitektur SCHP ATR-18 ke CPU murni (mengeliminasi dependensi ekstensi CUDA InPlaceABN) sebelum mengunduh checkpoint. Tidak mengubah `.venv` health.
+- M3: arsitektur model CPU siap. Berikutnya download checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`) ke `ai-service/models/` (diabaikan git), verifikasi keutuhan hash, dan uji pemuatan bobot (`model.load_state_dict`) secara aman di CPU.
 
 ## Blockers / risks
 
-- Inventaris hardware sudah tersedia, tetapi latensi/RAM puncak SCHP belum diukur. RAM bebas saat inventaris hanya 1,45 GiB; jangan menjanjikan inferensi lancar.
-- Python 3.14.3 tersedia; metadata paket modern mendukung versi ini, tetapi import/forward SCHP belum diuji. Upstream memakai ekstensi CUDA saat import dan `.cuda()` eksplisit; bukan langsung kompatibel dengan CPU laptop.
-- Pengujian Windows lokal saja; Linux/macOS dan deployment produksi belum diuji.
+- Latensi model forward pass CPU terukur ~1.98 detik pada AMD Ryzen 5 7430U dengan ukuran RAM model ~255 MB; inferensi CPU terbukti realistis dan tidak melebihi kapasitas RAM bebas.
+- Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; adaptasi model pure-PyTorch berhasil tanpa ketergantungan ekstensi CUDA atau Ninja compiler.
 - Checkpoint ATR resmi sudah diidentifikasi, belum diunduh/dihash/diuji. Hak redistribusi bobot/dataset belum terkonfirmasi; jangan samakan MIT kode dengan izin bundling model.
+- Pengujian Windows lokal saja; Linux/macOS dan deployment produksi belum diuji.
 - Batas dimensi preview diperiksa setelah decode browser; bukan perlindungan decompression bomb atau pengganti validasi server. Batas sementara dicatat di D-011, bukan benchmark.
 - Kamera fisik desktop PC Camera sudah diuji. Kamera mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state sebelumnya diuji lewat injeksi; navigasi `pagehide` diuji nyata pada tugas kamera sintetis.
 - Upload yang sudah diterima tetap tersimpan; pembatalan request bukan rollback dan hapus preview bukan hapus server. Retensi otomatis belum diimplementasikan; batasan ini ditampilkan di UI.
 - Browser dengan beberapa kamera dapat memilih kamera virtual secara default. Pengujian fisik memilih PC Camera lewat pengaturan Chrome; aplikasi belum mempunyai pemilih perangkat dan tidak menjanjikan kamera fisik tertentu.
-- Setelah verifikasi awal, supervisor Express/Vite melaporkan exit 127 tanpa penyebab pada log. Keduanya dijalankan ulang; smoke HTTP kembali PASS. Wrapper backend baru exit 0 meskipun endpoint masih berfungsi. Keberlangsungan proses tool lintas sesi tidak dijamin; startup terminal pengguna tersedia di README.
 - Jangan menandai fitur M3–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Adaptasi arsitektur model SCHP ATR-18 ke CPU murni: buat definisi model ResNet-101 yang mengganti ketergantungan ekstensi CUDA InPlaceABN dengan normalisasi dan aktivasi yang setara secara statistik pada CPU, serta buktikan instansiasi model dan forward pass tensor dummy [1, 3, 512, 512] di CPU tanpa error. Jangan mengunduh checkpoint sebelum arsitektur model CPU siap.
+Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), simpan di direktori yang diabaikan git (`ai-service/models/`), verifikasi integritas hash, dan buktikan pemuatan bobot (load state_dict) ke model CPU tanpa error. Jangan menyatukan tugas unduh bobot dengan inferensi gambar nyata sebelum pemuatan bobot diverifikasi.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -150,7 +151,10 @@ Adaptasi arsitektur model SCHP ATR-18 ke CPU murni: buat definisi model ResNet-1
 | 2026-11-16 | `py -3.14 -m venv ai-service/.venv-test` lalu pip install torch torchvision dari `https://download.pytorch.org/whl/cpu` | PASS | `torch-2.15.0+cpu`, `torchvision-0.29.2+cpu`, `numpy-2.5.4`, `pillow-13.0.0` terpasang di venv uji terisolasi; `.venv` health tetap utuh |
 | 2026-11-16 | `ai-service/.venv-test/Scripts/python.exe ai-service/smoke_cpu.py` | PASS | 7 pengujian: verifikasi CPU device, matmul, Conv2d+BatchNorm2d+ReLU forward, PIL<->numpy<->tensor, torchvision transform 512×512 normalisasi ATR |
 | 2026-11-16 | `agy update` | PASS | Antigravity CLI terverifikasi pada versi terbaru 1.5.9 |
-| 2026-11-16 | Download checkpoint resmi SCHP ATR, forward pass SCHP ResNet-101, segmentasi mask, Express integration | NOT RUN | Belum diimplementasikan; arsitektur model SCHP CPU perlu diadaptasi sebelum unduh checkpoint |
+| 2026-11-16 | `ai-service/.venv-test/Scripts/python.exe ai-service/test_schp_cpu.py` | PASS | Instansiasi ResNet-101 (66.7M params, 603 keys, 119 ABN running stats), forward pass CPU 1.977s pada input [1,3,512,512], upsample/argmax 18 kelas terverifikasi |
+| 2026-11-16 | `npm test --prefix backend` | PASS | 24/24 unit & integration tests validasi upload Express lulus tanpa regresi |
+| 2026-11-16 | `npm run build --prefix frontend` | PASS | Bundle Vite 6 modul berhasil dibangun tanpa regresi |
+| 2026-11-16 | Unduh checkpoint resmi SCHP ATR (`exp-schp-201908301523-atr.pth`), inferensi gambar nyata, masking RGBA transparan | NOT RUN | Model siap diinstansiasi; checkpoint belum diunduh/dihash |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
