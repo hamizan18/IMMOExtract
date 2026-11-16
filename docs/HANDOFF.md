@@ -4,63 +4,71 @@
 
 ## Last agent
 
-Antigravity CLI — implementasi endpoint FastAPI AI Service (`ai-service/main.py`), 2026-11-16.
+Antigravity CLI — implementasi integrasi Express backend dengan FastAPI AI Service dan asset serving PNG transparan/mask, 2026-11-16.
 
 ## Current milestone
 
-**M3 — POC human parsing — Sisi AI Service Selesai (Integrasi Backend Berikutnya).** M1/M2 selesai. Pipeline ekstraksi human parsing mandiri (`ai-service/extractor.py`) dan endpoint REST FastAPI (`ai-service/main.py`) terverifikasi end-to-end pada CPU (1.82 detik pada AMD Ryzen 5 7430U via live Uvicorn HTTP loopback), menghasilkan mask alpha foreground manusia utuh dan PNG transparan RGBA dengan preservasi pixel RGB asli serta deteksi kategori pakaian ATR. Integrasi pemanggilan dari backend Express berikutnya.
+**M4 — Job, object gallery, download individual/ZIP — Ready to start.** M1, M2, dan M3 selesai 100%. Pipeline human parsing SCHP ATR-18 CPU lokal, endpoint FastAPI, dan integrasi Express backend (`POST /api/uploads/:uploadId/extract`, `GET /api/uploads/:uploadId/extracted`, `GET /api/uploads/:uploadId/mask`) terverifikasi end-to-end secara live.
 
 ## Last completed task
 
-Implementasi endpoint FastAPI AI Service (`ai-service/main.py`):
-- Handler `lifespan` FastAPI memuat `HumanExtractor` saat server startup dan mengaktifkan `model_loaded: true` (dengan fallback graceful jika checkpoint tidak ditemukan).
-- Endpoint `GET /health` mengembalikan `status: "ok"`, `service: "ai-service"`, dan `model_loaded: true`.
-- Endpoint `POST /extract` menerima multipart image upload (`UploadFile`), mendukung opsi penyimpanan disk (`output_path`, `save_mask_path`), dan mengembalikan metadata kategori ATR, ukuran asli, waktu eksekusi CPU, serta base64 RGBA PNG transparan dan binary mask.
-- Endpoint `POST /extract-path` menerima JSON payload (`image_path`, `output_path`, `save_mask_path`) untuk efisiensi komunikasi co-located antar-proses lokal.
-- Script pengujian `ai-service/test_api.py` (5/5 PASS dalam 9.01 detik):
-  1. `test_01_health_endpoint`: verifikasi `model_loaded` bernilai `True`.
-  2. `test_02_extract_multipart_valid`: upload multipart gambar sintetis, inferensi 1.87s, verifikasi PNG RGBA base64 4-channel dengan transparansi alpha valid (0 dan 255).
-  3. `test_03_extract_multipart_corrupt_file`: file rusak ditolak dengan HTTP 400 Bad Request.
-  4. `test_04_extract_path_valid`: pemrosesan file path lokal menulis RGBA PNG dan mask ke disk dengan ukuran dan channel valid.
-  5. `test_05_extract_path_not_found`: path tidak ada mengembalikan HTTP 404.
-- Script live HTTP smoke test `ai-service/smoke_api_live.py` (PASS): Uvicorn server subprocess pada loopback `127.0.0.1:8005` merespons `GET /health` (`model_loaded: true`) dan `POST /extract` dalam 1.82 detik.
-- Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS).
-- Keputusan dicatat di D-019.
+Integrasi Express backend dengan FastAPI AI Service dan asset serving PNG transparan:
+- `backend/src/ai-client.js`: HTTP client untuk FastAPI AI Service (`health`, `extractPath`, `extractMultipart`) dengan timeout dan validasi respons.
+- `backend/src/app.js`: Diperbarui agar health check `/api/health/ai` menerima status dinamis `model_loaded: true/false`, serta me-mount router ekstraksi.
+- `backend/src/extractions.js`: Express router untuk pemrosesan ekstraksi:
+  - `POST /api/uploads/:uploadId/extract`: Validasi UUID upload, pemicuan ekstraksi model SCHP ATR-18 pada AI service, penyimpanan aman `extracted.png` dan `mask.png` di folder upload, serta update `manifest.json`.
+  - `GET /api/uploads/:uploadId/extracted`: Melayani file PNG transparan (RGBA 4 channel) dengan header proteksi cache dan tipe konten yang tepat.
+  - `GET /api/uploads/:uploadId/mask`: Melayani file mask PNG.
+- `frontend/src/main.js`: Diperbarui agar menampilkan indikator model AI aktif (`SCHP ATR-18`) saat `model_loaded: true`.
+- `scripts/smoke.mjs`: Diperbarui agar fleksibel terhadap status boolean `model_loaded`.
+- `backend/test/extractions.test.js`: Test suite unit/integrasi Express (27/27 PASS).
+- `scripts/smoke_integration_e2e.mjs`: Pengujian live end-to-end loopback Express (3005) <-> FastAPI (8005) (PASS: upload -> AI extract 2.097s -> serving RGBA PNG 4 channels terverifikasi).
+- Keputusan dicatat di D-020. Seluruh kriteria M3 terpenuhi.
 
 ## Current task
 
-Integrasikan pemanggilan AI Service dari backend Express:
-1. Selaraskan pengecekan health check di `backend/src/app.js` agar menerima `model_loaded: true` (atau fleksibel `boolean`) dari AI service tanpa melempar error `unexpected M1 response`.
-2. Siapkan endpoint/service pemrosesan job ekstraksi (`POST /api/jobs` atau trigger ekstraksi lokal) yang memanggil FastAPI `POST /extract` atau `POST /extract-path` dan mengelola metadata hasil ekstraksi.
+Mulai Milestone M4: Rancang dan implementasikan antrean/orchestrator job ekstraksi asynchronous M4:
+1. Endpoint `POST /api/jobs`: menerima upload gambar baru atau referensi `upload_id` yang sudah ada, mendaftarkan status job (`queued`/`processing`/`completed`/`failed`), dan memproses ekstraksi secara non-blocking / asynchronous.
+2. Endpoint `GET /api/jobs/:id`: polling status job dan progress.
+3. Manifest galeri objek: inventarisasi objek hasil ekstraksi per-kategori ATR (`Hat`, `Upper-clothes`, `Pants`, `Shoes`, dll.).
+4. Endpoint unduhan satu file PNG (`GET /api/jobs/:id/objects/:objectId/download`) dan unduhan ZIP (`POST /api/jobs/:id/exports`).
 
 ## Working components
 
 - Frontend file/kamera → preview → upload server dan validasi backend teruji pada M2.
 - `ai-service/extractor.py` memuat pipeline inferensi dan ekstraksi PNG transparan RGBA mandiri berbasis PyTorch CPU + Pillow + NumPy.
-- `ai-service/main.py` melayani `GET /health`, `POST /extract`, dan `POST /extract-path` pada loopback HTTP.
+- `ai-service/main.py` melayani `GET /health`, `POST /extract`, dan `POST /extract-path` pada loopback HTTP (1.82s/ekstraksi pada Ryzen 5 7430U).
+- `backend/src/ai-client.js` dan `backend/src/extractions.js` menghubungkan Express backend ke AI Service untuk memicu ekstraksi dan melayani PNG transparan/mask.
 - Checkpoint resmi bobot ATR-18 tersimpan di `ai-service/models/` (diabaikan Git).
-- Model CPU dengan bobot resmi terbukti mengeksekusi ekstraksi dalam ~1.82 detik.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint diperlukan, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
 - Tugas ini:
-  - `ai-service/main.py` (endpoint REST FastAPI: health, extract multipart, extract path)
-  - `ai-service/requirements.txt` (catatan paket python-multipart, httpx)
-  - `ai-service/test_api.py` (test suite unit & integration FastAPI TestClient)
-  - `ai-service/smoke_api_live.py` (live Uvicorn loopback smoke test)
-  - `docs/DECISIONS.md` (D-019)
+  - `backend/src/ai-client.js` (HTTP client untuk FastAPI AI Service)
+  - `backend/src/extractions.js` (Express router untuk ekstraksi & serving hasil)
+  - `backend/src/app.js` (update health check & mount extraction router)
+  - `backend/test/extractions.test.js` (test suite unit & integration backend ekstraksi)
+  - `scripts/smoke_integration_e2e.mjs` (live end-to-end integration test Express <-> FastAPI)
+  - `frontend/src/main.js` (update indikator model aktif)
+  - `scripts/smoke.mjs` (update health check assertions)
+  - `docs/DECISIONS.md` (D-020)
   - `docs/PROGRESS.md`
   - `docs/HANDOFF.md`
 
 ## Uncommitted changes / Git status
 
 Perubahan belum di-commit:
-- `modified: ai-service/main.py`
-- `modified: ai-service/requirements.txt`
+- `modified: backend/src/app.js`
+- `modified: frontend/src/main.js`
+- `modified: scripts/smoke.mjs`
 - `modified: docs/DECISIONS.md`
 - `modified: docs/PROGRESS.md`
 - `modified: docs/HANDOFF.md`
+- `untracked: backend/src/ai-client.js`
+- `untracked: backend/src/extractions.js`
+- `untracked: backend/test/extractions.test.js`
+- `untracked: scripts/smoke_integration_e2e.mjs`
 - `untracked: ai-service/test_api.py`
 - `untracked: ai-service/smoke_api_live.py`
 Sesuai aturan, tidak melakukan commit otomatis.
@@ -68,21 +76,19 @@ Sesuai aturan, tidak melakukan commit otomatis.
 ## Current errors
 
 - **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit ke repository (D-014).
-- Tidak ada error teknis yang menghambat eksekusi CPU, pipeline ekstraksi, atau endpoint FastAPI.
+- Tidak ada error teknis yang menghambat pipeline ekstraksi, AI service, atau integrasi backend Express.
 
 ## Tests performed
 
-- **PASS test_api.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_api.py` → 5/5 unit & integration tests PASS dalam 9.01 detik.
-- **PASS smoke_api_live.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/smoke_api_live.py` → live Uvicorn HTTP server loopback 127.0.0.1:8005, GET /health model_loaded: true, POST /extract live HTTP request PASS dalam 1.82s.
-- **PASS test_extractor.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_extractor.py` → letterbox 3 rasio aspek, ekstraksi CPU 1.901s, deteksi kategori pakaian ATR, transparansi alpha 0/255, save & reload PNG RGBA PASS.
-- **PASS backend suite:** `npm test --prefix backend` → 24/24 unit/integration tests PASS.
-- **PASS frontend build:** `npm run build --prefix frontend` → Vite build PASS.
-- **NOT RUN:** integrasi pemanggilan AI service dari Express backend (`/api/jobs` atau modul ekstraksi job M4).
+- **PASS backend test suite:** `npm test --prefix backend` → 27/27 unit/integration tests PASS (termasuk health check boolean, ekstraksi valid, serving asset PNG/mask, dan penanganan error 400/404/503).
+- **PASS live E2E smoke test:** `node scripts/smoke_integration_e2e.mjs` → live FastAPI + live Express loopback integration PASS (upload -> AI extraction CPU 2.097s -> serving RGBA PNG 4 channels terverifikasi).
+- **PASS test_api.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_api.py` → 5/5 unit & integration tests FastAPI lulus dalam 9.8s.
+- **PASS frontend build:** `npm run build --prefix frontend` → Vite build PASS (6 modul).
 
 ## Next action (only one)
 
-**Integrasikan pemanggilan AI Service dari backend Express:**
-Perbarui `backend/src/app.js` untuk menerima `model_loaded: true` pada route `/api/health/ai` tanpa melempar exception `unexpected M1 response`, dan buat/integrasikan endpoint atau client service pemrosesan ekstraksi di Express yang meneruskan gambar upload ke endpoint FastAPI `POST /extract` atau `POST /extract-path`. Jalankan `npm test --prefix backend` untuk memastikan tidak ada regresi.
+**Rancang dan implementasikan job orchestrator M4 (`/api/jobs`):**
+Buat model dan modul job manager di backend Express untuk mengelola siklus hidup job ekstraksi secara asynchronous (`queued`, `processing`, `completed`, `failed`), menyediakan endpoint `POST /api/jobs` dan polling status `GET /api/jobs/:id`, serta menyiapkan struktur manifest galeri objek individual yang diekstrak.
 
 ## Handoff rules
 

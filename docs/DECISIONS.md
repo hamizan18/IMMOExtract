@@ -185,6 +185,23 @@
   - `ai-service/test_api.py` PASS (5/5 unit & integration tests dalam 9.01 detik).
   - `ai-service/smoke_api_live.py` PASS: Uvicorn live server di `127.0.0.1:8005` merespons `GET /health` (`model_loaded: true`) dan `POST /extract` selesai dalam 1.82 detik.
 
+## D-020 — Integrasi Express Backend dengan FastAPI AI Service dan Ekstraksi Objek
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted; integrasi Express <-> FastAPI terverifikasi 100% via unit tests dan live loopback E2E smoke test.
+- **Keputusan:**
+  1. Menghubungkan Express dengan AI service melalui `AiClient` (`backend/src/ai-client.js`) yang mengelola health check probe dan pemanggilan ekstraksi lokal (`extractPath` dengan fallback `extractMultipart`).
+  2. Memperbarui `GET /api/health/ai` di `backend/src/app.js` agar menerima nilai `model_loaded: true/false` secara dinamis dan meneruskan status model ke client.
+  3. Mengimplementasikan router ekstraksi (`backend/src/extractions.js`):
+     - `POST /api/uploads/:uploadId/extract`: memvalidasi UUID upload, memicu inferensi model SCHP ATR-18 pada AI service, menyimpan file `extracted.png` (RGBA transparan) dan `mask.png` ke direktori upload yang terisolasi, serta memperbarui `manifest.json`.
+     - `GET /api/uploads/:uploadId/extracted`: menyajikan file PNG transparan hasil ekstraksi dengan header aman (`Cache-Control: no-store, private`, `Content-Type: image/png`).
+     - `GET /api/uploads/:uploadId/mask`: menyajikan file mask PNG.
+- **Alasan:** Melengkapi seluruh kriteria penyelesaian Milestone M3: pipeline inferensi human parsing dan foreground extraction kini dapat dipicu dari API Express dan hasilnya dapat diunduh/ditampilkan secara langsung oleh client.
+- **Konsekuensi:** M3 selesai. Express siap melanjutkan ke M4 (pengelolaan status job asynchronous, galeri objek, dan unduhan ZIP).
+- **Bukti tes:**
+  - `backend/test/extractions.test.js` PASS (3 suite, 27/27 tests PASS).
+  - `scripts/smoke_integration_e2e.mjs` PASS: live FastAPI (`127.0.0.1:8005`) + live Express (`127.0.0.1:3005`) berhasil mengupload, mengekstrak dalam 2.09s (deteksi `Upper-clothes` dan `Pants`), serta menyajikan file RGBA 4 channel yang terverifikasi keutuhannya melalui Sharp.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -192,12 +209,12 @@
 - [x] Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), verifikasi keutuhan/hash, dan uji pemuatan bobot aman ke model CPU (D-017).
 - [x] Pipeline inferensi gambar nyata (D-018: letterbox aspect-preserving, forward pass CPU, un-padding, mask alpha, RGBA PNG transparan di `ai-service/extractor.py`).
 - [x] Endpoint FastAPI AI service (`POST /extract`, `POST /extract-path`, `GET /health`) dan model lifecycle management (D-019).
-- [ ] Integrasi AI service FastAPI dengan Express backend (`/api/jobs` atau modul ekstraksi job M4).
-- [ ] Penyesuaian `backend/src/app.js` line 25 untuk menerima `model_loaded: true` dari AI service pada M3+.
+- [x] Integrasi Express backend dengan FastAPI AI service (`AiClient`, `/api/uploads/:uploadId/extract`, asset serving PNG/mask) (D-020).
+- [ ] Arsitektur Job Orchestrator & Polling status untuk ekstraksi asynchronous di M4.
+- [ ] Galeri objek hasil per-kategori dan pembuatan archive ZIP individual/all (M4).
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
-- [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
-- [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
-- [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
+- [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
+- [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-020 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-021 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

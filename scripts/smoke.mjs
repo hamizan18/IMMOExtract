@@ -8,7 +8,17 @@ const unavailable = process.argv.includes('--ai-unavailable');
 async function check(base, path, status, expected) {
   const response = await fetch(new URL(path, base), { signal: AbortSignal.timeout(10000) });
   assert.equal(response.status, status, base + path);
-  assert.deepEqual(await response.json(), expected, base + path);
+  const json = await response.json();
+  if (path === '/health' || path === '/api/health/ai') {
+    if (status === 200) {
+      assert.equal(json.status, 'ok', base + path);
+      assert.equal(json.service, 'ai-service', base + path);
+      assert.equal(typeof json.model_loaded, 'boolean', base + path);
+      console.log('PASS', status, base + path, `(model_loaded: ${json.model_loaded})`);
+      return;
+    }
+  }
+  assert.deepEqual(json, expected, base + path);
   console.log('PASS', status, base + path);
 }
 

@@ -1,14 +1,19 @@
 import express from 'express';
+import { AiClient } from './ai-client.js';
+import { createExtractionRouter } from './extractions.js';
 import { createUploadRouter } from './uploads.js';
 
 export function createApp({
   aiServiceUrl = new URL('http://127.0.0.1:8000'),
-  aiTimeoutMs = 3000,
+  aiTimeoutMs = 30000,
+  aiClient,
   uploadDir,
   maxUploadBytes = 10 * 1024 * 1024,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
+
+  const client = aiClient || new AiClient({ aiServiceUrl, timeoutMs: aiTimeoutMs });
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok', service: 'backend' });
@@ -16,18 +21,14 @@ export function createApp({
 
   app.get('/api/health/ai', async (_request, response) => {
     try {
-      const upstream = await fetch(new URL('/health', aiServiceUrl), {
-        signal: AbortSignal.timeout(aiTimeoutMs),
-        redirect: 'error',
+      const health = await client.health();
+      response.json({
+        status: 'ok',
+        service: 'ai-service',
+        model_loaded: health.model_loaded,
       });
-      if (!upstream.ok) throw new Error('AI health returned a non-success response');
-      const health = await upstream.json();
-      if (health.status !== 'ok' || health.service !== 'ai-service' || health.model_loaded !== false) {
-        throw new Error('AI health returned an unexpected M1 response');
-      }
-      response.json({ status: 'ok', service: 'ai-service', model_loaded: false });
     } catch (error) {
-      console.error('AI health check failed:', error.name);
+      console.error('AI health check failed:', error.name || error.message);
       response.status(503).json({
         status: 'unavailable',
         service: 'ai-service',
@@ -37,5 +38,7 @@ export function createApp({
   });
 
   app.use('/api/uploads', createUploadRouter({ uploadDir, maxUploadBytes }));
+  app.use('/api/uploads', createExtractionRouter({ uploadDir, aiClient: client }));
+
   return app;
 }
