@@ -4,68 +4,85 @@
 
 ## Last agent
 
-Antigravity CLI — implementasi pipeline ekstraksi gambar ke PNG transparan (`extractor.py`), 2026-11-16.
+Antigravity CLI — implementasi endpoint FastAPI AI Service (`ai-service/main.py`), 2026-11-16.
 
 ## Current milestone
 
-**M3 — POC human parsing — In progress.** M1/M2 selesai. Pipeline ekstraksi human parsing mandiri (`ai-service/extractor.py`) terverifikasi end-to-end pada CPU (1.90 detik pada AMD Ryzen 5 7430U), menghasilkan mask alpha foreground manusia utuh dan PNG transparan RGBA dengan preservasi pixel RGB asli tanpa ketergantungan OpenCV. Integrasi endpoint AI service berikutnya.
+**M3 — POC human parsing — Sisi AI Service Selesai (Integrasi Backend Berikutnya).** M1/M2 selesai. Pipeline ekstraksi human parsing mandiri (`ai-service/extractor.py`) dan endpoint REST FastAPI (`ai-service/main.py`) terverifikasi end-to-end pada CPU (1.82 detik pada AMD Ryzen 5 7430U via live Uvicorn HTTP loopback), menghasilkan mask alpha foreground manusia utuh dan PNG transparan RGBA dengan preservasi pixel RGB asli serta deteksi kategori pakaian ATR. Integrasi pemanggilan dari backend Express berikutnya.
 
 ## Last completed task
 
-Implementasi pipeline ekstraksi gambar ke PNG transparan (`ai-service/extractor.py`):
-- Kelas `HumanExtractor` dan dataclass `ExtractionResult` mengadopsi model ResNet-101 CPU dengan bobot terlatih resmi ATR-18.
-- Preprocessing letterbox aspect-preserving ke 512×512, konversi RGB→BGR, normalisasi ATR.
-- Inferensi forward pass CPU (1.901 detik), un-padding cropping area valid, dan interpolasi kembali ke dimensi asli `(W_orig, H_orig)`.
-- Pembuatan binary mask alpha foreground (`class > 0`) dan ekspor gambar RGBA dengan latar belakang sepenuhnya transparan (`alpha=0` pada background, `alpha=255` pada foreground manusia/pakaian, pixel RGB asli utuh).
-- Script pengujian `ai-service/test_extractor.py` lulus 100%:
-  - Verifikasi letterbox pada 3 aspect ratio (persegi, potret, lanskap).
-  - Ekstraksi gambar sintetis manusia: terdeteksi kategori pakaian ATR (`Hat`, `Upper-clothes`, `Pants`, `Left-shoe`, `Bag`).
-  - Verifikasi transparansi alpha: background alpha=0, foreground alpha=255, RGB match.
-  - Export & reload PNG RGBA dan mask PNG valid.
+Implementasi endpoint FastAPI AI Service (`ai-service/main.py`):
+- Handler `lifespan` FastAPI memuat `HumanExtractor` saat server startup dan mengaktifkan `model_loaded: true` (dengan fallback graceful jika checkpoint tidak ditemukan).
+- Endpoint `GET /health` mengembalikan `status: "ok"`, `service: "ai-service"`, dan `model_loaded: true`.
+- Endpoint `POST /extract` menerima multipart image upload (`UploadFile`), mendukung opsi penyimpanan disk (`output_path`, `save_mask_path`), dan mengembalikan metadata kategori ATR, ukuran asli, waktu eksekusi CPU, serta base64 RGBA PNG transparan dan binary mask.
+- Endpoint `POST /extract-path` menerima JSON payload (`image_path`, `output_path`, `save_mask_path`) untuk efisiensi komunikasi co-located antar-proses lokal.
+- Script pengujian `ai-service/test_api.py` (5/5 PASS dalam 9.01 detik):
+  1. `test_01_health_endpoint`: verifikasi `model_loaded` bernilai `True`.
+  2. `test_02_extract_multipart_valid`: upload multipart gambar sintetis, inferensi 1.87s, verifikasi PNG RGBA base64 4-channel dengan transparansi alpha valid (0 dan 255).
+  3. `test_03_extract_multipart_corrupt_file`: file rusak ditolak dengan HTTP 400 Bad Request.
+  4. `test_04_extract_path_valid`: pemrosesan file path lokal menulis RGBA PNG dan mask ke disk dengan ukuran dan channel valid.
+  5. `test_05_extract_path_not_found`: path tidak ada mengembalikan HTTP 404.
+- Script live HTTP smoke test `ai-service/smoke_api_live.py` (PASS): Uvicorn server subprocess pada loopback `127.0.0.1:8005` merespons `GET /health` (`model_loaded: true`) dan `POST /extract` dalam 1.82 detik.
 - Regression testing: `npm test --prefix backend` (24/24 PASS) dan `npm run build --prefix frontend` (PASS).
-- Keputusan dicatat di D-018.
+- Keputusan dicatat di D-019.
 
 ## Current task
 
-Integrasikan pipeline ekstraksi ke FastAPI AI service (`ai-service/main.py`): inisialisasi `HumanExtractor` saat startup AI service (`model_loaded: true`), buat endpoint `POST /extract` yang menerima request ekstraksi gambar (path file lokal atau multipart) dan mengembalikan mask serta objek transparan PNG, lalu uji endpoint secara langsung via HTTP request loopback.
+Integrasikan pemanggilan AI Service dari backend Express:
+1. Selaraskan pengecekan health check di `backend/src/app.js` agar menerima `model_loaded: true` (atau fleksibel `boolean`) dari AI service tanpa melempar error `unexpected M1 response`.
+2. Siapkan endpoint/service pemrosesan job ekstraksi (`POST /api/jobs` atau trigger ekstraksi lokal) yang memanggil FastAPI `POST /extract` atau `POST /extract-path` dan mengelola metadata hasil ekstraksi.
 
 ## Working components
 
 - Frontend file/kamera → preview → upload server dan validasi backend teruji pada M2.
 - `ai-service/extractor.py` memuat pipeline inferensi dan ekstraksi PNG transparan RGBA mandiri berbasis PyTorch CPU + Pillow + NumPy.
+- `ai-service/main.py` melayani `GET /health`, `POST /extract`, dan `POST /extract-path` pada loopback HTTP.
 - Checkpoint resmi bobot ATR-18 tersimpan di `ai-service/models/` (diabaikan Git).
-- Model CPU dengan bobot resmi terbukti mengeksekusi ekstraksi dalam ~1.90 detik.
+- Model CPU dengan bobot resmi terbukti mengeksekusi ekstraksi dalam ~1.82 detik.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint diperlukan, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
 - Tugas ini:
-  - `ai-service/extractor.py` (pipeline ekstraksi gambar ke PNG transparan)
-  - `ai-service/test_extractor.py` (test suite verifikasi pipeline ekstraksi)
-  - `docs/DECISIONS.md` (D-018)
+  - `ai-service/main.py` (endpoint REST FastAPI: health, extract multipart, extract path)
+  - `ai-service/requirements.txt` (catatan paket python-multipart, httpx)
+  - `ai-service/test_api.py` (test suite unit & integration FastAPI TestClient)
+  - `ai-service/smoke_api_live.py` (live Uvicorn loopback smoke test)
+  - `docs/DECISIONS.md` (D-019)
   - `docs/PROGRESS.md`
   - `docs/HANDOFF.md`
 
 ## Uncommitted changes / Git status
 
-Perubahan belum di-commit: `ai-service/extractor.py`, `ai-service/test_extractor.py`, dan dokumen yang diperbarui (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Sesuai aturan, tidak melakukan commit otomatis.
+Perubahan belum di-commit:
+- `modified: ai-service/main.py`
+- `modified: ai-service/requirements.txt`
+- `modified: docs/DECISIONS.md`
+- `modified: docs/PROGRESS.md`
+- `modified: docs/HANDOFF.md`
+- `untracked: ai-service/test_api.py`
+- `untracked: ai-service/smoke_api_live.py`
+Sesuai aturan, tidak melakukan commit otomatis.
 
 ## Current errors
 
 - **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit ke repository (D-014).
-- Tidak ada error teknis yang menghambat eksekusi CPU atau pipeline ekstraksi.
+- Tidak ada error teknis yang menghambat eksekusi CPU, pipeline ekstraksi, atau endpoint FastAPI.
 
 ## Tests performed
 
+- **PASS test_api.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_api.py` → 5/5 unit & integration tests PASS dalam 9.01 detik.
+- **PASS smoke_api_live.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/smoke_api_live.py` → live Uvicorn HTTP server loopback 127.0.0.1:8005, GET /health model_loaded: true, POST /extract live HTTP request PASS dalam 1.82s.
 - **PASS test_extractor.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_extractor.py` → letterbox 3 rasio aspek, ekstraksi CPU 1.901s, deteksi kategori pakaian ATR, transparansi alpha 0/255, save & reload PNG RGBA PASS.
 - **PASS backend suite:** `npm test --prefix backend` → 24/24 unit/integration tests PASS.
 - **PASS frontend build:** `npm run build --prefix frontend` → Vite build PASS.
-- **NOT RUN:** endpoint integrasi FastAPI `POST /extract`, orchestrator Express job M4.
+- **NOT RUN:** integrasi pemanggilan AI service dari Express backend (`/api/jobs` atau modul ekstraksi job M4).
 
 ## Next action (only one)
 
-**Integrasikan pipeline ekstraksi ke FastAPI AI service (`ai-service/main.py`):**
-Impor `HumanExtractor` di `ai-service/main.py`, inisialisasi extractor saat startup aplikasi FastAPI sehingga `GET /health` mengembalikan `model_loaded: true`, tambahkan endpoint `POST /extract` yang menerima request ekstraksi gambar (menerima upload multipart atau JSON payload berisi path file upload yang sudah divalidasi server) dan menghasilkan file PNG transparan (RGBA) serta metadata kelas yang terdeteksi. Uji endpoint secara langsung menggunakan script tes HTTP loopback.
+**Integrasikan pemanggilan AI Service dari backend Express:**
+Perbarui `backend/src/app.js` untuk menerima `model_loaded: true` pada route `/api/health/ai` tanpa melempar exception `unexpected M1 response`, dan buat/integrasikan endpoint atau client service pemrosesan ekstraksi di Express yang meneruskan gambar upload ke endpoint FastAPI `POST /extract` atau `POST /extract-path`. Jalankan `npm test --prefix backend` untuk memastikan tidak ada regresi.
 
 ## Handoff rules
 
@@ -75,28 +92,3 @@ Impor `HumanExtractor` di `ai-service/main.py`, inisialisasi extractor saat star
 4. Tulis semua hasil tes yang benar-benar dieksekusi.
 5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
 6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
-
-## Template perbaruan berikutnya
-
-Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.
-
-## Template perbaruan berikutnya
-
-Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.
-
-## Handoff rules
-
-1. Jangan langsung membuat ulang folder/berkas yang ternyata sudah ada; inspeksi dulu.
-2. Jangan menghapus perubahan agent sebelumnya atau melakukan reset destruktif.
-3. Ubah file sesedikit mungkin dan kerjakan satu milestone pada satu waktu.
-4. Tulis semua hasil tes yang benar-benar dieksekusi.
-5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
-6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
-
-## Template perbaruan berikutnya
-
-Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.
-
-## Template perbaruan berikutnya
-
-Saat milestone mulai dikerjakan, ganti isi `Last completed task`, `Working components`, `Modified files`, `Git status`, `Tests performed`, dan `Next action` dengan fakta terbaru. Jangan menumpuk log percakapan panjang di sini.

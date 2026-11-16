@@ -170,17 +170,34 @@
 - **Konsekuensi:** Waktu proses ekstraksi per gambar adalah ~1.90 detik pada AMD Ryzen 5 7430U. Output pixel RGB asli di area foreground terjaga 100%, background sepenuhnya transparan (alpha 0). Siap diintegrasikan ke endpoint FastAPI (`POST /extract`).
 - **Bukti tes:** `test_extractor.py` PASS (`=== ALL EXTRACTOR TESTS PASSED ===`): letterbox valid di 3 rasio aspek, deteksi kategori pakaian/bagian tubuh pada fixture sintetis, foreground ratio 21.1%, alpha transparency verification PASS, save/reload PNG RGBA PASS.
 
+## D-019 — Endpoint FastAPI AI Service untuk Human Parsing dan Transparansi RGBA
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted; endpoint HTTP FastAPI dan pengujian live loopback terverifikasi 100%.
+- **Keputusan:** Mengimplementasikan endpoint AI service di `ai-service/main.py`:
+  1. `lifespan` handler untuk memuat `HumanExtractor` saat server startup secara aman dengan graceful fallback jika bobot belum ada (`model_loaded: false`).
+  2. `GET /health`: mengembalikan `{"status": "ok", "service": "ai-service", "model_loaded": bool}`.
+  3. `POST /extract`: menerima multipart upload (`file: UploadFile`), opsi simpan ke disk (`output_path`, `save_mask_path`), dan opsi `include_base64`. Mengembalikan metadata deteksi kategori, ukuran gambar asli, waktu eksekusi CPU (~1.8–1.9 detik), serta base64 RGBA transparan PNG dan mask.
+  4. `POST /extract-path`: menerima JSON payload (`image_path`, `output_path`, `save_mask_path`) untuk efisiensi komunikasi antar-proses lokal pada backend terpadu.
+- **Alasan:** Menyediakan kontrak REST API yang fleksibel: mendukung stateless multipart upload (terpisah mesin / proxy) dan direct shared path (lokal co-located).
+- **Konsekuensi:** AI Service siap menerima request ekstraksi dari Express backend (`POST /api/jobs` atau modul ekstraksi).
+- **Bukti tes:**
+  - `ai-service/test_api.py` PASS (5/5 unit & integration tests dalam 9.01 detik).
+  - `ai-service/smoke_api_live.py` PASS: Uvicorn live server di `127.0.0.1:8005` merespons `GET /health` (`model_loaded: true`) dan `POST /extract` selesai dalam 1.82 detik.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
 - [x] Adaptasi arsitektur SCHP ATR-18 ke CPU murni (D-016: pure PyTorch ABN + AugmentCE2P ResNet-101 di `ai-service/schp_cpu`).
 - [x] Unduh checkpoint resmi SCHP ATR-18 (`exp-schp-201908301523-atr.pth`), verifikasi keutuhan/hash, dan uji pemuatan bobot aman ke model CPU (D-017).
 - [x] Pipeline inferensi gambar nyata (D-018: letterbox aspect-preserving, forward pass CPU, un-padding, mask alpha, RGBA PNG transparan di `ai-service/extractor.py`).
-- [ ] Integrasi AI service FastAPI (`POST /extract`) dengan Express backend (`/api/jobs` atau proxy ekstraksi).
+- [x] Endpoint FastAPI AI service (`POST /extract`, `POST /extract-path`, `GET /health`) dan model lifecycle management (D-019).
+- [ ] Integrasi AI service FastAPI dengan Express backend (`/api/jobs` atau modul ekstraksi job M4).
+- [ ] Penyesuaian `backend/src/app.js` line 25 untuk menerima `model_loaded: true` dari AI service pada M3+.
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Desain transport dan manifest hasil FastAPI ↔ Express.
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-019 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-020 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
