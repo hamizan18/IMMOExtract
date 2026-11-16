@@ -68,33 +68,24 @@ Kamera memerlukan **HTTPS atau localhost** serta izin browser. Aplikasi meminta 
 
 Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 → preview → upload HTTP 201 → track kamera berhenti. Pengujian sintetis sebelumnya mencakup error/izin dan race async. Kamera mobile fisik serta perpindahan tab non-headless belum diuji. Jika browser memilih kamera virtual, pilih kamera fisik melalui pengaturan kamera browser; aplikasi belum menyediakan pemilih perangkat.
 
-## Menjalankan M1
+## Menjalankan Aplikasi (M1–M3)
 
-Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3**. Python ini hanya untuk health service M1; kompatibilitas PyTorch/SCHP belum diuji.
+Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3** dengan PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`).
 
-Instal dependensi dari root proyek (PowerShell):
-
-```powershell
-npm ci --prefix frontend
-npm ci --prefix backend
-python -m venv ai-service/.venv
-.\ai-service\.venv\Scripts\python.exe -m pip install -r ai-service/requirements.txt
-```
-
-Buka tiga terminal dari root proyek:
+Jalankan 3 terminal dari root proyek (`IMMOExtract`):
 
 ```powershell
-# Terminal 1 — FastAPI, hanya loopback; tidak memuat model AI
-.\ai-service\.venv\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8000
+# Terminal 1 — AI Service (FastAPI + Model SCHP ATR-18 CPU)
+.\ai-service\.venv-test\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8000
 
-# Terminal 2 — Express
+# Terminal 2 — Backend (Express.js)
 npm start --prefix backend
 
-# Terminal 3 — Vite
+# Terminal 3 — Frontend (Vite)
 npm run dev --prefix frontend
 ```
 
-Buka **http://127.0.0.1:5173**. Hentikan masing-masing proses dengan `Ctrl+C`.
+Buka **http://127.0.0.1:5173** di browser Anda. Hentikan masing-masing proses dengan `Ctrl+C`.
 
 Linux/macOS: gunakan `python3 -m venv ai-service/.venv` dan `ai-service/.venv/bin/python` sebagai pengganti executable Python Windows. Perintah npm sama; platform tersebut belum diuji.
 
