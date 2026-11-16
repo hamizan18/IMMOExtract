@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1, M2, dan M3 selesai untuk lingkungan Windows/Chrome yang diuji. M3 selesai 100%: pipeline ekstraksi human parsing mandiri `HumanExtractor` (`ai-service/extractor.py`), endpoint FastAPI (`ai-service/main.py`), dan integrasi Express backend (`backend/src/ai-client.js`, `backend/src/extractions.js`) telah diimplementasikan serta terverifikasi via `backend/test/extractions.test.js` (27/27 PASS) dan live E2E smoke test `scripts/smoke_integration_e2e.mjs` (PASS). Menghasilkan binary mask alpha foreground dan PNG transparan RGBA dengan preservasi pixel RGB asli serta menyajikan asset ke client via HTTP. M4 (Job orchestrator, galeri objek, unduhan individual/ZIP) berikutnya.
+> **Status aktual:** M1–M3 memiliki bukti verifikasi sebelumnya untuk lingkungan Windows lokal. M4 sedang berjalan: job asynchronous, polling, persistensi manifest, dan satu worker antrean sudah terverifikasi dengan model SCHP nyata. Pipeline saat ini menghasilkan satu foreground manusia RGBA full-frame; PNG/crop per kategori, UI galeri, dan unduhan job/ZIP belum tersedia. Jangan menyamakan metadata kategori ATR dengan file objek individual.
 
 ## Ringkasan
 
-- **Current milestone:** M4 — Job, object gallery, download individual/ZIP — Ready to start (M1–M3 Complete).
-- **Current task:** M3 selesai penuh; berikutnya rancang dan implementasikan antrean/orchestrator job ekstraksi asynchronous M4 (`POST /api/jobs`, status polling `GET /api/jobs/:id`, manifest galeri objek).
-- **Overall status:** Input file/kamera fisik → preview → upload server → AI extraction CPU loopback → PNG RGBA transparan & mask asset serving terverifikasi end-to-end.
-- **Last verification:** 2026-11-16 — `scripts/smoke_integration_e2e.mjs` (PASS live E2E Express <-> FastAPI dalam 2.20s); `backend/test/extractions.test.js` (PASS 27/27 tests); `ai-service/test_api.py` (PASS 5/5); `npm run build --prefix frontend` (PASS).
+- **Current milestone:** M4 — Job, object gallery, download individual/ZIP — In progress.
+- **Current task:** Orchestrator job selesai; berikutnya ekstraksi PNG per kategori ATR dan pengisian manifest objek nyata.
+- **Overall status:** Upload baru/referensi upload → queued → processing → completed/failed → polling dan manifest privat terverifikasi. UI masih alur upload M2.
+- **Last verification:** 2026-11-17 — `npm test --prefix backend` PASS 32/32; smoke HTTP sementara Express ↔ FastAPI SCHP asli PASS untuk dua job berurutan dan kegagalan layanan AI.
 
 ## Milestone
 
@@ -16,7 +16,7 @@
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
-| M4 | Job, object gallery, download individual/ZIP | ⬜ Not started | Job status & unduhan end-to-end teruji |
+| M4 | Job, object gallery, download individual/ZIP | In progress | Orchestrator/polling PASS; PNG per kategori, UI galeri dan unduhan job/ZIP belum selesai |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
@@ -69,9 +69,14 @@
   - Live E2E smoke test `scripts/smoke_integration_e2e.mjs` (PASS).
   - Keputusan dicatat di D-020. Seluruh kriteria M3 terpenuhi.
 
+- Orchestrator M4 (2026-11-17): `backend/src/job-manager.js` dan `jobs.js` menyediakan `POST /api/jobs` (multipart `image` atau JSON `upload_id`, HTTP 202 + Location) serta polling `GET /api/jobs/:id`. Upload baru memakai validasi M2 yang sama melalui callback `onUploaded`; endpoint upload/ekstraksi lama tetap berfungsi.
+- Satu worker FIFO per instance backend; manifest privat `storage/jobs/<uuid>/manifest.json` ditulis melalui temporary file + rename. Job interrupted saat restart ditandai `failed` tanpa retry otomatis; job terminal tetap dapat dipolling. Progress 0/10/100 adalah tahap, bukan estimasi persentase inferensi.
+- Hasil baru diinventarisasi setelah PNG/mask berhasil didekode: satu objek `human` full-frame jika alpha foreground ada, atau `objects: []` jika kosong. Respons publik tidak menyertakan path/file internal. Pemisahan kategori belum diimplementasikan.
+- Git awal bersih; catatan uncommitted handoff sebelumnya sudah kedaluwarsa. Tidak melakukan staging/commit, instalasi, download model, atau perubahan teknologi. LSP tidak dikonfigurasi; referensi pemanggil diperiksa lewat pencarian.
+
 ## In progress
 
-- M4: Perancangan dan implementasi job orchestrator asynchronous (`POST /api/jobs`, status polling `GET /api/jobs/:id`, manifest galeri objek).
+- M4: PNG/crop per kategori ATR, manifest galeri individual, UI galeri, unduhan PNG/ZIP belum selesai. Orchestrator dan polling sudah PASS.
 
 ## Blockers / risks
 
@@ -83,11 +88,13 @@
 - Kamera fisik desktop PC Camera sudah diuji. Kamera mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state sebelumnya diuji lewat injeksi; navigasi `pagehide` diuji nyata pada tugas kamera sintetis.
 - Upload yang sudah diterima tetap tersimpan; pembatalan request bukan rollback dan hapus preview bukan hapus server. Retensi otomatis belum diimplementasikan; batasan ini ditampilkan di UI.
 - Browser dengan beberapa kamera dapat memilih kamera virtual secara default. Pengujian fisik memilih PC Camera lewat pengaturan Chrome; aplikasi belum mempunyai pemilih perangkat dan tidak menjanjikan kamera fisik tertentu.
+- Job manager mengasumsikan satu proses backend pemilik storage; belum mendukung multi-process, antrean berbatas, atau retensi. Endpoint ekstraksi sinkron M3 tetap di luar antrean `/api/jobs`.
+- Startup `server.js` masih memakai `AI_HEALTH_TIMEOUT_MS` sebagai timeout client AI bersama (default 3000 ms); smoke job memakai 30000 ms. Untuk input lambat, konfigurasi timeout memadai; benchmark batas input belum dilakukan.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Mulai Milestone M4: Rancang dan implementasikan job orchestrator (`POST /api/jobs`) yang menerima upload dan mendaftarkan status job (`queued`/`processing`/`completed`/`failed`) dengan manifest galeri objek hasil ekstraksi, serta endpoint status polling `GET /api/jobs/:id`. Pastikan seluruh pengujian integrasi tetap PASS.
+Implementasikan PNG transparan/crop per kategori ATR yang benar-benar terdeteksi pada pipeline AI, lalu isi manifest job dengan file objek tersebut. Pertahankan foreground manusia, piksel RGB/alpha asli, hasil kosong yang jujur, dan uji kategori dengan fixture deterministik. Jangan mulai UI/ZIP atau milestone baru pada tugas ini.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -184,6 +191,12 @@ Mulai Milestone M4: Rancang dan implementasikan job orchestrator (`POST /api/job
 | 2026-11-16 | `node scripts/smoke_integration_e2e.mjs` | PASS | Full E2E loopback: booting FastAPI (8005) + Express (3005) -> health probe -> upload gambar sintetis -> POST /api/uploads/:uploadId/extract (2.20s total, AI reported 2.097s, kategori 'Upper-clothes' & 'Pants') -> GET extracted.png (200x300, 4 channels RGBA) -> GET mask.png terverifikasi 100% |
 | 2026-11-16 | `npm run build --prefix frontend` | PASS | Bundle Vite 6 modul berhasil dibangun tanpa regresi |
 | 2026-11-16 | Job orchestrator asynchronous dan antrean job M4 (`/api/jobs`, status polling, manifest galeri objek) | NOT RUN | M3 selesai penuh; job orchestrator dan galeri objek adalah target berikutnya di M4 |
+| 2026-11-17 | Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat` | PASS | Working tree dan index bersih; tidak ada perubahan agent sebelumnya yang perlu ditimpa |
+| 2026-11-17 | `npm test --prefix backend` | PASS | 32/32: 27 tes lama + 5 tes lifecycle/security job, serialisasi antrean, failure recovery, restart, file output hilang, foreground kosong, sanitasi respons |
+| 2026-11-17 | Smoke sementara `node --input-type=module` melalui stdin; FastAPI nyata pada port 8017, Express port dinamis, storage temp | PASS | Multipart → HTTP 202 dalam 123 ms; JSON referensi upload diterima; job kedua terlihat queued; keduanya processing → completed; inferensi 2.0079s dan 1.88s; kategori Upper-clothes/Pants, RGBA 200×300, alpha min/max 0/255 |
+| 2026-11-17 | Smoke AI tidak dapat dihubungi melalui instance Express terisolasi | PASS | Job diterima lalu failed/EXTRACTION_FAILED; health backend tetap HTTP 200 |
+| 2026-11-17 | UI/browser, build frontend, PNG per kategori, download job/ZIP | NOT RUN | Frontend tidak diubah; fitur galeri/download belum tersedia. Tidak mengklaim M4 selesai |
+| 2026-11-17 | Cleanup smoke | PASS | Server Express uji ditutup; fixture/storage temp dihapus; service FastAPI 8017 dihentikan. Tidak menyentuh foto/storage pengguna |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

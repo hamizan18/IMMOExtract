@@ -202,6 +202,19 @@
   - `backend/test/extractions.test.js` PASS (3 suite, 27/27 tests PASS).
   - `scripts/smoke_integration_e2e.mjs` PASS: live FastAPI (`127.0.0.1:8005`) + live Express (`127.0.0.1:3005`) berhasil mengupload, mengekstrak dalam 2.09s (deteksi `Upper-clothes` dan `Pants`), serta menyajikan file RGBA 4 channel yang terverifikasi keutuhannya melalui Sharp.
 
+## D-021 — Job asynchronous lokal dengan satu worker dan manifest persisten
+
+- **Tanggal:** 2026-11-17.
+- **Status:** Accepted untuk orchestrator M4; galeri per kategori dan unduhan job belum selesai.
+- **Keputusan:** `POST /api/jobs` menerima multipart `image` menggunakan validator upload M2 atau JSON hanya `upload_id`. Respons HTTP 202 + Location dikirim setelah manifest queued tersimpan, sebelum inferensi. `GET /api/jobs/:id` membaca snapshot status dan objek tanpa path filesystem.
+- **Persistensi:** `storage/jobs/<uuid>/manifest.json`, tulis temporary file lalu rename; direktori job default sejajar direktori upload (opsi `jobDir` pada `createApp` untuk isolasi). Hanya satu proses backend boleh memiliki direktori itu. Queued/processing yang tersisa setelah restart menjadi failed/JOB_INTERRUPTED pada akses pertama; job terminal tetap tersedia.
+- **Worker:** FIFO serial per instance untuk API job. Satu kegagalan tidak menghentikan antrean; tidak ada retry/fallback inferensi otomatis. Shared path internal memakai `AiClient.extractPath`, bukan path dari client. Endpoint ekstraksi sinkron M3 tetap tersedia dan tidak menggunakan antrean ini.
+- **Manifest:** UUID objek, kategori, file relatif privat, lebar/tinggi. File PNG/mask didekode sebelum completed. Pipeline M3 hanya menyediakan foreground `human` full-frame; inventarisasi satu objek nyata jika alpha ada, atau kosong. Metadata kategori ATR tidak dipalsukan menjadi file per kategori. PNG per kategori/crop adalah tugas berikutnya.
+- **Progress:** 0 queued, 10 processing, 100 completed; indikator tahap, bukan persentase inferensi terukur. Error aman disimpan untuk failed. Jika penyimpanan status terminal gagal, polling dalam proses masih mengembalikan failed/JOB_STORAGE_FAILED.
+- **Alasan/alternatif:** File JSON dan antrean lokal mengikuti arsitektur MVP; tidak membutuhkan Redis/database, worker paralel, atau dependensi tambahan. Resume otomatis ditolak agar restart tidak menggandakan inferensi tanpa permintaan.
+- **Konsekuensi:** UI galeri/unduhan, multi-process, batas antrean, dan cleanup retensi belum tersedia. Tidak ada perubahan stack atau cakupan produk. Timeout startup backend masih mengikuti konfigurasi client yang sudah ada; smoke memakai 30 detik.
+- **Bukti:** `npm test --prefix backend` PASS 32/32. Smoke HTTP sementara dengan FastAPI/model nyata PASS: multipart + referensi upload, job kedua queued, dua inferensi serial (2.0079s/1.88s), RGBA 200×300 alpha 0/255; AI tidak dapat dihubungi menghasilkan failed tanpa mematikan backend.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -210,11 +223,11 @@
 - [x] Pipeline inferensi gambar nyata (D-018: letterbox aspect-preserving, forward pass CPU, un-padding, mask alpha, RGBA PNG transparan di `ai-service/extractor.py`).
 - [x] Endpoint FastAPI AI service (`POST /extract`, `POST /extract-path`, `GET /health`) dan model lifecycle management (D-019).
 - [x] Integrasi Express backend dengan FastAPI AI service (`AiClient`, `/api/uploads/:uploadId/extract`, asset serving PNG/mask) (D-020).
-- [ ] Arsitektur Job Orchestrator & Polling status untuk ekstraksi asynchronous di M4.
+- [x] Arsitektur Job Orchestrator & Polling status untuk ekstraksi asynchronous di M4 (D-021).
 - [ ] Galeri objek hasil per-kategori dan pembuatan archive ZIP individual/all (M4).
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-021 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-022 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

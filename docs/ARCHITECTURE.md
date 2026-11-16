@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Fondasi M1 diimplementasikan; hasil verifikasi dicatat di `PROGRESS.md`. Pipeline job, ekstraksi, dan AI di bawah tetap rancangan, bukan fitur yang sudah tersedia.
+> **Status:** Fondasi M1/M2, ekstraksi foreground M3, serta orchestrator/polling M4 tersedia. PNG per kategori, UI galeri dan unduhan job/ZIP tetap rancangan. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -54,7 +54,9 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 ## 4. Pemrosesan dan status job
 
-**Alur yang direncanakan:**
+**Kontrak orchestrator aktual (D-021):** `POST /api/jobs` menerima multipart `image` atau JSON `{"upload_id":"<uuid>"}`. HTTP 202 + Location setelah manifest queued tersimpan. FIFO satu worker per instance backend memanggil AI via shared path internal; `GET /api/jobs/:id` membaca status, progress tahap 0/10/100, timestamp, objek dan error aman. Manifest privat ditulis atomik via temporary file + rename. Satu proses backend memiliki storage; job interrupted saat restart menjadi failed tanpa retry, hasil terminal tetap tersedia. Manifest sekarang hanya memuat foreground manusia full-frame jika alpha ada, bukan file pakaian per kategori. Respons polling tidak mengirim nama file/path internal. Endpoint sinkron M3 berada di luar antrean ini.
+
+**Alur lengkap yang dituju (per-kategori, unduhan dan retensi belum tersedia):**
 
 1. `POST /api/jobs`: upload satu gambar valid; Express buat `job_id` acak, simpan input, metadata status `queued`.
 2. Worker mengambil pekerjaan; ubah ke `processing`.
@@ -71,8 +73,8 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 | Method | Path | Keterangan |
 | --- | --- | --- |
-| POST | `/api/jobs` | Upload dan buat job, kembalikan `{job_id,status}` |
-| GET | `/api/jobs/:id` | Status `queued/processing/completed/failed`, progress bila tersedia |
+| POST | `/api/jobs` | Tersedia: multipart image atau JSON upload_id, HTTP 202 + Location |
+| GET | `/api/jobs/:id` | Tersedia: status, progress tahap, timestamp, objek tanpa path, error aman |
 | GET | `/api/jobs/:id/objects` | Manifest objek hasil ekstraksi |
 | GET | `/api/jobs/:id/objects/:objectId` | Preview objek PNG |
 | GET | `/api/jobs/:id/objects/:objectId/download` | Attachment PNG |

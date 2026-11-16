@@ -2,12 +2,14 @@ import express from 'express';
 import { AiClient } from './ai-client.js';
 import { createExtractionRouter } from './extractions.js';
 import { createUploadRouter } from './uploads.js';
+import { createJobRouter } from './jobs.js';
 
 export function createApp({
   aiServiceUrl = new URL('http://127.0.0.1:8000'),
   aiTimeoutMs = 30000,
   aiClient,
   uploadDir,
+  jobDir,
   maxUploadBytes = 10 * 1024 * 1024,
 } = {}) {
   const app = express();
@@ -39,6 +41,7 @@ export function createApp({
 
   app.use('/api/uploads', createUploadRouter({ uploadDir, maxUploadBytes }));
   app.use('/api/uploads', createExtractionRouter({ uploadDir, aiClient: client }));
+  app.use('/api/jobs', createJobRouter({ uploadDir, jobDir, maxUploadBytes, aiClient: client }));
 
   return app;
 }

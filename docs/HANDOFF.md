@@ -4,91 +4,72 @@
 
 ## Last agent
 
-Antigravity CLI — implementasi integrasi Express backend dengan FastAPI AI Service dan asset serving PNG transparan/mask, 2026-11-16.
+OMP — orchestrator job asynchronous M4 dan verifikasi HTTP dengan model SCHP asli, 2026-11-17.
 
 ## Current milestone
 
-**M4 — Job, object gallery, download individual/ZIP — Ready to start.** M1, M2, dan M3 selesai 100%. Pipeline human parsing SCHP ATR-18 CPU lokal, endpoint FastAPI, dan integrasi Express backend (`POST /api/uploads/:uploadId/extract`, `GET /api/uploads/:uploadId/extracted`, `GET /api/uploads/:uploadId/mask`) terverifikasi end-to-end secara live.
+**M4 — Job, object gallery, download individual/ZIP — In progress.**
+M1–M3 memiliki bukti sebelumnya; alur foreground M3 tetap berfungsi pada tes regresi. Orchestrator/polling M4 selesai dan diuji. PNG per kategori, UI galeri, unduhan job individual/ZIP belum tersedia; M4 belum selesai.
 
 ## Last completed task
 
-Integrasi Express backend dengan FastAPI AI Service dan asset serving PNG transparan:
-- `backend/src/ai-client.js`: HTTP client untuk FastAPI AI Service (`health`, `extractPath`, `extractMultipart`) dengan timeout dan validasi respons.
-- `backend/src/app.js`: Diperbarui agar health check `/api/health/ai` menerima status dinamis `model_loaded: true/false`, serta me-mount router ekstraksi.
-- `backend/src/extractions.js`: Express router untuk pemrosesan ekstraksi:
-  - `POST /api/uploads/:uploadId/extract`: Validasi UUID upload, pemicuan ekstraksi model SCHP ATR-18 pada AI service, penyimpanan aman `extracted.png` dan `mask.png` di folder upload, serta update `manifest.json`.
-  - `GET /api/uploads/:uploadId/extracted`: Melayani file PNG transparan (RGBA 4 channel) dengan header proteksi cache dan tipe konten yang tepat.
-  - `GET /api/uploads/:uploadId/mask`: Melayani file mask PNG.
-- `frontend/src/main.js`: Diperbarui agar menampilkan indikator model AI aktif (`SCHP ATR-18`) saat `model_loaded: true`.
-- `scripts/smoke.mjs`: Diperbarui agar fleksibel terhadap status boolean `model_loaded`.
-- `backend/test/extractions.test.js`: Test suite unit/integrasi Express (27/27 PASS).
-- `scripts/smoke_integration_e2e.mjs`: Pengujian live end-to-end loopback Express (3005) <-> FastAPI (8005) (PASS: upload -> AI extract 2.097s -> serving RGBA PNG 4 channels terverifikasi).
-- Keputusan dicatat di D-020. Seluruh kriteria M3 terpenuhi.
+- `POST /api/jobs`: menerima multipart satu `image` atau JSON hanya `upload_id`; HTTP 202 dengan `Location`, `job_id`, `upload_id`, status `queued`.
+- `GET /api/jobs/:id`: polling `queued`/`processing`/`completed`/`failed`, progress tahap 0/10/100, timestamp, objek dan error aman. Tidak mengirim path/file internal.
+- FIFO satu worker per instance backend; upload baru menggunakan validasi M2, bukan validator duplikat.
+- Manifest privat per job ditulis melalui temporary file + rename; job selesai bertahan setelah restart. Job queued/processing yang tertinggal ditandai failed/JOB_INTERRUPTED pada akses pertama setelah restart, tanpa retry otomatis.
+- PNG/mask didekode sebelum job completed. `objects` berisi foreground `human` full-frame yang nyata atau kosong jika alpha foreground tidak ada; kategori ATR hanya metadata, belum file per kategori.
+- Error inferensi tidak menghambat job berikutnya; error path internal tidak diteruskan kepada client.
+- D-021 mencatat kontrak dan batasan. Tidak mengubah frontend, pipeline AI, dependensi, atau model.
 
 ## Current task
 
-Mulai Milestone M4: Rancang dan implementasikan antrean/orchestrator job ekstraksi asynchronous M4:
-1. Endpoint `POST /api/jobs`: menerima upload gambar baru atau referensi `upload_id` yang sudah ada, mendaftarkan status job (`queued`/`processing`/`completed`/`failed`), dan memproses ekstraksi secara non-blocking / asynchronous.
-2. Endpoint `GET /api/jobs/:id`: polling status job dan progress.
-3. Manifest galeri objek: inventarisasi objek hasil ekstraksi per-kategori ATR (`Hat`, `Upper-clothes`, `Pants`, `Shoes`, dll.).
-4. Endpoint unduhan satu file PNG (`GET /api/jobs/:id/objects/:objectId/download`) dan unduhan ZIP (`POST /api/jobs/:id/exports`).
+Orchestrator selesai. Tugas berikutnya hanya PNG/crop per kategori ATR dan integrasinya ke manifest job; jangan langsung mengerjakan seluruh sisa M4.
 
 ## Working components
 
-- Frontend file/kamera → preview → upload server dan validasi backend teruji pada M2.
-- `ai-service/extractor.py` memuat pipeline inferensi dan ekstraksi PNG transparan RGBA mandiri berbasis PyTorch CPU + Pillow + NumPy.
-- `ai-service/main.py` melayani `GET /health`, `POST /extract`, dan `POST /extract-path` pada loopback HTTP (1.82s/ekstraksi pada Ryzen 5 7430U).
-- `backend/src/ai-client.js` dan `backend/src/extractions.js` menghubungkan Express backend ke AI Service untuk memicu ekstraksi dan melayani PNG transparan/mask.
-- Checkpoint resmi bobot ATR-18 tersimpan di `ai-service/models/` (diabaikan Git).
-- Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint diperlukan, jalankan layanan dari terminal pengguna sesuai README.
+- Frontend file/kamera → preview → upload server (M2; bukti lama).
+- SCHP ATR-18 CPU lokal, endpoint FastAPI dan endpoint ekstraksi sinkron M3.
+- Job API Express → FastAPI nyata → foreground RGBA + mask privat → polling completed.
+- Checkpoint lokal tetap diabaikan Git. Layanan uji port 8017 sudah dihentikan; proses lintas sesi tidak dijamin.
 
 ## Modified files
 
-- Tugas ini:
-  - `backend/src/ai-client.js` (HTTP client untuk FastAPI AI Service)
-  - `backend/src/extractions.js` (Express router untuk ekstraksi & serving hasil)
-  - `backend/src/app.js` (update health check & mount extraction router)
-  - `backend/test/extractions.test.js` (test suite unit & integration backend ekstraksi)
-  - `scripts/smoke_integration_e2e.mjs` (live end-to-end integration test Express <-> FastAPI)
-  - `frontend/src/main.js` (update indikator model aktif)
-  - `scripts/smoke.mjs` (update health check assertions)
-  - `docs/DECISIONS.md` (D-020)
-  - `docs/PROGRESS.md`
-  - `docs/HANDOFF.md`
+- `backend/src/app.js` — mount job router, opsi direktori job untuk isolasi.
+- `backend/src/uploads.js` — callback setelah upload tersimpan; respons endpoint upload lama tetap HTTP 201.
+- `backend/src/job-manager.js` — baru, FIFO/persistensi/recovery dan manifest foreground.
+- `backend/src/jobs.js` — baru, HTTP create/polling dan sanitasi respons.
+- `backend/test/jobs.test.js` — baru, lima tes lifecycle/security dengan storage dan server terisolasi.
+- `README.md` — status dan cara memakai job API.
+- `docs/ARCHITECTURE.md` — kontrak aktual job dan batas implementasi.
+- `docs/DECISIONS.md` — D-021.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — bukti dan tugas berikutnya.
 
 ## Uncommitted changes / Git status
 
-Perubahan belum di-commit:
-- `modified: backend/src/app.js`
-- `modified: frontend/src/main.js`
-- `modified: scripts/smoke.mjs`
-- `modified: docs/DECISIONS.md`
-- `modified: docs/PROGRESS.md`
-- `modified: docs/HANDOFF.md`
-- `untracked: backend/src/ai-client.js`
-- `untracked: backend/src/extractions.js`
-- `untracked: backend/test/extractions.test.js`
-- `untracked: scripts/smoke_integration_e2e.mjs`
-- `untracked: ai-service/test_api.py`
-- `untracked: ai-service/smoke_api_live.py`
-Sesuai aturan, tidak melakukan commit otomatis.
+Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat` bersih. Daftar uncommitted pada handoff lama sudah kedaluwarsa; tidak ada perubahan awal yang ditimpa.
 
-## Current errors
+Semua perubahan dalam bagian Modified files dibuat pada sesi ini dan belum di-commit (tiga file baru, tujuh file existing). Tidak menjalankan staging atau commit otomatis.
 
-- **Lisensi Bobot ATR:** Kode SCHP berlisensi MIT; checkpoint resmi ATR belum memiliki kepastian hak redistribusi komersial. Checkpoint disimpan lokal di folder yang di-ignore Git (`ai-service/models/`), bukan di-commit ke repository (D-014).
-- Tidak ada error teknis yang menghambat pipeline ekstraksi, AI service, atau integrasi backend Express.
+## Current errors / limitations
+
+- Tidak ada kegagalan tes aplikasi yang belum terselesaikan pada sesi ini.
+- Manifest baru berisi satu foreground manusia, bukan crop atau PNG pakaian individual. Tidak ada UI job/galeri atau endpoint unduhan job/ZIP.
+- Satu proses backend harus memiliki storage job; multi-process, batas antrean, retensi otomatis belum tersedia. Ekstraksi sinkron M3 tidak melewati antrean job.
+- `server.js` masih menggunakan `AI_HEALTH_TIMEOUT_MS` untuk timeout client AI bersama (default 3000 ms); smoke memakai 30000 ms. Input lambat memerlukan konfigurasi timeout yang memadai.
+- Lisensi redistribusi bobot ATR belum terkonfirmasi; jangan bundle checkpoint.
+- LSP tidak dikonfigurasi; pencarian pemanggil digunakan setelah tool melaporkan tidak ada server. Satu patch ditolak karena nomor baris tidak ada; dibaca ulang lalu diterapkan, bukan error runtime.
 
 ## Tests performed
 
-- **PASS backend test suite:** `npm test --prefix backend` → 27/27 unit/integration tests PASS (termasuk health check boolean, ekstraksi valid, serving asset PNG/mask, dan penanganan error 400/404/503).
-- **PASS live E2E smoke test:** `node scripts/smoke_integration_e2e.mjs` → live FastAPI + live Express loopback integration PASS (upload -> AI extraction CPU 2.097s -> serving RGBA PNG 4 channels terverifikasi).
-- **PASS test_api.py:** `ai-service/.venv-test/Scripts/python.exe ai-service/test_api.py` → 5/5 unit & integration tests FastAPI lulus dalam 9.8s.
-- **PASS frontend build:** `npm run build --prefix frontend` → Vite build PASS (6 modul).
+- **PASS** `npm test --prefix backend`: 32/32 (27 tes lama + 5 tes job). Meliputi serialisasi, polling saat AI ditahan, hasil terminal setelah restart, interrupted jobs, antrean lanjut sesudah gagal, output hilang/kosong, input invalid dan sanitasi.
+- **PASS** smoke sementara melalui `node --input-type=module` stdin: FastAPI SCHP nyata port 8017, Express port dinamis dan storage temp. Multipart job diterima 123 ms; job JSON referensi upload menunggu queued; keduanya processing → completed. Inferensi 2.0079s dan 1.88s; kategori Upper-clothes/Pants; PNG 200×300 RGBA, alpha min/max 0/255.
+- **PASS** smoke AI tidak dapat dihubungi: job berubah failed/EXTRACTION_FAILED; health backend tetap HTTP 200.
+- **PASS** cleanup: server uji dihentikan, fixture sintetis/storage temp dihapus. Tidak membuat script smoke permanen atau menyentuh foto pengguna.
+- **NOT RUN** browser/build frontend, pengujian kualitas foto nyata, PNG per kategori, galeri/download ZIP. Frontend tidak berubah; fitur lanjutan belum tersedia.
 
 ## Next action (only one)
 
-**Rancang dan implementasikan job orchestrator M4 (`/api/jobs`):**
-Buat model dan modul job manager di backend Express untuk mengelola siklus hidup job ekstraksi secara asynchronous (`queued`, `processing`, `completed`, `failed`), menyediakan endpoint `POST /api/jobs` dan polling status `GET /api/jobs/:id`, serta menyiapkan struktur manifest galeri objek individual yang diekstrak.
+**Implementasikan PNG transparan/crop per kategori ATR yang benar-benar terdeteksi, lalu integrasikan file tersebut ke manifest job.** Mulai dari `ai-service/extractor.py`, kontrak respons `main.py`/`ai-client.js`, dan `backend/src/job-manager.js`. Pertahankan foreground manusia dan piksel RGB/alpha asli; jangan inventarisasi objek tanpa file nyata. Uji fixture deterministik, hasil kosong, lalu smoke model asli. Jangan mulai UI/ZIP atau M5.
 
 ## Handoff rules
 

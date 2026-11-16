@@ -71,7 +71,7 @@ async function validateImage(file) {
   }
 }
 
-export function createUploadRouter({ uploadDir, maxUploadBytes }) {
+export function createUploadRouter({ uploadDir, maxUploadBytes, onUploaded }) {
   if (!Number.isSafeInteger(maxUploadBytes) || maxUploadBytes < 1) {
     throw new Error('MAX_UPLOAD_BYTES must be a positive integer.');
   }
@@ -128,7 +128,11 @@ export function createUploadRouter({ uploadDir, maxUploadBytes }) {
       await rm(directory, { recursive: true, force: true });
       throw error;
     }
-    response.status(201).json({ upload_id: uploadId, status: 'uploaded', image });
+    if (onUploaded) {
+      await onUploaded(uploadId, response);
+    } else {
+      response.status(201).json({ upload_id: uploadId, status: 'uploaded', image });
+    }
   });
 
   router.use((error, _request, response, _next) => {

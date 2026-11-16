@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. Input file serta kamera fisik → preview → upload lokal terverifikasi. M3 baru pemeriksaan kesiapan CPU; belum ada model atau ekstraksi. Hambatan kompatibilitas dan lisensi dicatat di `docs/DECISIONS.md` D-014; bukti aktual di `docs/PROGRESS.md`.
+> **Status proyek:** Input/preview/upload M2 dan ekstraksi foreground SCHP lokal M3 tersedia. M4 sedang berjalan: job asynchronous dan polling teruji dengan model nyata. PNG/crop per kategori, UI galeri dan unduhan job/ZIP belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -68,7 +68,17 @@ Kamera memerlukan **HTTPS atau localhost** serta izin browser. Aplikasi meminta 
 
 Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 → preview → upload HTTP 201 → track kamera berhenti. Pengujian sintetis sebelumnya mencakup error/izin dan race async. Kamera mobile fisik serta perpindahan tab non-headless belum diuji. Jika browser memilih kamera virtual, pilih kamera fisik melalui pengaturan kamera browser; aplikasi belum menyediakan pemilih perangkat.
 
-## Menjalankan Aplikasi (M1–M3)
+## Job ekstraksi asynchronous (M4)
+
+- `POST /api/jobs`: kirim multipart satu field `image`, atau JSON `{"upload_id":"<ID dari /api/uploads>"}`. Jangan kirim keduanya.
+- Respons HTTP **202**, header `Location: /api/jobs/<job_id>`, dan status `queued`. Poll `GET /api/jobs/<job_id>` sampai `completed` atau `failed`.
+- Progress 0/10/100 menunjukkan tahap queued/processing/completed, bukan persentase inferensi. Error aman tersedia pada job failed.
+- Satu worker FIFO per instance backend. Job terminal tersimpan privat; job yang terputus saat restart menjadi failed pada akses pertama, tanpa retry otomatis.
+- `objects` saat ini berisi satu foreground `human` full-frame atau kosong; kategori ATR yang terdeteksi hanya metadata, belum PNG per kategori. UI masih upload saja; tidak ada endpoint unduhan job/ZIP.
+- Manifest dan hasil berada di `storage/jobs/<uuid>/`; jika `UPLOAD_DIR` diubah, direktori jobs default sejajar direktori upload. Jangan jalankan beberapa backend pada storage yang sama. Retensi/batas antrean belum tersedia.
+- Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); gunakan misalnya `30000` bila inferensi memerlukan waktu lebih panjang, lalu restart backend.
+
+## Menjalankan Aplikasi (M1–M4)
 
 Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3** dengan PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`).
 
