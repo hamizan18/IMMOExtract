@@ -17,8 +17,11 @@ let selection = 0;
 let objectUrl = null;
 let cameraSession = 0;
 let cameraStream = null;
+let uploadController = null;
 
 function clearPreview() {
+  uploadController?.abort();
+  uploadController = null;
   preview.hidden = true;
   image.removeAttribute('src');
   details.textContent = '';
@@ -34,6 +37,40 @@ function detectType(bytes) {
   if (String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
       && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP') return 'image/webp';
   return null;
+}
+
+async function uploadImage(file, type, current) {
+  const controller = new AbortController();
+  uploadController = controller;
+  const form = new FormData();
+  // Browser file pickers may omit MIME; use the signature-checked type.
+  form.append('image', file.type ? file : file.slice(0, file.size, type), file.name);
+  status.textContent = 'Preview siap. Mengunggah dan memvalidasi gambar di server lokal…';
+  try {
+    const response = await fetch('/api/uploads', {
+      method: 'POST',
+      body: form,
+      signal: controller.signal,
+    });
+    const body = await response.json().catch(() => null);
+    if (current !== selection) return;
+    if (!response.ok) {
+      const message = typeof body?.error?.message === 'string'
+        ? body.error.message
+        : 'Server tidak dapat menerima gambar.';
+      status.textContent = `Upload gagal: ${message} Preview lokal tetap tersedia. Pilih ulang gambar untuk mencoba lagi.`;
+      return;
+    }
+    if (body?.status !== 'uploaded' || typeof body.upload_id !== 'string' || !body.upload_id) {
+      throw new Error('Invalid upload response');
+    }
+    status.textContent = `Upload berhasil. ID upload: ${body.upload_id}. Gambar tersimpan di server lokal; ekstraksi AI belum tersedia.`;
+  } catch {
+    if (current !== selection || controller.signal.aborted) return;
+    status.textContent = 'Upload belum dapat dikonfirmasi. Periksa koneksi/server lokal, lalu pilih ulang gambar. Preview lokal tetap tersedia.';
+  } finally {
+    if (uploadController === controller) uploadController = null;
+  }
 }
 
 async function showImage(file) {
@@ -75,7 +112,7 @@ async function showImage(file) {
     image.src = objectUrl;
     details.textContent = `${file.name} — ${width} × ${height} piksel — ${(file.size / 1024 / 1024).toFixed(2)} MiB`;
     preview.hidden = false;
-    status.textContent = 'Preview siap. Gambar tetap lokal di browser dan belum dikirim ke server.';
+    await uploadImage(file, type, current);
   } catch (error) {
     if (current !== selection) return;
     clearPreview();
@@ -206,4 +243,7 @@ captureButton.addEventListener('click', async () => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopCamera('Kamera dihentikan karena halaman tidak aktif.');
 });
-window.addEventListener('pagehide', () => stopCamera('Kamera dihentikan karena halaman ditinggalkan.'));
+window.addEventListener('pagehide', () => {
+  stopCamera('Kamera dihentikan karena halaman ditinggalkan.');
+  resetImage();
+});

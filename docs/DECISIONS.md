@@ -98,6 +98,19 @@
 - **Konsekuensi:** Memerlukan secure context; dialog izin tidak selalu bisa ditutup programatis. Tes sintetis tidak membuktikan kompatibilitas kamera fisik.
 - **Bukti tes:** Build PASS; kamera sintetis → PNG 1280×720/nonuniform; penolakan/pemulihan izin, track shutdown, race async, file fallback, navigasi aktual, dan viewport mobile PASS. Hidden handler diuji lewat injeksi karena tab headless tetap visible.
 
+## D-013 — Upload otomatis setelah preview lokal
+
+- **Tanggal:** 2026-11-16.
+- **Status:** Accepted; integrasi frontend dan kamera fisik M2 terverifikasi.
+- **Keputusan:** File dan capture kamera yang lolos preview dikirim otomatis ke `POST /api/uploads` dengan multipart field `image`, sesuai next task handoff. UI menjelaskan pengiriman sebelum pemilihan, menampilkan status proses, `upload_id` atau pesan error server; bukan job/hasil AI.
+- **Lifecycle:** AbortController membatalkan request ketika pilihan diganti, dihapus, kamera dibuka, atau halaman ditinggalkan. Nomor seleksi mencegah respons usang mengganti UI. Kegagalan upload mempertahankan preview; mencoba lagi melalui pemilihan ulang, tanpa retry otomatis.
+- **MIME:** File dengan MIME kosong memakai tipe hasil pemeriksaan signature untuk multipart; MIME yang tidak sesuai tetap ditolak.
+- **Alasan:** Menyambung validasi server yang sudah tersedia ke lifecycle preview/kamera tanpa pipeline baru atau dependensi tambahan. Menggantikan batas “hanya lokal di browser” pada D-011/D-012.
+- **Alternatif:** Tombol upload terpisah tidak dipilih karena tugas aktif meminta upload setelah preview.
+- **Konsekuensi:** Abort bukan rollback storage. Gambar yang sudah diterima server tetap tersimpan; hapus preview bukan penghapusan server. Retensi otomatis belum tersedia dan dijelaskan di UI.
+- **Bukti tes:** Build frontend dan browser melalui Vite → Express PASS: tiga format, penolakan animasi, offline/pemulihan, race ganti/hapus, MIME kosong, kamera stream canvas sintetis, serta tampilan mobile.
+- **Bukti tambahan 2026-11-16:** PC Camera USB pada Windows/Chrome 158, tanpa injeksi stream: capture PNG 1280×720, preview terdecode, upload HTTP 201 dan ID tampil, track ended serta srcObject dilepas. Default browser awal memilih kamera virtual; memilih PC Camera melalui pengaturan profil uji menyelesaikan penerimaan fisik tanpa perubahan kode.
+
 ## Keputusan yang masih terbuka
 
 - [ ] Versi runtime dan dependensi AI M3 setelah tes kompatibilitas (web/health M1 sudah diputuskan pada D-010).
@@ -107,4 +120,4 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization.
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian.
 
-**Format entri baru:** `D-013 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-014 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

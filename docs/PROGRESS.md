@@ -1,20 +1,20 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1 selesai; M2 memiliki input file, kamera ke preview lokal, dan upload/validasi server Express, semuanya terverifikasi. M2 keseluruhan belum selesai; kamera fisik dan model AI belum tersedia.
+> **Status aktual:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. File dan kamera fisik → preview → upload/validasi server terverifikasi. M3 belum dimulai; model AI dan ekstraksi belum tersedia.
 
 ## Ringkasan
 
-- **Current milestone:** M2 — Input gambar — In progress.
-- **Current task:** Upload/validasi server selesai dan terverifikasi; tugas berikutnya menghubungkan upload ke frontend dan UI feedback.
-- **Overall status:** Fondasi layanan, input file, kamera lokal, dan upload server berjalan; pipeline ekstraksi belum tersedia.
-- **Last verification:** 2026-11-15 — node --test test/uploads.test.js: 24/24 PASS (upload valid PNG/JPEG/WebP, 17 kasus penolakan defensif, batas byte, abort koneksi, storage failure).
+- **Current milestone:** M2 — Input gambar — Complete; M3 belum dimulai.
+- **Current task:** Penerimaan kamera fisik selesai; berikutnya pemeriksaan kesiapan POC M3, tanpa download model.
+- **Overall status:** Input file/kamera fisik → preview → upload server berjalan; pipeline ekstraksi belum tersedia.
+- **Last verification:** 2026-11-16 — PC Camera USB pada Windows/Chrome 158: PNG 1280×720, HTTP 201, ID upload tampil, preview terdecode, track ended dan stream dilepas. Tanpa injeksi kamera sintetis.
 
 ## Milestone
 
 | Milestone | Cakupan | Status | Kriteria selesai |
 | --- | --- | --- | --- |
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
-| M2 | Upload, kamera, validasi, preview input | In progress | File dan kamera sintetis ke preview teruji; upload/validasi server teruji (24/24); kamera fisik dan frontend upload belum teruji |
+| M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | ⬜ Not started | Contoh foto diproses lokal; hasil transparan dapat diperiksa |
 | M4 | Job, object gallery, download individual/ZIP | ⬜ Not started | Job status & unduhan end-to-end teruji |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
@@ -36,10 +36,15 @@
 - Inspeksi Git tugas M2: branch `main...origin/main`, perubahan awal hanya `docs/PROGRESS.md` dan `docs/HANDOFF.md`, tidak ada staged diff. Perubahan awal dipertahankan; tidak menjalankan staging/commit.
 - Tugas kamera M2: live view, capture PNG ke preview yang sama, pesan izin/perangkat, pembatalan dan penghentian stream; tanpa upload server atau AI.
 - Perubahan tugas kamera: `frontend/index.html`, `frontend/src/image-input.js`, `README.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`. Git awal bersih pada `main...origin/main`; tanpa staging/commit.
+- Integrasi upload frontend: multipart `image` dikirim setelah preview, status proses/ID upload/error server tampil tanpa menghapus preview ketika upload gagal. Pilihan baru/hapus/buka kamera/pagehide membatalkan request dan mengabaikan hasil usang; MIME kosong dinormalisasi berdasarkan signature.
+- Perubahan tugas integrasi: `frontend/index.html`, `frontend/src/image-input.js`, `README.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`. Git awal bersih (termasuk staged diff); catatan perubahan belum commit pada handoff sebelumnya sudah kedaluwarsa. Tidak menjalankan staging/commit.
+- Penerimaan kamera fisik 2026-11-16: izin pengguna diperoleh sebelum capture; default browser awal memakai REDMI Windows Virtual Camera, kemudian PC Camera USB dipilih melalui pengaturan profil Chrome uji setelah izin capture tambahan.
+- PC Camera menghasilkan PNG 1280×720 (1.411.950 byte), server mengembalikan HTTP 201, ID tampil, preview terdecode, track berakhir dan `video.srcObject` dilepas. Tidak mengubah source/dependensi atau melampirkan foto ke percakapan.
+- Tugas penerimaan hanya memperbarui `README.md`, `docs/DECISIONS.md` (bukti tambahan, bukan keputusan baru), `docs/PROGRESS.md`, `docs/HANDOFF.md`. Enam perubahan belum commit dari tugas sebelumnya dipertahankan; tidak staging/commit.
 
 ## In progress
 
-- M2 masih parsial: frontend belum mengirim gambar ke endpoint server; kamera fisik belum diuji. Upload/validasi server selesai dan terverifikasi penuh.
+- Tidak ada implementasi M2 yang setengah jadi pada tugas aktif. M3 belum dimulai; tugas berikutnya sebatas pemeriksaan kesiapan POC.
 
 ## Blockers / risks
 
@@ -48,13 +53,15 @@
 - Pengujian Windows lokal saja; Linux/macOS dan deployment produksi belum diuji.
 - Checkpoint model belum dipilih/diunduh/diuji.
 - Batas dimensi preview diperiksa setelah decode browser; bukan perlindungan decompression bomb atau pengganti validasi server. Batas sementara dicatat di D-011, bukan benchmark.
-- Kamera/mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state tidak muncul lewat perpindahan tab headless; handler diuji lewat injeksi. Navigasi `pagehide` diuji nyata.
+- Kamera fisik desktop PC Camera sudah diuji. Kamera mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state sebelumnya diuji lewat injeksi; navigasi `pagehide` diuji nyata pada tugas kamera sintetis.
+- Upload yang sudah diterima tetap tersimpan; pembatalan request bukan rollback dan hapus preview bukan hapus server. Retensi otomatis belum diimplementasikan; batasan ini ditampilkan di UI.
+- Browser dengan beberapa kamera dapat memilih kamera virtual secara default. Pengujian fisik memilih PC Camera lewat pengaturan Chrome; aplikasi belum mempunyai pemilih perangkat dan tidak menjanjikan kamera fisik tertentu.
 - Setelah verifikasi awal, supervisor Express/Vite melaporkan exit 127 tanpa penyebab pada log. Keduanya dijalankan ulang; smoke HTTP kembali PASS. Wrapper backend baru exit 0 meskipun endpoint masih berfungsi. Keberlangsungan proses tool lintas sesi tidak dijamin; startup terminal pengguna tersedia di README.
 - Jangan menandai fitur M3–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Hubungkan upload server ke frontend: `frontend/src/image-input.js` mengirim `POST /api/uploads` setelah preview lokal, tampilkan `upload_id` atau pesan error server ke UI; tanpa model AI atau pipeline ekstraksi.
+Periksa kesiapan POC M3: hardware/runtime lokal dan prasyarat kompatibilitas/lisensi kandidat SCHP ATR-18. Laporkan pilihan serta kendala sebelum instalasi atau download checkpoint besar; jangan mengunduh model tanpa izin.
 
 ## Verification log
 
@@ -93,10 +100,33 @@ Hubungkan upload server ke frontend: `frontend/src/image-input.js` mengirim `POS
 | 2026-11-15 | Kamera/mobile fisik, background tab non-headless | NOT RUN | Memakai perangkat sintetis/viewport; tidak mengakses kamera pribadi |
 | 2026-11-15 | Upload server: `node --test test/uploads.test.js` (Antigravity) | PASS | 24/24 test: 3 format valid (PNG/JPEG/WebP), 17 kasus penolakan defensif (signature, MIME mismatch, corrupt, dimensi, animasi, ukuran berlebih, field salah, multipart tidak valid), batas byte exact, abort koneksi tanpa artefak, storage failure → 500 aman; tidak ada path bocor |
 | 2026-11-15 | Frontend upload ke server | NOT RUN | Frontend belum mengirim ke /api/uploads |
+| 2026-11-16 | Inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached` | PASS | Tidak ada perubahan awal; handoff lama tidak mencerminkan status Git saat ini |
+| 2026-11-16 | `npm run build --prefix frontend` | PASS | Vite memproses 6 modul |
+| 2026-11-16 | Backend uji terisolasi port 3100 dengan storage temp; `BACKEND_URL=http://127.0.0.1:3100 npm run dev --prefix frontend -- --port 5174` | PASS | Browser mengakses proxy Vite, bukan FastAPI langsung |
+| 2026-11-16 | Pembuatan fixture: import path internal Sharp | ERROR harness | `ERR_MODULE_NOT_FOUND`; diperbaiki menjadi `import sharp from 'sharp'` dari cwd backend, tanpa perubahan source aplikasi |
+| 2026-11-16 | Browser: file PNG/JPEG/WebP sintetis 160×100 → preview → upload | PASS | HTTP 201, ID respons tampil di UI, dimensi sesuai; hapus preview dan input palsu `.png` tanpa request upload juga PASS |
+| 2026-11-16 | Browser: animated WebP → server | PASS | HTTP 422, pesan penolakan server tampil, preview tetap tersedia |
+| 2026-11-16 | Browser offline → upload → online → pilih ulang | PASS | Pesan kegagalan konfirmasi, preview tetap tersedia, upload kembali berhasil |
+| 2026-11-16 | Tunda JSON respons upload nyata; ganti gambar/hapus sebelum penyelesaian | PASS | Status proses terlihat, signal request lama aborted, hasil lama tidak mengganti ID terbaru atau menghidupkan preview yang dihapus |
+| 2026-11-16 | Browser: file dengan MIME kosong | PASS | Multipart memakai MIME hasil signature; server menerima dan UI menampilkan sukses |
+| 2026-11-16 | Injeksi getUserMedia dengan stream canvas dua warna → Buka kamera → Ambil foto | PASS | PNG 160×100 diunggah ke Express nyata; ID tampil dan track berstatus ended |
+| 2026-11-16 | Screenshot browser mobile 390×844 | PASS | Preview/ID upload tampil, tanpa overflow horizontal; backend health terhubung |
+| 2026-11-16 | Suite backend, kamera fisik, FastAPI/model/ekstraksi | NOT RUN | Backend tidak berubah; suite 24/24 adalah hasil sesi sebelumnya. Kamera hanya stream sintetis; FastAPI tidak dijalankan pada sesi ini |
+| 2026-11-16 | Penerimaan fisik: inspeksi awal Git | PASS | Enam file sebelumnya masih berubah, staged diff kosong; tidak menimpa perubahan sebelumnya |
+| 2026-11-16 | PowerShell `Get-PnpDevice -PresentOnly` difilter kelas Camera/Image | PASS | Windows mendeteksi PC Camera dengan status OK |
+| 2026-11-16 | PowerShell pencarian proses `chrome,msedge` | EXIT 1 | Path executable Chrome berhasil diperoleh; tidak digunakan sebagai hasil tes aplikasi |
+| 2026-11-16 | Browser Chrome 158 berprofil temp, server 3100 dan Vite 5174, izin kamera setelah persetujuan pengguna | PASS | Browser mengakses layanan loopback; tanpa fake-device flag/injeksi getUserMedia; izin browser diberikan lewat automation |
+| 2026-11-16 | Capture pertama dari default REDMI Note 15 Windows Virtual Camera | PASS terbatas | Preview/upload HTTP 201 dan track ended; bukan bukti kamera USB, tidak dipakai untuk menutup penerimaan fisik |
+| 2026-11-16 | Harness setelah mengubah pilihan kamera di settings | ERROR harness | `No element found for selector: #clear-image`: tab masih di chrome://settings/content/camera; diselesaikan dengan navigasi eksplisit kembali ke aplikasi, tanpa perubahan source |
+| 2026-11-16 | Pilih PC Camera di settings profil uji; Buka kamera → Ambil foto → upload | PASS | Track berlabel PC Camera, hanya video; PNG 1280×720/1.411.950 byte; HTTP 201; ID tampil; preview terdecode; track ended dan srcObject null |
+| 2026-11-16 | Tutup browser/layanan uji dan hapus folder upload serta profil temp | PASS | Kedua hasil capture dan profil uji dihapus; tidak mengubah storage atau profil browser utama pengguna |
+| 2026-11-16 | Build, suite backend, kamera mobile, hidden-state non-headless, dialog izin OS/browser manual | NOT RUN | Tidak ada perubahan source; bukti build/backend terdahulu dipertahankan. Izin kamera browser diatur melalui automation setelah persetujuan pengguna |
 
-Browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
+Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
 Fixture sintetis sementara di folder temp telah dihapus. Pengujian browser dijalankan melalui harness sesi, bukan test suite permanen baru.
+
+Sesi 2026-11-16: tab browser dan layanan uji port 3100/5174 dihentikan; fixture serta storage temp upload sintetis dihapus. Kamera memakai injeksi stream canvas, bukan perangkat fisik. Tidak membuat script/test permanen atau mengubah storage pengguna.
 
 ## Cara memperbarui dokumen
 

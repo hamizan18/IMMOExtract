@@ -4,59 +4,59 @@
 
 ## Last agent
 
-Antigravity — verifikasi upload server M2, 2026-11-15.
+OMP — penerimaan kamera fisik dan penutupan M2, 2026-11-16.
 
 ## Current milestone
 
-**M2 — Input gambar — In progress.** M1 selesai; M2 memiliki upload/validasi server yang sudah terverifikasi penuh, tapi frontend belum mengirim ke server.
+**M2 — Input gambar — Complete pada Windows/Chrome yang diuji.** M1 selesai; file/kamera fisik → preview → upload server terverifikasi. M3 belum dimulai.
 
 ## Last completed task
 
-Upload/validasi server Express terverifikasi: `node --test test/uploads.test.js` → 24/24 PASS. Mencakup penerimaan PNG/JPEG/WebP valid, 17 kasus penolakan defensif (signature, MIME mismatch, file corrupt, dimensi berlebih, animasi, file terlalu besar, field salah, multipart tidak valid), batas byte yang dikonfigurasi, abort koneksi tanpa artefak tersisa, dan storage failure yang mengembalikan JSON aman tanpa path bocor. Implementasi OMP diverifikasi tanpa modifikasi.
+Uji kamera fisik dengan izin pengguna: Chrome 158, PC Camera USB, capture PNG 1280×720 (1.411.950 byte), preview terdecode, upload HTTP 201 dan ID tampil. Satu track video tanpa audio; setelah capture track ended dan `video.srcObject` null. Tidak ada injeksi stream/fake-device atau perubahan source. Default browser awal memilih REDMI Windows Virtual Camera; hasil awal dicatat terpisah, lalu kamera USB dipilih di pengaturan profil uji setelah izin capture tambahan.
 
 ## Current task
 
-Upload server selesai dan terverifikasi. Berikutnya: hubungkan frontend ke endpoint server sehingga M2 menjadi end-to-end.
+Penerimaan kamera fisik selesai dan M2 ditutup. Berikutnya: pemeriksaan kesiapan POC M3 tanpa instalasi/download model.
 
 ## Working components
 
-- Frontend `http://127.0.0.1:5173`: input file, kamera ke preview lokal, dan health checks. Upload ke server belum terhubung dari frontend.
-- Express `http://127.0.0.1:3000/api/health`: HTTP 200, independen dari FastAPI.
-- Express `POST /api/uploads`: menerima dan memvalidasi satu gambar, menyimpan ke `storage/uploads/<uuid>/`, mengembalikan `{upload_id, status, image}`. Terverifikasi 24/24 test.
-- FastAPI `http://127.0.0.1:8000/health`: HTTP 200, `model_loaded: false`.
-- Express `/api/health/ai`: health FastAPI sungguhan via HTTP; timeout 3 detik; HTTP 503 saat upstream gagal.
-- Proxy `/api` Vite bekerja; build frontend berhasil. `storage/` tidak disajikan publik.
+- Input file, preview, upload otomatis, validasi server, dan feedback error/sukses sudah teruji pada tugas sebelumnya.
+- Kamera fisik PC Camera pada Windows/Chrome 158 terverifikasi sesi ini, termasuk preview/upload dan penghentian stream.
+- Express `POST /api/uploads`: multipart field `image`, respons HTTP 201 `{upload_id, status: "uploaded", image}`; input/manifest privat, bukan job ekstraksi.
+- Pengujian memakai Vite 5174 → Express 3100, folder upload temp, dan profil Chrome temp. Port normal tetap 5173 → 3000.
+- FastAPI/model tidak dijalankan pada tugas penerimaan ini; tidak ada pipeline ekstraksi.
+- Browser dan seluruh layanan uji dihentikan; kedua foto uji serta profil browser temp dihapus. Profil browser utama dan storage pengguna tidak diubah.
 - Keberlangsungan proses lintas sesi tidak dijamin; bila endpoint tidak tersedia, jalankan layanan dari terminal pengguna sesuai README.
 
 ## Modified files
 
-- Tugas ini: `docs/PROGRESS.md`, `docs/HANDOFF.md` (hanya dokumentasi; implementasi OMP tidak diubah).
-- File untracked OMP yang sudah ada: `backend/src/app.js`, `backend/src/uploads.js`, `backend/test/uploads.test.js`.
-- Backend package dimodifikasi OMP: `backend/package.json`, `backend/package-lock.json`, `backend/.env.example`, `backend/src/server.js`.
-- Frontend OMP: `frontend/index.html`, `frontend/src/image-input.js`.
+- Tugas ini: `README.md`, `docs/DECISIONS.md` (tambahan bukti D-013, tanpa keputusan baru), `docs/PROGRESS.md`, `docs/HANDOFF.md`.
+- Source aplikasi, dependensi, dan konfigurasi repo tidak diubah.
+- Perubahan frontend dari tugas sebelumnya tetap dipertahankan: `frontend/index.html`, `frontend/src/image-input.js`.
 
 ## Uncommitted changes / Git status
 
-10 file tracked dimodifikasi (OMP + tugas ini), 3 lokasi untracked (`backend/src/app.js`, `backend/src/uploads.js`, `backend/test/`). Belum ada commit sejak M2 dimulai. Jangan commit tanpa instruksi pengguna.
+Inspeksi awal menunjukkan enam file modified: README, DECISIONS, PROGRESS, HANDOFF, frontend/index.html, frontend/src/image-input.js; staged diff kosong. Empat dokumen diperbarui tugas ini, dua source frontend tidak disentuh. Tidak melakukan staging/commit atau inspeksi Git ulang setelah edit.
 
 ## Current errors
 
-Tidak ada error. Test suite berjalan bersih. Frontend belum mengirim ke `/api/uploads` (NOT RUN dari sisi browser).
+Tidak ada kegagalan aplikasi pada pengujian kamera fisik. Harness sempat tetap berada di halaman settings sehingga `#clear-image` tidak ditemukan; navigasi eksplisit ke aplikasi memperbaikinya tanpa perubahan kode. Browser dapat memilih kamera virtual secara default; pilih kamera fisik melalui settings jika diperlukan. Kamera mobile, perpindahan tab non-headless, dan dialog izin manual OS/browser belum diuji. Retensi/penghapusan otomatis upload server belum tersedia.
 
 ## Tests performed
 
-- **PASS:** `node --test test/uploads.test.js` — 24/24 subtest, duration ~2.3 detik.
-  - accept PNG, JPEG, WebP dengan path klien diabaikan, file tersimpan privat
-  - tolak: missing file, file kosong, fake PNG, MIME mismatch, MIME tidak didukung
-  - tolak: file corrupt setelah metadata valid, sisi >8192px, >24MP, animated WebP, APNG
-  - tolak: >10 MiB, field tidak dikenal, banyak file, field teks tambahan, JSON request, boundary hilang, multipart terpotong
-  - batas byte yang dikonfigurasi (exact limit pass, +1 byte reject)
-  - abort koneksi tidak meninggalkan file
-  - storage failure → HTTP 500 JSON aman, tidak ada path bocor, backend tetap sehat
+- **PASS:** PowerShell enumerasi perangkat: PC Camera berstatus OK.
+- **EXIT 1 (discovery):** pencarian proses chrome/msedge mengembalikan path Chrome; bukan hasil tes aplikasi.
+- **PASS terbatas:** capture awal REDMI Windows Virtual Camera → PNG 1280×720 → HTTP 201 → track ended. Tidak dianggap bukti kamera USB.
+- **ERROR harness, resolved:** selector `#clear-image` tidak ditemukan karena tab masih di settings; navigasi kembali ke aplikasi sebelum capture fisik.
+- **PASS:** Chrome 158 pada Windows, profil terisolasi tanpa fake-device/injeksi: PC Camera USB → frame live 1280×720, hanya video → tombol Ambil foto → PNG 1.411.950 byte → HTTP 201.
+- **PASS:** UI menampilkan ID upload `8379ad08-8578-4940-a9df-05fd173aabfc`; preview terlihat dan terdecode; track kamera ended dan srcObject null sesudah capture.
+- **PASS:** layanan/profil browser uji dihentikan; kedua foto/manifest dan profil temp dihapus dengan izin pengguna. Tidak melampirkan foto ke percakapan.
+- **NOT RUN:** build/suite backend pada tugas ini (tidak ada perubahan source), kamera mobile, background tab non-headless, dialog izin manual. Permission browser diberikan lewat automation setelah persetujuan pengguna.
+- Bukti integrasi sebelumnya (build, tiga format, error/offline, race, MIME kosong, kamera sintetis/mobile viewport) dan backend 24/24 tetap tersimpan di `PROGRESS.md`; tidak diulang untuk tugas ini.
 
 ## Next action (only one)
 
-**Hubungkan upload frontend ke server**: modifikasi `frontend/src/image-input.js` untuk mengirim `POST /api/uploads` (multipart) setelah preview lokal berhasil, tampilkan `upload_id` atau pesan error server ke UI; jangan mulai job processing atau pipeline AI.
+**Periksa kesiapan POC M3:** inventaris hardware/runtime lokal dan prasyarat kompatibilitas/lisensi kandidat SCHP ATR-18. Laporkan pilihan serta kendala sebelum instalasi atau download checkpoint besar; jangan download model tanpa izin pengguna. M3 belum diimplementasikan.
 
 ## Handoff rules
 

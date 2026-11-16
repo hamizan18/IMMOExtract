@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1 tersedia dan teruji. M2 memiliki pemilihan gambar serta kamera ke preview lokal; belum ada upload server, ekstraksi, atau model AI. Kamera diuji dengan perangkat sintetis Chromium, belum kamera fisik. Lihat `docs/PROGRESS.md`.
+> **Status proyek:** M1 dan M2 selesai untuk lingkungan Windows/Chrome yang diuji. Input file serta kamera fisik → preview → upload lokal terverifikasi. Ekstraksi dan model AI belum tersedia; M3 belum dimulai. Lihat `docs/PROGRESS.md`.
 
 ## Gambaran fitur
 
@@ -46,23 +46,27 @@ IMMOExtract/
 └── .gitignore
 ```
 
-`frontend/`, `backend/`, dan `ai-service/` berisi fondasi M1. `storage/` tetap privat, diabaikan Git, dan belum digunakan.
+`frontend/`, `backend/`, dan `ai-service/` berisi fondasi M1. `storage/` privat dan diabaikan Git; upload disimpan di `storage/uploads/<uuid>/`, bukan folder statis publik.
 
-## Preview lokal (M2, sebagian)
+## Preview dan upload lokal (M2)
 
-Pada halaman utama, pilih satu JPG/JPEG, PNG, atau WebP, atau gunakan **Buka kamera → Ambil foto**. Preview menampilkan gambar, nama file, dimensi, dan ukuran. **Hapus pilihan** mengosongkan preview; gambar lain dapat dipilih tanpa reload. Data gambar hanya menjadi object URL di browser, tidak dikirim ke server atau disimpan oleh aplikasi.
+Pada halaman utama, pilih satu JPG/JPEG, PNG, atau WebP, atau gunakan **Buka kamera → Ambil foto**. Preview menampilkan gambar, nama file, dimensi, dan ukuran. Setelah preview berhasil, gambar otomatis dikirim melalui proxy Vite ke Express lokal (`POST /api/uploads`, multipart field `image`). UI menampilkan proses upload, ID upload setelah server menerima gambar, atau pesan kegagalan. Upload tidak memulai ekstraksi AI.
 
-Batas sementara preview: **10 MiB (10.485.760 byte)**, maksimal **8192 piksel per sisi** dan **24.000.000 piksel**. File kosong, signature/MIME tidak sesuai, atau gagal decode ditolak dengan pesan. Dimensi diperiksa **setelah decode browser**, bukan perlindungan penuh terhadap decompression bomb. Pemeriksaan ini hanya UX frontend; validasi server defensif belum tersedia. Tidak ada tombol ekstraksi atau hasil AI palsu.
+Batas sementara: **10 MiB (10.485.760 byte)**, maksimal **8192 piksel per sisi** dan **24.000.000 piksel**. File kosong, signature/MIME tidak sesuai, atau gagal decode ditolak dengan pesan. Dimensi preview diperiksa **setelah decode browser**, bukan perlindungan penuh terhadap decompression bomb. Server memvalidasi ulang signature, MIME, dimensi, decode, dan menolak animasi. Preview tetap tersedia saat server menolak gambar atau koneksi gagal; pilih ulang gambar untuk mencoba lagi.
 
 Uji manual: pilih JPG/PNG/WebP valid; ganti gambar; hapus lalu pilih file yang sama; coba file rusak, teks berekstensi `.png`, file >10 MiB, atau dimensi melebihi batas. Preview lama harus hilang saat pilihan baru diproses/gagal. Pengujian aktual desktop/mobile dan race decode dicatat di `PROGRESS.md`.
+
+**Hapus pilihan** mengosongkan preview dan membatalkan request yang masih berjalan. Memilih gambar lain, membuka kamera, atau meninggalkan halaman juga membatalkan upload lama; respons lama tidak boleh mengganti pilihan terbaru. Pembatalan tidak menjamin gambar belum tersimpan di server. File yang sudah diterima tetap tersimpan; penghapusan server dan retensi otomatis belum tersedia.
+
+Respons sukses server: HTTP 201 `{upload_id, status: "uploaded", image}`. ID ini bukan ID job ekstraksi. File dan manifest disimpan privat tanpa memakai nama/path dari klien; browser tidak menerima path filesystem.
 
 ### Kamera lokal
 
 Kamera memerlukan **HTTPS atau localhost** serta izin browser. Aplikasi meminta video saja (tanpa mikrofon) setelah **Buka kamera** ditekan; preferensi kamera belakang dan ukuran 1280×720 bersifat ideal, bukan syarat perangkat. Penolakan izin, perangkat tidak ditemukan/sibuk, atau API tidak tersedia menghasilkan pesan; pemilihan file tetap tersedia.
 
-**Ambil foto** menyalin frame ke PNG lokal dengan validasi/preview yang sama. Stream dihentikan setelah frame disalin, saat **Tutup kamera**, **Hapus pilihan**, berganti file, halaman tersembunyi, atau navigasi keluar. Pembatalan tidak selalu menutup dialog izin browser, tetapi stream yang terlambat diberikan langsung dihentikan. Capture lama tidak boleh menimpa file baru.
+**Ambil foto** menyalin frame ke PNG dengan validasi/preview dan upload yang sama seperti file. Stream dihentikan setelah frame disalin, saat **Tutup kamera**, **Hapus pilihan**, berganti file, halaman tersembunyi, atau navigasi keluar. Pembatalan tidak selalu menutup dialog izin browser, tetapi stream yang terlambat diberikan langsung dihentikan. Capture lama tidak boleh menimpa file baru.
 
-Uji otomatis memakai kamera sintetis Chromium, bukan kamera/foto pribadi. Izin ditolak diuji lewat kebijakan browser; error perangkat dan hidden-state diuji lewat injeksi harness. Kamera/mobile fisik serta perpindahan tab di browser non-headless belum diuji.
+Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 → preview → upload HTTP 201 → track kamera berhenti. Pengujian sintetis sebelumnya mencakup error/izin dan race async. Kamera mobile fisik serta perpindahan tab non-headless belum diuji. Jika browser memilih kamera virtual, pilih kamera fisik melalui pengaturan kamera browser; aplikasi belum menyediakan pemilih perangkat.
 
 ## Menjalankan M1
 
@@ -94,7 +98,7 @@ Buka **http://127.0.0.1:5173**. Hentikan masing-masing proses dengan `Ctrl+C`.
 
 Linux/macOS: gunakan `python3 -m venv ai-service/.venv` dan `ai-service/.venv/bin/python` sebagai pengganti executable Python Windows. Perintah npm sama; platform tersebut belum diuji.
 
-Konfigurasi bawaan langsung bekerja tanpa `.env`. Bila perlu, salin `backend/.env.example` ke `backend/.env` dan `frontend/.env.example` ke `frontend/.env`; restart layanan setelah perubahan. Express memakai `PORT`, `AI_SERVICE_URL`, dan `AI_HEALTH_TIMEOUT_MS`. Vite memakai `BACKEND_URL` untuk proxy `/api`; browser tidak mengakses FastAPI langsung. Port FastAPI diatur lewat argumen Uvicorn.
+Konfigurasi bawaan langsung bekerja tanpa `.env`. Bila perlu, salin `backend/.env.example` ke `backend/.env` dan `frontend/.env.example` ke `frontend/.env`; restart layanan setelah perubahan. Express memakai `PORT`, `AI_SERVICE_URL`, `AI_HEALTH_TIMEOUT_MS`, `UPLOAD_DIR`, dan `MAX_UPLOAD_BYTES`. Batas byte frontend tetap 10 MiB; batas server yang lebih kecil menghasilkan pesan penolakan. Vite memakai `BACKEND_URL` untuk proxy `/api`; browser tidak mengakses FastAPI langsung. Port FastAPI diatur lewat argumen Uvicorn.
 
 ### Health checks dan smoke test
 
