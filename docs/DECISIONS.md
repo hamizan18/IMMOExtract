@@ -215,6 +215,19 @@
 - **Konsekuensi:** UI galeri/unduhan, multi-process, batas antrean, dan cleanup retensi belum tersedia. Tidak ada perubahan stack atau cakupan produk. Timeout startup backend masih mengikuti konfigurasi client yang sudah ada; smoke memakai 30 detik.
 - **Bukti:** `npm test --prefix backend` PASS 32/32. Smoke HTTP sementara dengan FastAPI/model nyata PASS: multipart + referensi upload, job kedua queued, dua inferensi serial (2.0079s/1.88s), RGBA 200×300 alpha 0/255; AI tidak dapat dihubungi menghasilkan failed tanpa mematikan backend.
 
+## D-022 — PNG per kategori ATR dengan crop, padding dan manifest nyata
+
+- **Tanggal:** 2026-11-17.
+- **Status:** Accepted; crop deterministik, API model asli, manifest job dan smoke HTTP terverifikasi.
+- **Keputusan:** Ekspor satu PNG untuk setiap kategori ATR non-background dengan jumlah piksel **>50**, konsisten dengan ambang `categories_present` yang sudah ada. Bagian satu kategori yang terpisah tetap satu mask semantik; sepatu kiri/kanan memakai label ATR berbeda. Tidak ada connected-components, kategori buatan, atau penyelesaian objek yang tertutup.
+- **Piksel/geometri:** Bounding box kategori diperluas padding 2 piksel dan dipotong ke batas input. `bbox: [left, top, right, bottom]` menggunakan koordinat asli dengan right/bottom eksklusif. RGB crop tetap identik dengan input; alpha 255 hanya pada kategori tersebut dan 0 pada piksel lain, termasuk kategori tetangga. Tanpa resize atau warna latar pengganti.
+- **Kontrak internal:** JSON `/extract-path` dan multipart `/extract` menerima opsi `objects_dir`; `AiClient` menyediakan `objectsDir`. Respons AI menyertakan `objects` berisi `{class_id, category, file, bbox, width, height, pixel_count}` hanya untuk PNG yang selesai ditulis, atau array kosong bila ekspor tidak diminta/tidak ada kategori memenuhi ambang. Backend menetapkan direktori `<job>/objects`; referensi file berbentuk `objects/atr-<class_id>.png`.
+- **Manifest job:** Pertahankan objek foreground manusia full-frame. Tambahkan kategori dengan UUID objek dari backend setelah metadata, inventaris kategori dan file RGBA nyata divalidasi. Polling menampilkan metadata geometri tetapi tetap menghapus referensi file internal. Respons AI tanpa kontrak objek tidak dianggap sukses untuk job baru; restart kedua service bersama setelah pembaruan.
+- **Alasan/alternatif:** Memakai class map hasil inferensi yang sudah ada, tanpa inferensi kedua atau dependensi baru. Padding tetap kecil agar tepi crop tidak terlalu rapat; clipping menghindari pembuatan piksel di luar input. Tidak memisahkan instance karena model hanya memberikan label semantik.
+- **Konsekuensi:** Piksel noise ≤50 tidak diekspor sebagai kategori tetapi tetap masuk foreground manusia seperti sebelumnya. Ambang absolut bukan ukuran akurasi/kepercayaan model. Hasil job lama tidak dimigrasikan; tidak mengarang PNG kategori untuk manifest lama. UI galeri, preview/unduhan job dan ZIP tetap tugas M4 terpisah.
+- **Penyesuaian lifecycle teruji:** Pengujian mengungkap race Windows: `rename(manifest.tmp, manifest.json)` gagal EPERM ketika pembaca memegang manifest. Diagnostik dengan read handle terbuka membuktikan syscall tersebut gagal. Job aktif kini dipolling melalui snapshot terakhir yang berhasil disimpan; snapshot diperbarui sesudah rename, bukan dari objek job yang sedang dimutasi. Job terminal tetap dibaca dari disk. Tidak menambah retry, delay, atau mengabaikan kegagalan storage.
+- **Bukti tes:** Python crop 7/7 dan API dengan checkpoint asli 7/7 PASS. Suite backend semula FAIL akibat race manifest tersebut; setelah perbaikan `npm test --prefix backend` PASS 69/69. Smoke live menghasilkan foreground manusia dan crop Upper-clothes (104×85, 7547 piksel) serta Pants (94×104, 7989 piksel), RGB tepat, alpha biner dan tidak tumpang tindih; inferensi 2.3621s. Frontend/unduhan belum diuji karena belum diimplementasikan pada tugas ini.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -230,4 +243,4 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-022 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-023 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

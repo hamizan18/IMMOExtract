@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** Input/preview/upload M2 dan ekstraksi foreground SCHP lokal M3 tersedia. M4 sedang berjalan: job asynchronous dan polling teruji dengan model nyata. PNG/crop per kategori, UI galeri dan unduhan job/ZIP belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** Input/preview/upload M2 dan ekstraksi foreground SCHP lokal M3 tersedia. M4 sedang berjalan: job asynchronous, polling, dan PNG/crop per kategori ATR teruji dengan model nyata. UI galeri serta preview/unduhan job/ZIP belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -74,9 +74,10 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Respons HTTP **202**, header `Location: /api/jobs/<job_id>`, dan status `queued`. Poll `GET /api/jobs/<job_id>` sampai `completed` atau `failed`.
 - Progress 0/10/100 menunjukkan tahap queued/processing/completed, bukan persentase inferensi. Error aman tersedia pada job failed.
 - Satu worker FIFO per instance backend. Job terminal tersimpan privat; job yang terputus saat restart menjadi failed pada akses pertama, tanpa retry otomatis.
-- `objects` saat ini berisi satu foreground `human` full-frame atau kosong; kategori ATR yang terdeteksi hanya metadata, belum PNG per kategori. UI masih upload saja; tidak ada endpoint unduhan job/ZIP.
+- `objects` berisi foreground `human` full-frame bila ada, ditambah PNG per label ATR dengan **>50 piksel**. Crop memakai padding 2 piksel yang dipotong pada batas input; RGB asli dan alpha khusus kategori dipertahankan. `bbox` berkoordinat asli `[left, top, right, bottom]`, right/bottom eksklusif; metadata juga memuat `class_id`, dimensi, dan `pixel_count`. Label sama tetap satu mask semantik, bukan instance terpisah. UI masih upload saja; belum ada preview/unduhan job/ZIP.
 - Manifest dan hasil berada di `storage/jobs/<uuid>/`; jika `UPLOAD_DIR` diubah, direktori jobs default sejajar direktori upload. Jangan jalankan beberapa backend pada storage yang sama. Retensi/batas antrean belum tersedia.
 - Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); gunakan misalnya `30000` bila inferensi memerlukan waktu lebih panjang, lalu restart backend.
+- Restart backend dan AI service bersama setelah pembaruan kontrak kategori. Job lama tetap dapat dipolling, tetapi tidak ditambahi file kategori secara otomatis. Polling job aktif memakai snapshot yang sudah berhasil disimpan, menghindari konflik pembacaan/penggantian manifest di Windows.
 
 ## Menjalankan Aplikasi (M1–M4)
 

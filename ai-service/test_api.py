@@ -23,6 +23,8 @@ from PIL import Image, ImageDraw
 from fastapi.testclient import TestClient
 
 from main import app
+from extractor import CATEGORY_PIXEL_THRESHOLD
+from schp_cpu import ATR_SETTINGS
 
 
 def _create_synthetic_human_image(width: int = 240, height: int = 360) -> Image.Image:
@@ -55,6 +57,55 @@ class TestAIServiceAPI(unittest.TestCase):
     def tearDown(self):
         self.client_ctx.__exit__(None, None, None)
 
+    def assert_category_files(self, data, source, job_dir):
+        objects = data["objects"]
+        self.assertIsInstance(objects, list)
+        eligible = {
+            category for category, count in data["category_pixel_counts"].items()
+            if category != "Background" and count > CATEGORY_PIXEL_THRESHOLD
+        }
+        self.assertEqual(set(data["categories_present"]), eligible)
+        self.assertEqual({obj["category"] for obj in objects}, eligible)
+        self.assertEqual(len(objects), len(eligible))
+        self.assertGreater(len(objects), 0)
+        source_pixels = np.array(source)
+        image_width, image_height = source.size
+        occupied = np.zeros((image_height, image_width), dtype=bool)
+        for obj in objects:
+            class_id = obj["class_id"]
+            self.assertIs(type(class_id), int)
+            self.assertIn(class_id, range(1, 18))
+            self.assertEqual(obj["category"], ATR_SETTINGS["labels"][class_id])
+            self.assertEqual(obj["file"], f"objects/atr-{class_id}.png")
+            left, top, right, bottom = obj["bbox"]
+            self.assertTrue(0 <= left < right <= image_width)
+            self.assertTrue(0 <= top < bottom <= image_height)
+            self.assertEqual((obj["width"], obj["height"]), (right - left, bottom - top))
+            self.assertEqual(obj["pixel_count"], data["category_pixel_counts"][obj["category"]])
+            with Image.open(os.path.join(job_dir, obj["file"])) as crop:
+                self.assertEqual(crop.format, "PNG")
+                self.assertEqual(crop.mode, "RGBA")
+                self.assertEqual(crop.size, (obj["width"], obj["height"]))
+                pixels = np.array(crop)
+            np.testing.assert_array_equal(pixels[..., :3], source_pixels[top:bottom, left:right])
+            alpha = pixels[..., 3]
+            self.assertTrue(np.all((alpha == 0) | (alpha == 255)))
+            self.assertEqual(int(np.count_nonzero(alpha)), obj["pixel_count"])
+            rows, columns = np.nonzero(alpha)
+            self.assertEqual(obj["bbox"], [
+                max(0, left + int(columns.min()) - 2),
+                max(0, top + int(rows.min()) - 2),
+                min(image_width, left + int(columns.max()) + 3),
+                min(image_height, top + int(rows.max()) + 3),
+            ])
+            occupied_crop = occupied[top:bottom, left:right]
+            self.assertFalse(np.any(occupied_crop & (alpha != 0)))
+            occupied_crop |= alpha != 0
+        self.assertEqual(
+            set(os.listdir(os.path.join(job_dir, "objects"))),
+            {f"atr-{obj['class_id']}.png" for obj in objects},
+        )
+
     def test_01_health_endpoint(self):
         """GET /health must return 200, status ok, and model_loaded: true."""
         response = self.client.get("/health")
@@ -85,6 +136,7 @@ class TestAIServiceAPI(unittest.TestCase):
         self.assertIsInstance(data.get("categories_present"), list)
         self.assertGreater(len(data.get("categories_present")), 0)
         self.assertGreater(data.get("execution_time_seconds"), 0)
+        self.assertEqual(data["objects"], [])
 
         # Verify RGBA PNG base64
         self.assertIn("image_base64", data)
@@ -125,6 +177,7 @@ class TestAIServiceAPI(unittest.TestCase):
             in_path = os.path.join(tmp_dir, "input.png")
             out_path = os.path.join(tmp_dir, "output.png")
             mask_path = os.path.join(tmp_dir, "mask.png")
+            objects_dir = os.path.join(tmp_dir, "objects")
 
             test_img = _create_synthetic_human_image(200, 200)
             test_img.save(in_path)
@@ -134,6 +187,7 @@ class TestAIServiceAPI(unittest.TestCase):
                 "output_path": out_path,
                 "save_mask_path": mask_path,
                 "include_base64": False,
+                "objects_dir": objects_dir,
             }
             response = self.client.post("/extract-path", json=payload)
             self.assertEqual(response.status_code, 200)
@@ -141,6 +195,7 @@ class TestAIServiceAPI(unittest.TestCase):
             self.assertEqual(data.get("status"), "success")
             self.assertEqual(data.get("output_path"), out_path)
             self.assertEqual(data.get("save_mask_path"), mask_path)
+            self.assert_category_files(data, test_img, tmp_dir)
 
             # Check files written to disk
             self.assertTrue(os.path.isfile(out_path), "RGBA file should exist on disk")
@@ -162,6 +217,51 @@ class TestAIServiceAPI(unittest.TestCase):
         response = self.client.post("/extract-path", json=payload)
         self.assertEqual(response.status_code, 404)
         print("  [PASS] test_05_extract_path_not_found: returned 404 as expected")
+
+    def test_06_extract_multipart_objects_without_foreground_path(self):
+        """Category-only disk export must also work for multipart uploads."""
+        test_img = _create_synthetic_human_image(240, 360)
+        buf = io.BytesIO()
+        test_img.save(buf, format="PNG")
+        with tempfile.TemporaryDirectory() as job_dir:
+            response = self.client.post(
+                "/extract",
+                files={"file": ("person.png", buf.getvalue(), "image/png")},
+                data={
+                    "objects_dir": os.path.join(job_dir, "objects"),
+                    "include_base64": "false",
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertNotIn("output_path", data)
+            self.assertNotIn("image_base64", data)
+            self.assertNotIn("mask_base64", data)
+            self.assert_category_files(data, test_img, job_dir)
+
+    def test_07_extract_path_objects_only_and_legacy(self):
+        """Path export needs no foreground path; omitted objects_dir remains opt-in."""
+        test_img = _create_synthetic_human_image(200, 200)
+        with tempfile.TemporaryDirectory() as job_dir:
+            input_path = os.path.join(job_dir, "input.png")
+            test_img.save(input_path)
+            response = self.client.post("/extract-path", json={
+                "image_path": input_path,
+                "objects_dir": os.path.join(job_dir, "objects"),
+            })
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertNotIn("output_path", data)
+            self.assertNotIn("image_base64", data)
+            self.assert_category_files(data, test_img, job_dir)
+
+        with tempfile.TemporaryDirectory() as job_dir:
+            input_path = os.path.join(job_dir, "input.png")
+            test_img.save(input_path)
+            response = self.client.post("/extract-path", json={"image_path": input_path})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["objects"], [])
+            self.assertEqual(os.listdir(job_dir), ["input.png"])
 
 
 if __name__ == "__main__":

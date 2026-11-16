@@ -37,7 +37,7 @@ export class AiClient {
   /**
    * Requests extraction using local disk file paths (fastest for co-located service).
    */
-  async extractPath({ imagePath, outputPath, saveMaskPath, includeBase64 = false }) {
+  async extractPath({ imagePath, outputPath, saveMaskPath, objectsDir, includeBase64 = false }) {
     const url = new URL('/extract-path', this.aiServiceUrl);
     const response = await fetch(url, {
       method: 'POST',
@@ -46,6 +46,7 @@ export class AiClient {
         image_path: imagePath,
         output_path: outputPath,
         save_mask_path: saveMaskPath,
+        objects_dir: objectsDir,
         include_base64: includeBase64,
       }),
       signal: AbortSignal.timeout(this.timeoutMs),
@@ -70,6 +71,7 @@ export class AiClient {
     mimeType = 'image/png',
     outputPath,
     saveMaskPath,
+    objectsDir,
     includeBase64 = false,
   }) {
     const url = new URL('/extract', this.aiServiceUrl);
@@ -77,6 +79,7 @@ export class AiClient {
     form.append('file', new Blob([buffer], { type: mimeType }), filename);
     if (outputPath) form.append('output_path', outputPath);
     if (saveMaskPath) form.append('save_mask_path', saveMaskPath);
+    if (objectsDir) form.append('objects_dir', objectsDir);
     form.append('include_base64', includeBase64 ? 'true' : 'false');
 
     const response = await fetch(url, {

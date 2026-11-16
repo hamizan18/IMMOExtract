@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Fondasi M1/M2, ekstraksi foreground M3, serta orchestrator/polling M4 tersedia. PNG per kategori, UI galeri dan unduhan job/ZIP tetap rancangan. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** Fondasi M1/M2, ekstraksi foreground M3, orchestrator/polling serta PNG per kategori ATR M4 tersedia. UI galeri dan preview/unduhan job/ZIP tetap rancangan. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -54,9 +54,11 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 ## 4. Pemrosesan dan status job
 
-**Kontrak orchestrator aktual (D-021):** `POST /api/jobs` menerima multipart `image` atau JSON `{"upload_id":"<uuid>"}`. HTTP 202 + Location setelah manifest queued tersimpan. FIFO satu worker per instance backend memanggil AI via shared path internal; `GET /api/jobs/:id` membaca status, progress tahap 0/10/100, timestamp, objek dan error aman. Manifest privat ditulis atomik via temporary file + rename. Satu proses backend memiliki storage; job interrupted saat restart menjadi failed tanpa retry, hasil terminal tetap tersedia. Manifest sekarang hanya memuat foreground manusia full-frame jika alpha ada, bukan file pakaian per kategori. Respons polling tidak mengirim nama file/path internal. Endpoint sinkron M3 berada di luar antrean ini.
+**Kontrak orchestrator aktual (D-021/D-022):** `POST /api/jobs` menerima multipart `image` atau JSON `{"upload_id":"<uuid>"}`. HTTP 202 + Location setelah manifest queued tersimpan. FIFO satu worker per instance backend memanggil AI via shared path internal; `GET /api/jobs/:id` membaca status, progress tahap 0/10/100, timestamp, objek dan error aman. Manifest privat ditulis atomik via temporary file + rename. Polling job aktif memakai snapshot terakhir yang berhasil disimpan untuk menghindari konflik read/rename Windows; terminal dibaca dari disk. Satu proses backend memiliki storage; job interrupted saat restart menjadi failed tanpa retry, hasil terminal tetap tersedia. Endpoint sinkron M3 berada di luar antrean ini.
 
-**Alur lengkap yang dituju (per-kategori, unduhan dan retensi belum tersedia):**
+**Objek kategori aktual (D-022):** Backend memberikan `objects_dir=<job>/objects` ke FastAPI. Setelah satu inferensi, tiap label ATR non-background dengan >50 piksel disimpan ke `objects/atr-<class_id>.png`: crop bbox + padding 2 piksel yang terpotong pada batas input, RGB asli, alpha hanya kelas tersebut. Manifest mempertahankan foreground `human` dan menambahkan UUID objek, class_id, kategori, bbox `[left,top,right,bottom]` eksklusif, dimensi dan pixel_count setelah file serta metadata lolos validasi. Polling menghapus referensi file internal. Satu label adalah satu mask semantik, bukan satu instance. Tidak ada migrasi otomatis job lama.
+
+**Alur lengkap yang dituju (UI galeri, unduhan dan retensi belum tersedia):**
 
 1. `POST /api/jobs`: upload satu gambar valid; Express buat `job_id` acak, simpan input, metadata status `queued`.
 2. Worker mengambil pekerjaan; ubah ke `processing`.

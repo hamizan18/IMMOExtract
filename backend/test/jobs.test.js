@@ -22,7 +22,7 @@ async function setup(t, aiClient) {
 }
 
 async function imageForm() {
-  const buffer = await sharp({ create: { width: 8, height: 6, channels: 3, background: 'red' } }).png().toBuffer();
+  const buffer = await sharp({ create: { width: 16, height: 12, channels: 3, background: 'red' } }).png().toBuffer();
   const form = new FormData();
   form.append('image', new Blob([buffer], { type: 'image/png' }), 'private-name.png');
   return form;
@@ -52,9 +52,174 @@ async function poll(base, id, status) {
 
 async function writeOutput({ imagePath, outputPath, saveMaskPath }, transparent = false) {
   await sharp(imagePath).ensureAlpha(transparent ? 0 : 1).png().toFile(outputPath);
-  await sharp({ create: { width: 8, height: 6, channels: 3, background: transparent ? 'black' : 'white' } }).png().toFile(saveMaskPath);
-  return { status: 'success', original_size: [8, 6], categories_present: [], category_pixel_counts: {}, execution_time_seconds: 0 };
+  await sharp({ create: { width: 16, height: 12, channels: 3, background: transparent ? 'black' : 'white' } }).png().toFile(saveMaskPath);
+  return {
+    status: 'success', original_size: [16, 12], categories_present: [],
+    category_pixel_counts: {}, objects: [], execution_time_seconds: 0,
+  };
 }
+
+async function writeCategoryOutput(args) {
+  const result = await writeOutput(args);
+  const { data, info } = await sharp(args.imagePath)
+    .extract({ left: 2, top: 0, width: 12, height: 12 }).ensureAlpha().raw()
+    .toBuffer({ resolveWithObject: true });
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      data[(y * 12 + x) * 4 + 3] = x >= 2 && x < 10 && y >= 2 && y < 10 ? 255 : 0;
+    }
+  }
+  await mkdir(args.objectsDir, { recursive: true });
+  await sharp(data, { raw: info }).png().toFile(join(args.objectsDir, 'atr-4.png'));
+  result.categories_present = ['Upper-clothes'];
+  result.category_pixel_counts = { Background: 128, 'Upper-clothes': 64 };
+  result.objects = [{
+    class_id: 4, category: 'Upper-clothes', file: 'objects/atr-4.png',
+    bbox: [2, 0, 14, 12], width: 12, height: 12, pixel_count: 64,
+  }];
+  return result;
+}
+
+test('category PNG pixels are inventoried with the foreground and polling hides their paths', async t => {
+  let requestedDirectory;
+  const { base, options, serve } = await setup(t, { async extractPath(args) {
+    requestedDirectory = args.objectsDir;
+    const result = await writeCategoryOutput(args);
+    result.objects[0].id = 'untrusted-id';
+    result.objects[0].private_path = args.objectsDir;
+    return result;
+  } });
+  const queued = await submit(base);
+  const completed = await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, queued.job_id);
+  assert.equal(requestedDirectory, join(directory, 'objects'));
+  assert.deepEqual(completed.objects.map(object => object.category), ['human', 'Upper-clothes']);
+  const manifest = JSON.parse(await readFile(join(directory, 'manifest.json')));
+  const object = manifest.objects[1];
+  assert.match(object.id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(object.id, manifest.objects[0].id);
+  assert.deepEqual(object, {
+    id: object.id, class_id: 4, category: 'Upper-clothes', file: 'objects/atr-4.png',
+    bbox: [2, 0, 14, 12], width: 12, height: 12, pixel_count: 64,
+  });
+  const { data, info } = await sharp(join(directory, object.file)).raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual([info.width, info.height, info.channels], [12, 12, 4]);
+  let opaque = 0;
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      const offset = (y * 12 + x) * 4;
+      assert.deepEqual([...data.subarray(offset, offset + 3)], [255, 0, 0]);
+      const expectedAlpha = x >= 2 && x < 10 && y >= 2 && y < 10 ? 255 : 0;
+      assert.equal(data[offset + 3], expectedAlpha);
+      if (expectedAlpha) opaque++;
+    }
+  }
+  assert.equal(opaque, object.pixel_count);
+  for (const publicObject of completed.objects) assert.equal(publicObject.file, undefined);
+  assert.ok(!JSON.stringify(completed).includes('objects/atr-'));
+  assert.ok(!JSON.stringify(completed).includes(options.jobDir));
+  assert.equal(completed.objects[1].private_path, undefined);
+  assert.deepEqual(await poll(await serve(), queued.job_id, 'completed'), completed);
+});
+
+test('invalid category metadata and artifacts fail without publishing partial objects', async t => {
+  const cases = [
+    ['missing objects contract', result => { delete result.objects; }],
+    ['non-array objects', result => { result.objects = {}; }],
+    ['missing category inventory', result => { result.objects = []; }],
+    ['duplicate categories', result => { result.categories_present.push('Upper-clothes'); }],
+    ['unknown category', result => { result.categories_present = ['Invented']; }],
+    ['missing counts', result => { delete result.category_pixel_counts; }],
+    ['missing category count', result => { delete result.category_pixel_counts['Upper-clothes']; }],
+    ['unlisted eligible category', result => { result.category_pixel_counts.Pants = 64; }],
+    ['invalid count', result => { result.category_pixel_counts.Background = -1; }],
+    ['count mismatch', result => { result.objects[0].pixel_count = 63; }],
+    ['tiny category', result => { result.objects[0].pixel_count = result.category_pixel_counts['Upper-clothes'] = 50; }],
+    ['duplicate class ID', result => {
+      result.categories_present.push('Pants');
+      result.category_pixel_counts.Pants = 64;
+      result.objects.push({ ...result.objects[0] });
+    }],
+    ['background class', result => { result.objects[0].class_id = 0; }],
+    ['unknown class', result => { result.objects[0].class_id = 18; }],
+    ['category class mismatch', result => { result.objects[0].category = 'Pants'; }],
+    ['absolute POSIX path', result => { result.objects[0].file = '/objects/atr-4.png'; }],
+    ['absolute Windows path', result => { result.objects[0].file = 'C:\\objects\\atr-4.png'; }],
+    ['traversal path', result => { result.objects[0].file = 'objects/../atr-4.png'; }],
+    ['backslash path', result => { result.objects[0].file = 'objects\\atr-4.png'; }],
+    ['wrong category filename', result => { result.objects[0].file = 'objects/atr-6.png'; }],
+    ['fractional bbox', result => { result.objects[0].bbox[0] = 2.5; }],
+    ['negative bbox', result => { result.objects[0].bbox[0] = -1; }],
+    ['out-of-image bbox', result => { result.objects[0].bbox[2] = 17; }],
+    ['inverted bbox', result => { result.objects[0].bbox[2] = 1; }],
+    ['width mismatch', result => { result.objects[0].width = 11; }],
+    ['height mismatch', result => { result.objects[0].height = 11; }],
+    ['wrong original dimensions', result => { result.original_size = [12, 16]; }],
+    ['missing category PNG', async (result, args) => { await rm(join(args.objectsDir, 'atr-4.png')); }],
+    ['missing second category PNG', result => {
+      result.categories_present.push('Pants');
+      result.category_pixel_counts.Pants = 64;
+      result.objects.push({ ...result.objects[0], class_id: 6, category: 'Pants', file: 'objects/atr-6.png' });
+    }],
+    ['non-PNG artifact', async (result, args) => {
+      await writeFile(join(args.objectsDir, 'atr-4.png'), 'not an image');
+    }],
+    ['RGB-only category PNG', async (result, args) => {
+      await sharp({ create: { width: 12, height: 12, channels: 3, background: 'red' } })
+        .png().toFile(join(args.objectsDir, 'atr-4.png'));
+    }],
+    ['wrong PNG dimensions', async (result, args) => {
+      await sharp({ create: { width: 10, height: 12, channels: 4, background: 'red' } })
+        .png().toFile(join(args.objectsDir, 'atr-4.png'));
+    }],
+    ['wrong alpha pixel count', async (result, args) => {
+      await sharp({ create: { width: 12, height: 12, channels: 4, background: 'red' } })
+        .png().toFile(join(args.objectsDir, 'atr-4.png'));
+    }],
+    ['corrupt compressed PNG pixels', async (result, args) => {
+      const path = join(args.objectsDir, 'atr-4.png');
+      const bytes = await readFile(path);
+      const start = bytes.indexOf(Buffer.from('IDAT')) + 4;
+      bytes[start] = 0xff;
+      bytes[start + 1] = 0xff;
+      await writeFile(path, bytes);
+      const metadata = await sharp(path).metadata();
+      assert.deepEqual([metadata.width, metadata.height, metadata.channels], [12, 12, 4]);
+    }],
+  ];
+  for (const [name, mutate] of cases) {
+    await t.test(name, async t => {
+      let responseReturned = false;
+      const { base, options } = await setup(t, { async extractPath(args) {
+        const result = await writeCategoryOutput(args);
+        await mutate(result, args);
+        responseReturned = true;
+        return result;
+      } });
+      const queued = await submit(base);
+      const failed = await poll(base, queued.job_id, 'failed');
+      assert.equal(failed.error.code, 'EXTRACTION_FAILED');
+      assert.equal(responseReturned, true, 'The fixture must return its malformed response rather than fail during setup');
+      assert.deepEqual(failed.objects, []);
+      assert.ok(!JSON.stringify(failed).includes(options.jobDir));
+      const manifest = JSON.parse(await readFile(join(options.jobDir, queued.job_id, 'manifest.json')));
+      assert.equal(manifest.status, 'failed');
+      assert.deepEqual(manifest.objects, []);
+    });
+  }
+});
+
+test('tiny-only categories preserve the human foreground without inventing category objects', async t => {
+  const { base } = await setup(t, { async extractPath(args) {
+    const result = await writeOutput(args);
+    result.category_pixel_counts = { Background: 142, Hat: 50 };
+    return result;
+  } });
+  const queued = await submit(base);
+  const completed = await poll(base, queued.job_id, 'completed');
+  assert.deepEqual(completed.objects.map(object => object.category), ['human']);
+  assert.deepEqual(completed.extraction.categories_present, []);
+});
 
 test('jobs serialize inference, preserve results and expose no private file paths', async t => {
   let release;
@@ -107,7 +272,12 @@ test('failed inference does not stall the queue; empty output creates no invente
 });
 
 test('missing AI artifacts fail instead of publishing nonexistent gallery files', async t => {
-  const { base } = await setup(t, { async extractPath() { return { status: 'success', categories_present: [] }; } });
+  const { base } = await setup(t, { async extractPath() {
+    return {
+      status: 'success', original_size: [16, 12], categories_present: [],
+      category_pixel_counts: {}, objects: [], execution_time_seconds: 0,
+    };
+  } });
   const job = await submit(base);
   assert.deepEqual((await poll(base, job.job_id, 'failed')).objects, []);
 });

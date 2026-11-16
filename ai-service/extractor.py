@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import os
 import sys
 import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Ensure ai-service root is in sys.path
 ai_service_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,6 +32,7 @@ from schp_cpu import resnet101, ATR_SETTINGS
 DEFAULT_CHECKPOINT_PATH = os.path.join(
     ai_service_dir, "models", "exp-schp-201908301523-atr.pth"
 )
+CATEGORY_PIXEL_THRESHOLD = 50
 
 
 @dataclass
@@ -45,6 +46,49 @@ class ExtractionResult:
     categories_present: List[str] = field(default_factory=list)
     category_pixel_counts: Dict[str, int] = field(default_factory=dict)
     execution_time_seconds: float = 0.0
+
+
+def save_category_objects(
+    result: ExtractionResult, objects_dir: str
+) -> List[Dict[str, Any]]:
+    """Save one original-pixel RGBA crop per eligible ATR class, without inference."""
+    objects = []
+    image_width, image_height = result.original_size
+    for class_id, category in enumerate(ATR_SETTINGS["labels"]):
+        if class_id == 0:
+            continue
+        category_mask = result.class_map == class_id
+        pixel_count = int(np.count_nonzero(category_mask))
+        if pixel_count <= CATEGORY_PIXEL_THRESHOLD:
+            continue
+
+        rows = np.flatnonzero(category_mask.any(axis=1))
+        columns = np.flatnonzero(category_mask.any(axis=0))
+        left = max(0, int(columns[0]) - 2)
+        top = max(0, int(rows[0]) - 2)
+        right = min(image_width, int(columns[-1]) + 3)
+        bottom = min(image_height, int(rows[-1]) + 3)
+        bbox = [left, top, right, bottom]
+        filename = f"atr-{class_id}.png"
+
+        if not objects:
+            os.makedirs(objects_dir, exist_ok=True)
+        with result.rgba_image.crop(bbox) as crop:
+            alpha = category_mask[top:bottom, left:right].astype(np.uint8) * 255
+            crop.putalpha(Image.fromarray(alpha))
+            crop.save(os.path.join(objects_dir, filename), format="PNG")
+
+        # Advertise only files whose writes have completed successfully.
+        objects.append({
+            "class_id": class_id,
+            "category": category,
+            "file": f"objects/{filename}",
+            "bbox": bbox,
+            "width": right - left,
+            "height": bottom - top,
+            "pixel_count": pixel_count,
+        })
+    return objects
 
 
 class HumanExtractor:
@@ -211,7 +255,7 @@ class HumanExtractor:
             if cls_idx < len(self.labels):
                 label_name = self.labels[cls_idx]
                 category_counts[label_name] = int(count)
-                if cls_idx > 0 and count > 50:  # Ignore tiny noise (<50 px)
+                if cls_idx > 0 and count > CATEGORY_PIXEL_THRESHOLD:
                     categories_present.append(label_name)
 
         elapsed = time.perf_counter() - start_time

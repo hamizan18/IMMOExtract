@@ -5,6 +5,11 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const atrLabels = [
+  'Background', 'Hat', 'Hair', 'Sunglasses', 'Upper-clothes', 'Skirt', 'Pants',
+  'Dress', 'Belt', 'Left-shoe', 'Right-shoe', 'Face', 'Left-leg', 'Right-leg',
+  'Left-arm', 'Right-arm', 'Bag', 'Scarf',
+];
 
 export class JobError extends Error {
   constructor(status, code, message) {
@@ -21,6 +26,65 @@ function validateId(id, kind) {
   return id.toLowerCase();
 }
 
+async function validateCategoryObjects(result, directory, width, height) {
+  const counts = result.category_pixel_counts;
+  if (!Array.isArray(result.objects) || !Array.isArray(result.categories_present)
+      || !counts || typeof counts !== 'object' || Array.isArray(counts)) {
+    throw new Error('Invalid category response');
+  }
+  for (const [category, count] of Object.entries(counts)) {
+    if (!atrLabels.includes(category) || !Number.isInteger(count) || count < 0 || count > width * height) {
+      throw new Error('Invalid category counts');
+    }
+  }
+  const expected = atrLabels.slice(1).filter(category => counts[category] > 50);
+  const present = new Set(result.categories_present);
+  if (present.size !== result.categories_present.length || present.size !== expected.length
+      || expected.some(category => !present.has(category)) || result.objects.length !== expected.length) {
+    throw new Error('Incomplete category inventory');
+  }
+  const objects = [];
+  const seen = new Set();
+  for (const object of result.objects) {
+    if (!object || typeof object !== 'object') throw new Error('Invalid category object');
+    const { class_id, category, file, bbox, pixel_count } = object;
+    if (!Number.isInteger(class_id) || class_id < 1 || class_id >= atrLabels.length
+        || category !== atrLabels[class_id] || !present.has(category) || seen.has(class_id)
+        || file !== `objects/atr-${class_id}.png`
+        || !Number.isInteger(pixel_count) || pixel_count <= 50 || pixel_count !== counts[category]
+        || !Array.isArray(bbox) || bbox.length !== 4 || !bbox.every(Number.isInteger)) {
+      throw new Error('Invalid category object metadata');
+    }
+    seen.add(class_id);
+    const [left, top, right, bottom] = bbox;
+    if (left < 0 || top < 0 || right > width || bottom > height || right <= left || bottom <= top
+        || object.width !== right - left || object.height !== bottom - top
+        || pixel_count > object.width * object.height) {
+      throw new Error('Invalid category bounds');
+    }
+    const image = sharp(join(directory, file), { limitInputPixels: 24_000_000, failOn: 'warning' });
+    const metadata = await image.metadata();
+    if (metadata.format !== 'png' || metadata.channels !== 4 || !metadata.hasAlpha
+        || metadata.width !== object.width || metadata.height !== object.height) {
+      throw new Error('Invalid category PNG');
+    }
+    // Decode every pixel: a readable PNG header alone does not prove a complete artifact.
+    const { data, info } = await image.raw().toBuffer({ resolveWithObject: true });
+    if (info.channels !== 4) throw new Error('Invalid category pixels');
+    let opaquePixels = 0;
+    for (let offset = 3; offset < data.length; offset += 4) {
+      if (data[offset] !== 0 && data[offset] !== 255) throw new Error('Invalid category alpha');
+      if (data[offset] === 255) opaquePixels++;
+    }
+    if (opaquePixels !== pixel_count) throw new Error('Invalid category pixel count');
+    objects.push({
+      id: randomUUID(), class_id, category, file, bbox: [...bbox],
+      width: object.width, height: object.height, pixel_count,
+    });
+  }
+  return objects;
+}
+
 export function createJobManager({ uploadDir, jobDir, aiClient }) {
   const uploads = resolve(uploadDir || fileURLToPath(new URL('../../storage/uploads/', import.meta.url)));
   const root = resolve(jobDir || join(dirname(uploads), 'jobs'));
@@ -34,6 +98,8 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     const temporary = join(directory, 'manifest.tmp');
     await writeFile(temporary, JSON.stringify(job, null, 2) + '\n', { mode: 0o600 });
     await rename(temporary, join(directory, 'manifest.json'));
+    // Poll committed snapshots while active: Windows cannot replace an open manifest.
+    if (active.has(job.job_id)) active.set(job.job_id, { ...job });
   }
 
   function initialize() {
@@ -75,24 +141,33 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
           const directory = join(root, job.job_id);
           const outputPath = join(directory, 'extracted.png');
           const saveMaskPath = join(directory, 'mask.png');
-          const result = await aiClient.extractPath({ imagePath, outputPath, saveMaskPath, includeBase64: false });
-          if (result.status !== 'success' || !Array.isArray(result.categories_present)) {
+          const result = await aiClient.extractPath({
+            imagePath, outputPath, saveMaskPath, objectsDir: join(directory, 'objects'), includeBase64: false,
+          });
+          if (!result || result.status !== 'success') {
             throw new Error('Invalid extraction response');
           }
           const image = sharp(outputPath, { limitInputPixels: 24_000_000, failOn: 'warning' });
           const metadata = await image.metadata();
+          const sourceMetadata = await sharp(imagePath, { limitInputPixels: 24_000_000 }).metadata();
           const mask = sharp(saveMaskPath, { limitInputPixels: 24_000_000, failOn: 'warning' });
           const maskMetadata = await mask.metadata();
           if (metadata.format !== 'png' || metadata.channels !== 4 || !metadata.hasAlpha
               || maskMetadata.format !== 'png' || maskMetadata.width !== metadata.width
-              || maskMetadata.height !== metadata.height) throw new Error('Invalid extraction files');
+              || maskMetadata.height !== metadata.height || metadata.width !== sourceMetadata.width
+              || metadata.height !== sourceMetadata.height
+              || !Array.isArray(result.original_size) || result.original_size.length !== 2
+              || result.original_size[0] !== sourceMetadata.width
+              || result.original_size[1] !== sourceMetadata.height) throw new Error('Invalid extraction files');
           const statistics = await image.stats();
           await mask.stats();
-          // M3 yields one full-frame foreground, not individual ATR object files.
-          job.objects = statistics.channels[3].max > 0 ? [{
+          const categoryObjects = await validateCategoryObjects(result, directory, metadata.width, metadata.height);
+          // Retain the full-frame foreground alongside the semantic ATR crops.
+          const foregroundObjects = statistics.channels[3].max > 0 ? [{
             id: randomUUID(), category: 'human', file: 'extracted.png',
             width: metadata.width, height: metadata.height,
           }] : [];
+          job.objects = [...foregroundObjects, ...categoryObjects];
           job.extraction = {
             original_size: result.original_size,
             categories_present: result.categories_present,
@@ -117,6 +192,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
           job.status = 'failed';
           job.objects = [];
           job.error = { code: 'JOB_STORAGE_FAILED', message: 'Hasil job tidak dapat disimpan.' };
+          active.set(job.job_id, { ...job });
           console.error('Job persistence failed:', error.code || error.name);
         }
       }
@@ -154,7 +230,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       };
       await mkdir(join(root, job.job_id), { mode: 0o700 });
       await save(job);
-      active.set(job.job_id, job);
+      active.set(job.job_id, { ...job });
       queue.push({ job, imagePath });
       setImmediate(() => { void drain(); });
       return { ...job };
@@ -162,7 +238,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     async get(jobId) {
       const id = validateId(jobId, 'JOB');
       await initialize();
-      if (active.get(id)?.error?.code === 'JOB_STORAGE_FAILED') return active.get(id);
+      if (active.has(id)) return active.get(id);
       try {
         return JSON.parse(await readFile(join(root, id, 'manifest.json'), 'utf8'));
       } catch (error) {

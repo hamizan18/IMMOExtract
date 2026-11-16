@@ -4,72 +4,75 @@
 
 ## Last agent
 
-OMP — orchestrator job asynchronous M4 dan verifikasi HTTP dengan model SCHP asli, 2026-11-17.
+OMP — PNG/crop per kategori ATR, integrasi manifest job, dan perbaikan race polling manifest Windows, 2026-11-17.
 
 ## Current milestone
 
 **M4 — Job, object gallery, download individual/ZIP — In progress.**
-M1–M3 memiliki bukti sebelumnya; alur foreground M3 tetap berfungsi pada tes regresi. Orchestrator/polling M4 selesai dan diuji. PNG per kategori, UI galeri, unduhan job individual/ZIP belum tersedia; M4 belum selesai.
+Orchestrator/polling, foreground manusia dan file PNG kategori terverifikasi. UI galeri serta preview/unduhan PNG job dan ZIP belum tersedia; jangan menandai M4 selesai atau mulai M5.
 
 ## Last completed task
 
-- `POST /api/jobs`: menerima multipart satu `image` atau JSON hanya `upload_id`; HTTP 202 dengan `Location`, `job_id`, `upload_id`, status `queued`.
-- `GET /api/jobs/:id`: polling `queued`/`processing`/`completed`/`failed`, progress tahap 0/10/100, timestamp, objek dan error aman. Tidak mengirim path/file internal.
-- FIFO satu worker per instance backend; upload baru menggunakan validasi M2, bukan validator duplikat.
-- Manifest privat per job ditulis melalui temporary file + rename; job selesai bertahan setelah restart. Job queued/processing yang tertinggal ditandai failed/JOB_INTERRUPTED pada akses pertama setelah restart, tanpa retry otomatis.
-- PNG/mask didekode sebelum job completed. `objects` berisi foreground `human` full-frame yang nyata atau kosong jika alpha foreground tidak ada; kategori ATR hanya metadata, belum file per kategori.
-- Error inferensi tidak menghambat job berikutnya; error path internal tidak diteruskan kepada client.
-- D-021 mencatat kontrak dan batasan. Tidak mengubah frontend, pipeline AI, dependensi, atau model.
+- `save_category_objects()` memakai class map yang sudah dihasilkan SCHP; tidak melakukan inferensi kedua. Satu PNG per label ATR non-background dengan >50 piksel, mempertahankan ambang kategori lama.
+- Crop bbox dengan padding 2 piksel, clipped ke dimensi input. RGB asli dipertahankan; alpha 255 hanya pada kelas tersebut, 0 pada background/kategori tetangga. Satu kelas disconnected tetap satu objek semantik; sepatu kiri/kanan tetap label berbeda.
+- JSON `/extract-path` dan multipart `/extract` menerima `objects_dir`, termasuk ekspor kategori tanpa path foreground. Respons `objects` berisi hanya file yang selesai ditulis; opsi tidak diberikan/hasil tidak memenuhi ambang menghasilkan array kosong.
+- AiClient meneruskan `objectsDir`; job manager menetapkan `<job>/objects`, memvalidasi label/class ID, inventaris lengkap, bbox, dimensi, pixel_count, path relatif tetap dan PNG RGBA yang benar-benar dapat didekode.
+- Manifest mempertahankan foreground `human`, menambahkan UUID objek kategori beserta bbox/class_id/pixel_count. Polling tidak membocorkan file/path atau field arbitrer dari AI.
+- Race Windows ditemukan pada suite: rename manifest gagal EPERM saat reader terbuka. Diagnostik syscall membuktikannya. Job aktif kini dipolling dari snapshot terakhir yang berhasil disimpan; terminal tetap dari disk. Tidak ada retry/delay atau pemalsuan sukses.
+- D-022 mencatat kontrak dan alasan. Pipeline model, frontend, dependensi dan checkpoint tidak diganti.
 
 ## Current task
 
-Orchestrator selesai. Tugas berikutnya hanya PNG/crop per kategori ATR dan integrasinya ke manifest job; jangan langsung mengerjakan seluruh sisa M4.
+Tugas PNG kategori selesai dan diverifikasi. Berikutnya hanya penyajian PNG job individual berbasis manifest; UI/ZIP tetap terpisah.
 
 ## Working components
 
-- Frontend file/kamera → preview → upload server (M2; bukti lama).
-- SCHP ATR-18 CPU lokal, endpoint FastAPI dan endpoint ekstraksi sinkron M3.
-- Job API Express → FastAPI nyata → foreground RGBA + mask privat → polling completed.
-- Checkpoint lokal tetap diabaikan Git. Layanan uji port 8017 sudah dihentikan; proses lintas sesi tidak dijamin.
+- Input/preview/upload M2 dan ekstraksi full-frame/base64 M3 tetap lolos tes relevan.
+- Job queued → processing → completed/failed, antrean serial, restart, manifest privat dan polling.
+- Model asli menghasilkan foreground + Upper-clothes dan Pants pada smoke sintetis; crop dan RGB/alpha diverifikasi terhadap input.
+- Service uji FastAPI port 8018 sudah dihentikan, Express/storage/fixture temp dan script smoke dibersihkan. Jalankan ulang layanan sesuai README.
 
 ## Modified files
 
-- `backend/src/app.js` — mount job router, opsi direktori job untuk isolasi.
-- `backend/src/uploads.js` — callback setelah upload tersimpan; respons endpoint upload lama tetap HTTP 201.
-- `backend/src/job-manager.js` — baru, FIFO/persistensi/recovery dan manifest foreground.
-- `backend/src/jobs.js` — baru, HTTP create/polling dan sanitasi respons.
-- `backend/test/jobs.test.js` — baru, lima tes lifecycle/security dengan storage dan server terisolasi.
-- `README.md` — status dan cara memakai job API.
-- `docs/ARCHITECTURE.md` — kontrak aktual job dan batas implementasi.
-- `docs/DECISIONS.md` — D-021.
+- `ai-service/extractor.py` — helper crop/export deterministik dan konstanta ambang bersama.
+- `ai-service/main.py` — kontrak objects_dir/objects pada kedua endpoint.
+- `ai-service/test_category_objects.py` — baru, tujuh tes tanpa checkpoint.
+- `ai-service/test_api.py` — tujuh tes API model asli, termasuk kategori dan perilaku lama.
+- `backend/src/ai-client.js` — pemetaan objectsDir.
+- `backend/src/job-manager.js` — validasi artefak kategori dan snapshot polling Windows.
+- `backend/test/jobs.test.js` — fixture kontrak baru, inventaris kategori nyata dan 34 kasus invalid.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` — kontrak aktual, batasan dan D-022.
 - `docs/PROGRESS.md`, `docs/HANDOFF.md` — bukti dan tugas berikutnya.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat` bersih. Daftar uncommitted pada handoff lama sudah kedaluwarsa; tidak ada perubahan awal yang ditimpa.
+Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat`, `git diff` bersih. Catatan uncommitted tugas sebelumnya sudah kedaluwarsa; tidak menimpa perubahan awal.
 
-Semua perubahan dalam bagian Modified files dibuat pada sesi ini dan belum di-commit (tiga file baru, tujuh file existing). Tidak menjalankan staging atau commit otomatis.
+Sebelas file existing dan satu file baru dalam Modified files diubah pada sesi ini dan belum di-commit. Script sementara `backend/.smoke-category.mjs` sudah dihapus. Tidak menjalankan staging/commit otomatis, instalasi atau download model.
 
 ## Current errors / limitations
 
-- Tidak ada kegagalan tes aplikasi yang belum terselesaikan pada sesi ini.
-- Manifest baru berisi satu foreground manusia, bukan crop atau PNG pakaian individual. Tidak ada UI job/galeri atau endpoint unduhan job/ZIP.
-- Satu proses backend harus memiliki storage job; multi-process, batas antrean, retensi otomatis belum tersedia. Ekstraksi sinkron M3 tidak melewati antrean job.
-- `server.js` masih menggunakan `AI_HEALTH_TIMEOUT_MS` untuk timeout client AI bersama (default 3000 ms); smoke memakai 30000 ms. Input lambat memerlukan konfigurasi timeout yang memadai.
-- Lisensi redistribusi bobot ATR belum terkonfirmasi; jangan bundle checkpoint.
-- LSP tidak dikonfigurasi; pencarian pemanggil digunakan setelah tool melaporkan tidak ada server. Satu patch ditolak karena nomor baris tidak ada; dibaca ulang lalu diterapkan, bukan error runtime.
+- Kegagalan EPERM suite awal sudah diperbaiki; suite akhir 69/69 PASS. Satu proses backend tetap harus menjadi pemilik storage.
+- StarletteDeprecationWarning muncul pada TestClient/httpx; API 7/7 PASS. Tidak mengubah dependensi untuk warning ini.
+- UI job/galeri, preview/unduhan job/ZIP, batas antrean dan retensi belum tersedia. Ekstraksi sinkron M3 tetap di luar antrean job.
+- Kategori ≤50 piksel tidak punya file kategori tetapi masih ada pada foreground. Semantic mask bukan pemisahan instance; kualitas foto nyata/occlusion belum diuji pada sesi ini.
+- Restart backend dan FastAPI bersama setelah pembaruan: job baru mensyaratkan kontrak objects AI. Job lama tidak dimigrasikan dan tidak dibuatkan kategori palsu.
+- Startup `server.js` masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); smoke memakai 30000 ms. Lisensi redistribusi checkpoint ATR belum terkonfirmasi.
+- LSP tidak dikonfigurasi; referensi dicari setelah tool menyatakan server tidak tersedia.
 
 ## Tests performed
 
-- **PASS** `npm test --prefix backend`: 32/32 (27 tes lama + 5 tes job). Meliputi serialisasi, polling saat AI ditahan, hasil terminal setelah restart, interrupted jobs, antrean lanjut sesudah gagal, output hilang/kosong, input invalid dan sanitasi.
-- **PASS** smoke sementara melalui `node --input-type=module` stdin: FastAPI SCHP nyata port 8017, Express port dinamis dan storage temp. Multipart job diterima 123 ms; job JSON referensi upload menunggu queued; keduanya processing → completed. Inferensi 2.0079s dan 1.88s; kategori Upper-clothes/Pants; PNG 200×300 RGBA, alpha min/max 0/255.
-- **PASS** smoke AI tidak dapat dihubungi: job berubah failed/EXTRACTION_FAILED; health backend tetap HTTP 200.
-- **PASS** cleanup: server uji dihentikan, fixture sintetis/storage temp dihapus. Tidak membuat script smoke permanen atau menyentuh foto pengguna.
-- **NOT RUN** browser/build frontend, pengujian kualitas foto nyata, PNG per kategori, galeri/download ZIP. Frontend tidak berubah; fitur lanjutan belum tersedia.
+- **PASS** `ai-service/.venv-test/Scripts/python.exe -m unittest discover -s ai-service -p test_category_objects.py`: 7/7, tanpa model. RGB/alpha asli, padding/clipping, sepatu kiri/kanan, kelas disconnected, 50/51, kosong/tiny, storage failure.
+- **PASS** `ai-service/.venv-test/Scripts/python.exe ai-service/test_api.py`: 7/7 dalam 16.576s dengan checkpoint asli. Kedua endpoint, ekspor kategori saja, opsi tidak diberikan, crop nyata dan full-frame/base64 lama.
+- **FAIL lalu diperbaiki** `npm test --prefix backend` awal: EPERM pada rename manifest. Diagnostik Node dengan read handle terbuka membuktikan operasi penyebab; bukan kegagalan model.
+- **PASS** `npm test --prefix backend` sesudah perbaikan snapshot: 69/69, termasuk seluruh tes upload/ekstraksi/job dan kategori.
+- **PASS** `node .smoke-category.mjs` dari backend (script sementara): FastAPI nyata 8018 + Express port dinamis, queued → processing → completed, inferensi 2.3621s. Manifest tiga objek: human, Upper-clothes (104×85; 7547 piksel), Pants (94×104; 7989 piksel). RGB tepat, alpha biner/disjoint/subset foreground, respons publik tanpa file/path.
+- **PASS** cleanup server dan storage/fixture/script sementara. Tidak mengakses foto pribadi.
+- **NOT RUN** browser/build frontend, kualitas foto nyata, preview/unduhan job/ZIP. Frontend tidak berubah; fitur tersebut belum diimplementasikan pada tugas ini.
 
 ## Next action (only one)
 
-**Implementasikan PNG transparan/crop per kategori ATR yang benar-benar terdeteksi, lalu integrasikan file tersebut ke manifest job.** Mulai dari `ai-service/extractor.py`, kontrak respons `main.py`/`ai-client.js`, dan `backend/src/job-manager.js`. Pertahankan foreground manusia dan piksel RGB/alpha asli; jangan inventarisasi objek tanpa file nyata. Uji fixture deterministik, hasil kosong, lalu smoke model asli. Jangan mulai UI/ZIP atau M5.
+**Implementasikan penyajian PNG job individual berdasarkan manifest:** preview `GET /api/jobs/:id/objects/:objectId` dan attachment `GET /api/jobs/:id/objects/:objectId/download`. Batasi ke job completed dan object ID yang terdaftar, tanpa path dari client/static storage. Verifikasi foreground dan crop kategori serta penolakan ID invalid/tidak dikenal dan file hilang. Jangan mulai UI, ZIP atau M5 pada tugas ini.
 
 ## Handoff rules
 

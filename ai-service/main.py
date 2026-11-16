@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
-from extractor import HumanExtractor, DEFAULT_CHECKPOINT_PATH
+from extractor import HumanExtractor, DEFAULT_CHECKPOINT_PATH, save_category_objects
 
 
 @asynccontextmanager
@@ -68,6 +68,7 @@ class ExtractPathRequest(BaseModel):
     output_path: Optional[str] = Field(None, description="Path where extracted RGBA PNG will be saved")
     save_mask_path: Optional[str] = Field(None, description="Path where binary alpha mask will be saved")
     include_base64: bool = Field(False, description="Whether to include base64-encoded image and mask")
+    objects_dir: Optional[str] = Field(None, description="Internal directory for category PNG crops")
 
 
 def _get_extractor() -> HumanExtractor:
@@ -86,6 +87,7 @@ def _build_response_payload(
     output_path: Optional[str] = None,
     save_mask_path: Optional[str] = None,
     include_base64: bool = False,
+    objects: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Formats extraction result into standardized JSON response dict."""
     payload: Dict[str, Any] = {
@@ -94,6 +96,7 @@ def _build_response_payload(
         "categories_present": result.categories_present,
         "category_pixel_counts": result.category_pixel_counts,
         "execution_time_seconds": round(result.execution_time_seconds, 4),
+        "objects": objects if objects is not None else [],
     }
 
     if output_path:
@@ -133,6 +136,7 @@ async def extract_upload(
     output_path: Optional[str] = Form(None, description="Optional local file path to save RGBA PNG"),
     save_mask_path: Optional[str] = Form(None, description="Optional local file path to save mask PNG"),
     include_base64: bool = Form(True, description="Include base64 strings in response"),
+    objects_dir: Optional[str] = Form(None, description="Internal directory for category PNG crops"),
 ) -> Dict[str, Any]:
     """Extract foreground human sprite from uploaded image file."""
     extractor = _get_extractor()
@@ -159,12 +163,14 @@ async def extract_upload(
     # Save to disk if requested
     if output_path:
         extractor.save_result(result, output_rgba_path=output_path, save_mask_path=save_mask_path)
+    objects = save_category_objects(result, objects_dir) if objects_dir is not None else []
 
     return _build_response_payload(
         result,
         output_path=output_path,
         save_mask_path=save_mask_path,
         include_base64=include_base64,
+        objects=objects,
     )
 
 
@@ -200,10 +206,15 @@ def extract_path(request: ExtractPathRequest) -> Dict[str, Any]:
             output_rgba_path=request.output_path,
             save_mask_path=request.save_mask_path,
         )
+    objects = (
+        save_category_objects(result, request.objects_dir)
+        if request.objects_dir is not None else []
+    )
 
     return _build_response_payload(
         result,
         output_path=request.output_path,
         save_mask_path=request.save_mask_path,
         include_base64=request.include_base64,
+        objects=objects,
     )
