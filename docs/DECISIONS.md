@@ -239,6 +239,18 @@
 - **Konsekuensi:** Berlaku pada hasil persisten setelah restart, termasuk foreground job lama. Storage tetap diasumsikan privat dan dimiliki satu proses backend; pemeriksaan path bukan proteksi terhadap proses lokal berbahaya yang mengganti file saat transfer. UI galeri dan ZIP masih terpisah.
 - **Bukti tes:** `node --test backend/test/jobs.test.js` PASS 45/45; kedua endpoint, byte PNG foreground/crop, header, restart, ID invalid/lintas-job, status non-completed, hasil kosong, file hilang/non-file, path tidak aman dan junction keluar job. Smoke stdin dengan FastAPI/model asli port 8019 PASS: human 200×300, Upper-clothes 104×85, Pants 94×104; byte-identical RGBA/alpha 0–255 pada preview dan attachment; inferensi 2.05s.
 
+## D-024 — UI ekstraksi/galeri mengikuti lifecycle upload
+
+- **Tanggal:** 2026-11-17.
+- **Status:** Accepted; build dan browser desktop/mobile dengan model asli terverifikasi.
+- **Keputusan:** Modul Vanilla JS `extraction-workspace.js` menerima upload_id/reset dari `image-input.js` lewat `setUploadedImage()`. Tombol aktif setelah upload sukses; klik mengirim JSON ke `/api/jobs`. UI menampilkan queued/processing, gagal/kosong atau kartu foreground/kategori dengan label, dimensi, preview transparansi dan link attachment PNG asli. Tidak menambah framework/dependensi, ZIP atau pixelation.
+- **Lifecycle:** Ganti/hapus pilihan, buka kamera dan pagehide meng-abort operasi, membatalkan timer dan mengosongkan galeri/ID. Identitas AbortController diperiksa setelah respons async agar hasil lama tidak menimpa pilihan baru. Job yang diterima server tetap berjalan; pembatalan browser bukan pembatalan job/retensi.
+- **Polling:** GET serial, 1 detik setelah respons queued/processing; timeout request 15 detik. Indikator proses tidak mengklaim persentase inferensi. Request gagal menghentikan polling; Periksa status melanjutkan GET job yang diketahui tanpa POST baru. POST tidak terkonfirmasi diberi peringatan potensi job sudah diterima. Tidak ada retry otomatis atau state lintas reload.
+- **Presentasi:** Dua panel desktop, tumpuk mobile. Label melalui textContent; ID valid membentuk URL API. Pola transparansi hanya CSS; preview gagal diberi pesan, bukan gambar pengganti. Unduhan link native/attachment server tanpa menyalin PNG ke blob frontend.
+- **Alasan/alternatif:** Menggunakan lifecycle upload/kamera yang sudah ada menghindari event bus/state store baru. Pemeriksaan manual job menghindari duplikasi inferensi setelah gangguan koneksi.
+- **Bukti:** Build Vite PASS (7 modul). Browser build preview → Express → model asli: tiga kartu, download byte-identical RGBA/alpha 0/255, blank input → kosong, AI dihentikan → failed. Desktop 1365×1000/mobile 390×844 tanpa overflow. Fault injection polling/preview/upload, respons JSON tertunda, capture sintetis dan navigasi pagehide PASS.
+- **Konsekuensi:** ZIP masih tugas M4. Gunakan Hapus pilihan dan pilih gambar untuk job baru; tidak ada riwayat UI/pembatalan server. Kegagalan unduhan ditangani browser, bukan dialog khusus aplikasi. Tidak menguji foto pribadi/kamera fisik.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -248,10 +260,10 @@
 - [x] Endpoint FastAPI AI service (`POST /extract`, `POST /extract-path`, `GET /health`) dan model lifecycle management (D-019).
 - [x] Integrasi Express backend dengan FastAPI AI service (`AiClient`, `/api/uploads/:uploadId/extract`, asset serving PNG/mask) (D-020).
 - [x] Arsitektur Job Orchestrator & Polling status untuk ekstraksi asynchronous di M4 (D-021).
-- [ ] Galeri objek hasil per-kategori dan pembuatan archive ZIP individual/all (M4).
+- [ ] Pembuatan archive ZIP beberapa/semua objek (M4); galeri serta unduhan PNG individual tersedia (D-023/D-024).
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-024 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-025 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M3 memiliki bukti verifikasi sebelumnya untuk lingkungan Windows lokal. M4 sedang berjalan: orchestrator/polling, foreground manusia, PNG per kategori ATR, serta endpoint preview/unduhan PNG individual sudah terverifikasi. UI galeri dan ZIP belum tersedia; M4 belum selesai.
+> **Status aktual:** M1–M3 memiliki bukti verifikasi sebelumnya untuk Windows lokal. M4 sedang berjalan: orchestrator/polling, foreground manusia, PNG kategori ATR, UI ekstraksi/galeri serta preview/unduhan individual terverifikasi. ZIP belum tersedia; M4 belum selesai.
 
 ## Ringkasan
 
 - **Current milestone:** M4 — Job, object gallery, download individual/ZIP — In progress.
-- **Current task:** Endpoint preview/unduhan PNG individual berbasis manifest selesai; berikutnya integrasi UI job/galeri dan unduhan individual.
-- **Overall status:** Upload → queued → processing → completed → manifest foreground/kategori → preview/attachment PNG terverifikasi. ID/status/path invalid dan file hilang ditolak. UI masih alur upload M2.
-- **Last verification:** 2026-11-17 — `node --test backend/test/jobs.test.js` 45/45 PASS; smoke HTTP model asli untuk preview/attachment tiga objek PASS, inferensi 2.05s. Tidak mengulang suite Python/frontend.
+- **Current task:** UI ekstraksi/galeri dan unduhan individual selesai; berikutnya endpoint ZIP berbasis manifest.
+- **Overall status:** Browser upload → queued/processing → completed → galeri → download PNG asli terverifikasi dengan model lokal. Status kosong/gagal dan lifecycle respons usang teruji.
+- **Last verification:** 2026-11-17 — `npm run build --prefix frontend` PASS (7 modul); browser desktop/mobile pada build preview → Express → FastAPI/model asli PASS. Download dibandingkan byte/piksel dengan PNG disk. Backend/Python tidak diubah atau diuji ulang.
 
 ## Milestone
 
@@ -16,7 +16,7 @@
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
-| M4 | Job, object gallery, download individual/ZIP | In progress | Orchestrator/polling, PNG kategori dan endpoint preview/unduhan individual PASS; UI galeri serta ZIP belum selesai |
+| M4 | Job, object gallery, download individual/ZIP | In progress | Orchestrator/polling, PNG kategori, UI galeri dan preview/unduhan individual PASS; ZIP belum selesai |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
@@ -84,9 +84,14 @@
 - Job belum completed ditolak 409; UUID invalid 400; ID/file hilang 404. Path manifest dibatasi ke nama PNG hasil; lokasi canonical harus sesuai dan berupa regular file. Traversal, absolute path dan junction pengalihan ditolak dengan error aman.
 - Git awal tugas unduhan bersih, berbeda dari catatan uncommitted handoff sebelumnya. Perubahan hanya `backend/src/job-manager.js`, `backend/src/jobs.js`, `backend/test/jobs.test.js`, README dan empat dokumen docs. Tanpa staging/commit; LSP tidak tersedia, referensi ditelusuri melalui pencarian.
 
+- UI ekstraksi/galeri (2026-11-17, D-024): `image-input.js` memberi upload_id/reset langsung ke modul `extraction-workspace.js`. Tombol aktif setelah upload sukses; POST hanya upload_id, polling serial tiap 1 detik dengan timeout request 15 detik. Status queued/processing/completed/failed dan hasil kosong ditampilkan jujur.
+- Kartu foreground/kategori memuat label, dimensi, preview transparansi dan link attachment PNG asli. Label melalui textContent; preview gagal diberi pesan. Desktop dua panel dan mobile bertumpuk, tanpa pixelation.
+- Ganti/hapus pilihan, buka kamera dan pagehide meng-abort request, membatalkan timer dan membersihkan hasil. Identitas operasi menolak respons POST/poll usang. Putus polling dapat dilanjutkan manual pada job yang sama, tanpa POST kedua.
+- Git awal tugas UI bersih; catatan uncommitted sebelumnya sudah kedaluwarsa. Perubahan: tiga frontend existing, satu modul baru, README dan empat dokumen docs. Backend/model/dependensi tidak berubah; tanpa staging/commit.
+
 ## In progress
 
-- M4: UI job/galeri dan ZIP belum selesai. Orchestrator, polling, PNG kategori serta endpoint preview/unduhan individual sudah PASS.
+- M4: ZIP belum selesai. UI ekstraksi/galeri, polling dan unduhan PNG individual sudah terhubung serta terverifikasi di browser.
 
 ## Blockers / risks
 
@@ -102,11 +107,12 @@
 - Startup `server.js` masih memakai `AI_HEALTH_TIMEOUT_MS` sebagai timeout client AI bersama (default 3000 ms); smoke job memakai 30000 ms. Untuk input lambat, konfigurasi timeout memadai; benchmark batas input belum dilakukan.
 - Kategori ≤50 piksel tidak diekspor sebagai file; tetap berada dalam foreground manusia. Ambang ini bukan confidence model. Kualitas pada foto pribadi/occlusion nyata belum diuji pada sesi kategori.
 - `test_api.py` memunculkan StarletteDeprecationWarning mengenai integrasi httpx TestClient; 7 tes tetap PASS. Tidak mengganti dependensi pada tugas ini.
+- State job UI tidak dipulihkan setelah reload. Ganti/hapus pilihan hanya menghentikan pengamatan browser, bukan job server. Unduhan memakai browser native; tidak ada dialog error unduhan khusus aplikasi.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Integrasikan UI ekstraksi/galeri dengan API yang tersedia: tombol ekstraksi dari upload_id, polling status job, kartu preview objek dan unduhan PNG individual. Jaga lifecycle pilihan baru/hapus agar respons job lama tidak menimpa pilihan terbaru; tampilkan status gagal/kosong dengan jujur. Verifikasi browser desktop/mobile. ZIP dan M5 tetap tugas terpisah.
+Implementasikan endpoint ZIP backend berbasis manifest: `POST /api/jobs/:id/exports` untuk semua atau object_ids dan `GET /api/jobs/:id/exports/:exportId/download`. Hanya job completed dan objek terdaftar; ZIP privat, tanpa path client. Verifikasi isi archive sesuai pilihan/semua serta penolakan ID invalid/file hilang. UI ZIP dan M5 tetap tugas terpisah.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -223,6 +229,21 @@ Integrasikan UI ekstraksi/galeri dengan API yang tersedia: tombol ekstraksi dari
 | 2026-11-17 | Smoke sementara `node --input-type=module` melalui stdin (cwd backend), FastAPI/model asli port 8019, Express dinamis | PASS | Job completed; preview + attachment human 200×300, Upper-clothes 104×85, Pants 94×104. Byte sama persis dengan file manifest, RGBA, alpha min/max 0/255; header sesuai; inferensi 2.05s |
 | 2026-11-17 | Cleanup smoke unduhan | PASS | Express ditutup, storage temp dihapus, FastAPI 8019 dihentikan. Script lewat stdin tidak membuat file; tidak menyentuh foto/storage pengguna |
 | 2026-11-17 | Suite backend lain/Python, browser/build frontend, kualitas foto nyata dan ZIP | NOT RUN | Verifikasi dibatasi jalur job/endpoint yang berubah; frontend, AI dan ZIP tidak diubah pada tugas ini |
+| 2026-11-17 | Tugas UI: inspeksi awal Git status/diff/index | PASS | Working tree/index bersih; pekerjaan endpoint sebelumnya sudah tidak pending |
+| 2026-11-17 | `npm run build --prefix frontend` | PASS | Vite 7 modul; tanpa dependensi tambahan |
+| 2026-11-17 | Browser build preview 5175 → Express 3120 → model asli 8020, fixture sintetis 200×300 | PASS | Upload, queued/processing/completed; kartu human 200×300, Upper-clothes 104×85, Pants 94×104; seluruh preview terdecode |
+| 2026-11-17 | Klik Unduh PNG asli pada Upper-clothes; Node/Sharp via stdin | PASS | PNG browser 451 byte, byte-identical dengan file kategori manifest, RGBA 104×85 dan alpha min/max 0/255 |
+| 2026-11-17 | Screenshot desktop 1365×1000/mobile 390×844 | PASS | Dua panel desktop; panel/kartu bertumpuk mobile; tanpa overflow horizontal |
+| 2026-11-17 | Ganti ke fixture putih 160×100; ekstraksi model asli | PASS | Galeri lama dibersihkan; completed nol objek menampilkan pesan kosong |
+| 2026-11-17 | Tahan JSON POST lalu Hapus; tahan GET polling lalu ganti input | PASS | Signal lama aborted; respons yang dilepas tidak mengubah galeri/ID/status pilihan terbaru |
+| 2026-11-17 | Injeksi satu kegagalan GET lalu Periksa status | PASS | Job ID sama, hanya satu POST; galeri tiga objek pulih |
+| 2026-11-17 | Injeksi HTTP 404 tiga preview dan gangguan fetch upload | PASS | Pesan error per kartu; upload gagal mempertahankan preview dan menonaktifkan ekstraksi |
+| 2026-11-17 | Kamera stream canvas sintetis → capture → upload | PASS | Galeri reset, PNG diunggah, ekstraksi aktif, track ended; bukan kamera fisik |
+| 2026-11-17 | Navigasi nyata saat JSON POST ditahan; pagehide diamati via sessionStorage | PASS | Signal aborted, galeri kosong, tombol disabled sebelum halaman ditinggalkan |
+| 2026-11-17 | Hentikan FastAPI 8020 lalu ekstraksi browser | PASS | Job failed dengan pesan, tanpa kartu palsu, preview input tetap tersedia dan indikator berhenti |
+| 2026-11-17 | Harness browser awal | ERROR harness | document digunakan di runtime tab.run, lalu assert.equal pada helper assert fungsi; diperbaiki tanpa mengulang ekstraksi sukses. Timeout preview karena pemilihan file sama tidak memicu change; Hapus pilihan dahulu menyelesaikan skenario |
+| 2026-11-17 | Cleanup UI smoke | PASS | Tab ditutup, layanan uji dihentikan, fixture/upload/job temp serta PNG unduhan dihapus; tanpa foto pribadi |
+| 2026-11-17 | Suite backend/Python, kamera/mobile fisik, foto nyata, ZIP | NOT RUN | Backend/model tidak berubah; kamera sintetis dan viewport mobile saja; ZIP belum tersedia |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

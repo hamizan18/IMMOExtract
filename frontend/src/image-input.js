@@ -1,3 +1,5 @@
+import { setUploadedImage } from './extraction-workspace.js';
+
 const input = document.querySelector('#image-input');
 const clearButton = document.querySelector('#clear-image');
 const status = document.querySelector('#image-status');
@@ -22,6 +24,7 @@ let uploadController = null;
 function clearPreview() {
   uploadController?.abort();
   uploadController = null;
+  setUploadedImage(null);
   preview.hidden = true;
   image.removeAttribute('src');
   details.textContent = '';
@@ -64,7 +67,8 @@ async function uploadImage(file, type, current) {
     if (body?.status !== 'uploaded' || typeof body.upload_id !== 'string' || !body.upload_id) {
       throw new Error('Invalid upload response');
     }
-    status.textContent = `Upload berhasil. ID upload: ${body.upload_id}. Gambar tersimpan di server lokal; ekstraksi AI belum tersedia.`;
+    status.textContent = `Upload berhasil. ID upload: ${body.upload_id}. Gambar tersimpan di server lokal; tekan Ekstrak objek untuk memulai.`;
+    setUploadedImage(body.upload_id);
   } catch {
     if (current !== selection || controller.signal.aborted) return;
     status.textContent = 'Upload belum dapat dikonfirmasi. Periksa koneksi/server lokal, lalu pilih ulang gambar. Preview lokal tetap tersedia.';
