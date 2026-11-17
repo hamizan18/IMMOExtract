@@ -228,6 +228,17 @@
 - **Penyesuaian lifecycle teruji:** Pengujian mengungkap race Windows: `rename(manifest.tmp, manifest.json)` gagal EPERM ketika pembaca memegang manifest. Diagnostik dengan read handle terbuka membuktikan syscall tersebut gagal. Job aktif kini dipolling melalui snapshot terakhir yang berhasil disimpan; snapshot diperbarui sesudah rename, bukan dari objek job yang sedang dimutasi. Job terminal tetap dibaca dari disk. Tidak menambah retry, delay, atau mengabaikan kegagalan storage.
 - **Bukti tes:** Python crop 7/7 dan API dengan checkpoint asli 7/7 PASS. Suite backend semula FAIL akibat race manifest tersebut; setelah perbaikan `npm test --prefix backend` PASS 69/69. Smoke live menghasilkan foreground manusia dan crop Upper-clothes (104×85, 7547 piksel) serta Pants (94×104, 7989 piksel), RGB tepat, alpha biner dan tidak tumpang tindih; inferensi 2.3621s. Frontend/unduhan belum diuji karena belum diimplementasikan pada tugas ini.
 
+## D-023 — Preview dan unduhan PNG individual berbasis manifest
+
+- **Tanggal:** 2026-11-17.
+- **Status:** Accepted; pengujian job dan smoke HTTP model asli PASS.
+- **Keputusan:** `GET /api/jobs/:id/objects/:objectId` menyajikan PNG inline; suffix `/download` menyajikan attachment. Keduanya memilih object UUID dari manifest job completed, tanpa parameter path client, static storage, inferensi ulang atau pixelation.
+- **Batas akses:** UUID v4 invalid → 400; job/objek/file hilang → 404; job queued/processing/failed → 409. Object ID dari job lain tidak berlaku. Nama file manifest hanya `extracted.png` atau `objects/atr-1.png` sampai `objects/atr-17.png`; lokasi canonical harus sama dengan lokasi yang diharapkan di root/job. Symlink/junction pengalihan dan path manifest tidak aman ditolak 500 dengan pesan tanpa path.
+- **HTTP:** Byte PNG asli dipertahankan; nama unduhan `<object_id>.png`, `Content-Type: image/png`, `Cache-Control: no-store, private`, `X-Content-Type-Options: nosniff`. Transfer memakai sendFile, tanpa range/Last-Modified; error transfer sebelum header terkirim dikembalikan sebagai JSON aman.
+- **Alasan/alternatif:** Memakai manifest dan pola sendFile Express yang sudah tersedia, tanpa dependensi baru. Nama UUID menghindari nama input/label menjadi header unduhan. Pemeriksaan lokasi canonical juga menolak pengalihan direktori Windows, bukan hanya traversal string.
+- **Konsekuensi:** Berlaku pada hasil persisten setelah restart, termasuk foreground job lama. Storage tetap diasumsikan privat dan dimiliki satu proses backend; pemeriksaan path bukan proteksi terhadap proses lokal berbahaya yang mengganti file saat transfer. UI galeri dan ZIP masih terpisah.
+- **Bukti tes:** `node --test backend/test/jobs.test.js` PASS 45/45; kedua endpoint, byte PNG foreground/crop, header, restart, ID invalid/lintas-job, status non-completed, hasil kosong, file hilang/non-file, path tidak aman dan junction keluar job. Smoke stdin dengan FastAPI/model asli port 8019 PASS: human 200×300, Upper-clothes 104×85, Pants 94×104; byte-identical RGBA/alpha 0–255 pada preview dan attachment; inferensi 2.05s.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -243,4 +254,4 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-023 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-024 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

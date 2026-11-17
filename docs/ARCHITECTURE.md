@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Fondasi M1/M2, ekstraksi foreground M3, orchestrator/polling serta PNG per kategori ATR M4 tersedia. UI galeri dan preview/unduhan job/ZIP tetap rancangan. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** Fondasi M1/M2, ekstraksi foreground M3, orchestrator/polling, PNG per kategori ATR serta endpoint preview/unduhan PNG individual M4 tersedia. UI galeri dan ZIP tetap rancangan. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -58,7 +58,9 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 **Objek kategori aktual (D-022):** Backend memberikan `objects_dir=<job>/objects` ke FastAPI. Setelah satu inferensi, tiap label ATR non-background dengan >50 piksel disimpan ke `objects/atr-<class_id>.png`: crop bbox + padding 2 piksel yang terpotong pada batas input, RGB asli, alpha hanya kelas tersebut. Manifest mempertahankan foreground `human` dan menambahkan UUID objek, class_id, kategori, bbox `[left,top,right,bottom]` eksklusif, dimensi dan pixel_count setelah file serta metadata lolos validasi. Polling menghapus referensi file internal. Satu label adalah satu mask semantik, bukan satu instance. Tidak ada migrasi otomatis job lama.
 
-**Alur lengkap yang dituju (UI galeri, unduhan dan retensi belum tersedia):**
+**Penyajian objek aktual (D-023):** Preview dan attachment PNG memilih UUID objek dari manifest job completed. Manager memvalidasi ID, nama PNG hasil yang diizinkan, lokasi canonical tanpa pengalihan symlink/junction, dan regular file. Router mengirim file tanpa transformasi dengan disposition inline/attachment, nama UUID, `Cache-Control: no-store, private` dan `X-Content-Type-Options: nosniff`. Tidak menerima path client atau membuka static storage; file hilang menghasilkan 404 aman.
+
+**Alur lengkap yang dituju (UI galeri, ZIP dan retensi belum tersedia):**
 
 1. `POST /api/jobs`: upload satu gambar valid; Express buat `job_id` acak, simpan input, metadata status `queued`.
 2. Worker mengambil pekerjaan; ubah ke `processing`.
@@ -78,8 +80,8 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | POST | `/api/jobs` | Tersedia: multipart image atau JSON upload_id, HTTP 202 + Location |
 | GET | `/api/jobs/:id` | Tersedia: status, progress tahap, timestamp, objek tanpa path, error aman |
 | GET | `/api/jobs/:id/objects` | Manifest objek hasil ekstraksi |
-| GET | `/api/jobs/:id/objects/:objectId` | Preview objek PNG |
-| GET | `/api/jobs/:id/objects/:objectId/download` | Attachment PNG |
+| GET | `/api/jobs/:id/objects/:objectId` | Tersedia: preview PNG, hanya objek manifest job completed |
+| GET | `/api/jobs/:id/objects/:objectId/download` | Tersedia: attachment PNG asli dengan nama UUID objek |
 | POST | `/api/jobs/:id/exports` | Pilih `all` / `object_ids[]`, mulai ZIP |
 | GET | `/api/jobs/:id/exports/:exportId/download` | Ambil ZIP yang sudah siap |
 | POST | `/api/jobs/:id/pixelate` | Pixelation pilihan objek / ukuran / warna |

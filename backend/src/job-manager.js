@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -243,6 +243,38 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         return JSON.parse(await readFile(join(root, id, 'manifest.json'), 'utf8'));
       } catch (error) {
         if (error.code === 'ENOENT') throw new JobError(404, 'JOB_NOT_FOUND', 'Job tidak ditemukan.');
+        throw error;
+      }
+    },
+    async getObject(jobId, objectId) {
+      const id = validateId(jobId, 'JOB');
+      const objectKey = validateId(objectId, 'OBJECT');
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+      }
+      const object = job.objects.find(object => object.id === objectKey);
+      if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
+      // Only generated PNG names are valid, even if a stored manifest is damaged.
+      if (typeof object.file !== 'string'
+          || !/^(extracted\.png|objects\/atr-([1-9]|1[0-7])\.png)$/.test(object.file)) {
+        throw new Error('Invalid object file');
+      }
+      try {
+        const directory = join(await realpath(root), id);
+        const expected = join(directory, object.file);
+        const filePath = await realpath(expected);
+        // Reject symlinks/junctions redirecting a job or its files elsewhere.
+        if (filePath !== expected) throw new Error('Invalid object file location');
+        if (!(await stat(filePath)).isFile()) {
+          throw new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.');
+        }
+        return { filePath, filename: `${objectKey}.png` };
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.');
+        }
         throw error;
       }
     },

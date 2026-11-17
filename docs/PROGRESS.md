@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M3 memiliki bukti verifikasi sebelumnya untuk lingkungan Windows lokal. M4 sedang berjalan: orchestrator/polling, foreground manusia, serta PNG per kategori ATR dengan crop dan alpha asli sudah terverifikasi. UI galeri dan preview/unduhan job/ZIP belum tersedia; M4 belum selesai.
+> **Status aktual:** M1–M3 memiliki bukti verifikasi sebelumnya untuk lingkungan Windows lokal. M4 sedang berjalan: orchestrator/polling, foreground manusia, PNG per kategori ATR, serta endpoint preview/unduhan PNG individual sudah terverifikasi. UI galeri dan ZIP belum tersedia; M4 belum selesai.
 
 ## Ringkasan
 
 - **Current milestone:** M4 — Job, object gallery, download individual/ZIP — In progress.
-- **Current task:** PNG/crop per kategori ATR dan integrasi manifest selesai; berikutnya penyajian preview/unduhan PNG individual berbasis manifest.
-- **Overall status:** Upload → queued → processing → completed → manifest foreground + file kategori nyata terverifikasi. Hasil kosong/tiny, metadata invalid, file hilang/rusak dan restart diuji. UI masih alur upload M2.
-- **Last verification:** 2026-11-17 — Python crop deterministik 7/7 PASS; API dengan checkpoint asli 7/7 PASS; `npm test --prefix backend` 69/69 PASS setelah perbaikan race read/rename manifest Windows; smoke HTTP kategori model asli PASS.
+- **Current task:** Endpoint preview/unduhan PNG individual berbasis manifest selesai; berikutnya integrasi UI job/galeri dan unduhan individual.
+- **Overall status:** Upload → queued → processing → completed → manifest foreground/kategori → preview/attachment PNG terverifikasi. ID/status/path invalid dan file hilang ditolak. UI masih alur upload M2.
+- **Last verification:** 2026-11-17 — `node --test backend/test/jobs.test.js` 45/45 PASS; smoke HTTP model asli untuk preview/attachment tiga objek PASS, inferensi 2.05s. Tidak mengulang suite Python/frontend.
 
 ## Milestone
 
@@ -16,7 +16,7 @@
 | M1 | Struktur repo, frontend, Express, FastAPI, health checks | Complete | Frontend dibuka di browser; kedua health checks dan Express → FastAPI lulus; kegagalan/pemulihan diuji |
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
-| M4 | Job, object gallery, download individual/ZIP | In progress | Orchestrator/polling dan PNG per kategori PASS; UI galeri serta preview/unduhan job/ZIP belum selesai |
+| M4 | Job, object gallery, download individual/ZIP | In progress | Orchestrator/polling, PNG kategori dan endpoint preview/unduhan individual PASS; UI galeri serta ZIP belum selesai |
 | M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
@@ -80,9 +80,13 @@
 - Suite awal menemukan race manifest Windows (EPERM saat rename dengan reader aktif). Diagnostik read handle membuktikan syscall gagal. Polling job aktif kini memakai snapshot terakhir yang berhasil disimpan; snapshot berubah hanya setelah rename. Tidak menambahkan retry/delay atau menyembunyikan kegagalan. Suite akhir 69/69 PASS.
 - Git awal tugas kategori bersih; perubahan tugas orchestrator sebelumnya sudah tidak pending. Perubahan sesi ini hanya tujuh file Python/backend dan lima dokumen (rincian di HANDOFF), tanpa staging/commit, dependensi baru atau unduhan model.
 
+- Preview/unduhan individual (2026-11-17, D-023): kedua endpoint memilih UUID objek hanya dari manifest job completed. PNG foreground/crop dikirim byte-identical, disposition inline/attachment dengan nama UUID, no-store/private dan nosniff. Tidak menambah inferensi, pixelation, dependensi atau static storage.
+- Job belum completed ditolak 409; UUID invalid 400; ID/file hilang 404. Path manifest dibatasi ke nama PNG hasil; lokasi canonical harus sesuai dan berupa regular file. Traversal, absolute path dan junction pengalihan ditolak dengan error aman.
+- Git awal tugas unduhan bersih, berbeda dari catatan uncommitted handoff sebelumnya. Perubahan hanya `backend/src/job-manager.js`, `backend/src/jobs.js`, `backend/test/jobs.test.js`, README dan empat dokumen docs. Tanpa staging/commit; LSP tidak tersedia, referensi ditelusuri melalui pencarian.
+
 ## In progress
 
-- M4: UI galeri dan penyajian preview/unduhan PNG individual/ZIP belum selesai. Orchestrator, polling dan PNG per kategori sudah PASS.
+- M4: UI job/galeri dan ZIP belum selesai. Orchestrator, polling, PNG kategori serta endpoint preview/unduhan individual sudah PASS.
 
 ## Blockers / risks
 
@@ -102,7 +106,7 @@
 
 ## Next task — satu tugas saja
 
-Implementasikan penyajian PNG job individual berdasarkan manifest: preview `GET /api/jobs/:id/objects/:objectId` dan attachment `GET /api/jobs/:id/objects/:objectId/download`. Hanya job completed dan object ID terdaftar yang boleh dilayani; jangan menerima path client atau membuka static storage. Verifikasi file foreground/crop serta penolakan ID invalid/tidak dikenal. UI dan ZIP tetap tugas terpisah.
+Integrasikan UI ekstraksi/galeri dengan API yang tersedia: tombol ekstraksi dari upload_id, polling status job, kartu preview objek dan unduhan PNG individual. Jaga lifecycle pilihan baru/hapus agar respons job lama tidak menimpa pilihan terbaru; tampilkan status gagal/kosong dengan jujur. Verifikasi browser desktop/mobile. ZIP dan M5 tetap tugas terpisah.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -214,6 +218,11 @@ Implementasikan penyajian PNG job individual berdasarkan manifest: preview `GET 
 | 2026-11-17 | `node .smoke-category.mjs` (cwd backend; script sementara) dengan FastAPI 8018 | PASS | queued → processing → completed; foreground + Upper-clothes 104×85/7547 piksel + Pants 94×104/7989 piksel; inferensi 2.3621s. RGB crop tepat, alpha biner/disjoint/subset foreground, manifest publik tanpa file/path |
 | 2026-11-17 | Cleanup tugas kategori | PASS | Script smoke, fixture dan storage temp dihapus; Express dan FastAPI 8018 uji dihentikan. Tidak menyentuh foto/storage pengguna |
 | 2026-11-17 | Browser/build frontend, kualitas foto nyata, preview/unduhan job/ZIP | NOT RUN | Frontend tidak berubah; endpoint preview/unduhan job dan UI galeri belum tersedia |
+| 2026-11-17 | Tugas unduhan: inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached --stat` | PASS | Working tree/index bersih; tidak ada perubahan awal yang ditimpa |
+| 2026-11-17 | `node --test backend/test/jobs.test.js` | PASS | 45/45: lifecycle/kategori sebelumnya serta preview/attachment foreground/crop, byte/header, restart, UUID invalid/lintas-job, non-completed, hasil kosong, file hilang/non-file, path manifest tidak aman dan junction keluar job |
+| 2026-11-17 | Smoke sementara `node --input-type=module` melalui stdin (cwd backend), FastAPI/model asli port 8019, Express dinamis | PASS | Job completed; preview + attachment human 200×300, Upper-clothes 104×85, Pants 94×104. Byte sama persis dengan file manifest, RGBA, alpha min/max 0/255; header sesuai; inferensi 2.05s |
+| 2026-11-17 | Cleanup smoke unduhan | PASS | Express ditutup, storage temp dihapus, FastAPI 8019 dihentikan. Script lewat stdin tidak membuat file; tidak menyentuh foto/storage pengguna |
+| 2026-11-17 | Suite backend lain/Python, browser/build frontend, kualitas foto nyata dan ZIP | NOT RUN | Verifikasi dibatasi jalur job/endpoint yang berubah; frontend, AI dan ZIP tidak diubah pada tugas ini |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

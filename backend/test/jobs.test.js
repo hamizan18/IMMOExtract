@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -80,6 +80,19 @@ async function writeCategoryOutput(args) {
   return result;
 }
 
+async function assertObjectError(base, jobId, objectId, status, code) {
+  for (const suffix of ['', '/download']) {
+    const response = await fetch(`${base}/api/jobs/${jobId}/objects/${objectId}${suffix}`);
+    assert.equal(response.status, status);
+    assert.equal(response.headers.get('cache-control'), 'no-store, private');
+    assert.equal(response.headers.get('content-disposition'), null);
+    const body = await response.json();
+    assert.equal(body.error.code, code);
+    assert.ok(!JSON.stringify(body).includes('immo-jobs-'));
+    assert.ok(!JSON.stringify(body).includes('private'));
+  }
+}
+
 test('category PNG pixels are inventoried with the foreground and polling hides their paths', async t => {
   let requestedDirectory;
   const { base, options, serve } = await setup(t, { async extractPath(args) {
@@ -120,6 +133,22 @@ test('category PNG pixels are inventoried with the foreground and polling hides 
   assert.ok(!JSON.stringify(completed).includes(options.jobDir));
   assert.equal(completed.objects[1].private_path, undefined);
   assert.deepEqual(await poll(await serve(), queued.job_id, 'completed'), completed);
+  const restarted = await serve();
+  for (const stored of manifest.objects) {
+    const expected = await readFile(join(directory, stored.file));
+    for (const [suffix, disposition] of [['', 'inline'], ['/download', 'attachment']]) {
+      const response = await fetch(`${restarted}/api/jobs/${queued.job_id.toUpperCase()}/objects/${stored.id.toUpperCase()}${suffix}?path=manifest.json`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-type'), 'image/png');
+      assert.equal(response.headers.get('content-disposition'), `${disposition}; filename="${stored.id}.png"`);
+      assert.equal(response.headers.get('cache-control'), 'no-store, private');
+      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      const png = Buffer.from(await response.arrayBuffer());
+      assert.deepEqual(png, expected);
+      const metadata = await sharp(png).metadata();
+      assert.deepEqual([metadata.width, metadata.height, metadata.channels], [stored.width, stored.height, 4]);
+    }
+  }
 });
 
 test('invalid category metadata and artifacts fail without publishing partial objects', async t => {
@@ -238,6 +267,8 @@ test('jobs serialize inference, preserve results and expose no private file path
   assert.equal(queued.progress, 0);
   assert.equal(calls, 1);
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
+  await assertObjectError(base, first.job_id, randomUUID(), 409, 'JOB_NOT_COMPLETED');
+  await assertObjectError(base, second.job_id, randomUUID(), 409, 'JOB_NOT_COMPLETED');
   release();
   const completed = await poll(base, first.job_id, 'completed');
   const other = await poll(base, second.job_id, 'completed');
@@ -269,6 +300,8 @@ test('failed inference does not stall the queue; empty output creates no invente
   assert.deepEqual(failed.objects, []);
   const completed = await poll(base, second.job_id, 'completed');
   assert.deepEqual(completed.objects, []);
+  await assertObjectError(base, first.job_id, randomUUID(), 409, 'JOB_NOT_COMPLETED');
+  await assertObjectError(base, second.job_id, randomUUID(), 404, 'OBJECT_NOT_FOUND');
 });
 
 test('missing AI artifacts fail instead of publishing nonexistent gallery files', async t => {
@@ -315,4 +348,65 @@ test('job API rejects malformed IDs, mixed inputs, malformed JSON and corrupt up
   const form = new FormData();
   form.append('image', new Blob(['not a PNG'], { type: 'image/png' }), 'fake.png');
   assert.equal((await fetch(`${base}/api/jobs`, { method: 'POST', body: form })).status, 415);
+});
+
+test('object routes reject invalid, unknown and cross-job IDs without serving private files', async t => {
+  const { base } = await setup(t, { extractPath: writeCategoryOutput });
+  const first = await submit(base);
+  const completed = await poll(base, first.job_id, 'completed');
+  const second = await submit(base, first.upload_id);
+  const other = await poll(base, second.job_id, 'completed');
+  const objectId = completed.objects[0].id;
+  await assertObjectError(base, 'invalid', objectId, 400, 'INVALID_JOB_ID');
+  await assertObjectError(base, randomUUID(), objectId, 404, 'JOB_NOT_FOUND');
+  for (const invalid of ['invalid', 'manifest.json', 'extracted.png', 'mask.png', '..%2Fmanifest.json', '..%5Cmanifest.json']) {
+    await assertObjectError(base, first.job_id, invalid, 400, 'INVALID_OBJECT_ID');
+  }
+  await assertObjectError(base, first.job_id, randomUUID(), 404, 'OBJECT_NOT_FOUND');
+  await assertObjectError(base, first.job_id, other.objects[0].id, 404, 'OBJECT_NOT_FOUND');
+  for (const path of [`/storage/jobs/${first.job_id}/extracted.png`, `/api/jobs/${first.job_id}/objects/atr-4.png`]) {
+    const response = await fetch(`${base}${path}`);
+    assert.notEqual(response.status, 200);
+    await response.arrayBuffer();
+  }
+});
+
+test('object routes reject unsafe manifest paths and report missing files safely', async t => {
+  const { base, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, queued.job_id);
+  const manifestPath = join(directory, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath));
+  const object = manifest.objects[1];
+  const originalFile = object.file;
+  for (const file of [
+    '../private.png', 'objects/../../private.png', 'objects\\atr-4.png',
+    join(directory, 'extracted.png'), 'C:\\private.png', '//server/private.png',
+    'manifest.json', 'mask.png', 'objects/atr-18.png', null,
+  ]) {
+    object.file = file;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await assertObjectError(base, queued.job_id, object.id, 500, 'JOB_FAILED');
+  }
+  object.file = originalFile;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  for (const stored of manifest.objects) {
+    await rm(join(directory, stored.file));
+    await assertObjectError(base, queued.job_id, stored.id, 404, 'OBJECT_FILE_NOT_FOUND');
+  }
+  await mkdir(join(directory, originalFile));
+  await assertObjectError(base, queued.job_id, object.id, 404, 'OBJECT_FILE_NOT_FOUND');
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
+});
+
+test('object routes refuse a category directory redirected outside its job', async t => {
+  const { base, root, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const completed = await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, queued.job_id, 'objects');
+  const outside = join(root, 'private-objects');
+  await rename(directory, outside);
+  await symlink(outside, directory, 'junction');
+  await assertObjectError(base, queued.job_id, completed.objects[1].id, 500, 'JOB_FAILED');
 });

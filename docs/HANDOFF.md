@@ -4,75 +4,66 @@
 
 ## Last agent
 
-OMP — PNG/crop per kategori ATR, integrasi manifest job, dan perbaikan race polling manifest Windows, 2026-11-17.
+OMP — endpoint preview dan unduhan PNG individual berbasis manifest, 2026-11-17.
 
 ## Current milestone
 
 **M4 — Job, object gallery, download individual/ZIP — In progress.**
-Orchestrator/polling, foreground manusia dan file PNG kategori terverifikasi. UI galeri serta preview/unduhan PNG job dan ZIP belum tersedia; jangan menandai M4 selesai atau mulai M5.
+Orchestrator/polling, foreground manusia, PNG kategori dan endpoint preview/unduhan individual terverifikasi. UI galeri serta ZIP belum tersedia; jangan menandai M4 selesai atau mulai M5.
 
 ## Last completed task
 
-- `save_category_objects()` memakai class map yang sudah dihasilkan SCHP; tidak melakukan inferensi kedua. Satu PNG per label ATR non-background dengan >50 piksel, mempertahankan ambang kategori lama.
-- Crop bbox dengan padding 2 piksel, clipped ke dimensi input. RGB asli dipertahankan; alpha 255 hanya pada kelas tersebut, 0 pada background/kategori tetangga. Satu kelas disconnected tetap satu objek semantik; sepatu kiri/kanan tetap label berbeda.
-- JSON `/extract-path` dan multipart `/extract` menerima `objects_dir`, termasuk ekspor kategori tanpa path foreground. Respons `objects` berisi hanya file yang selesai ditulis; opsi tidak diberikan/hasil tidak memenuhi ambang menghasilkan array kosong.
-- AiClient meneruskan `objectsDir`; job manager menetapkan `<job>/objects`, memvalidasi label/class ID, inventaris lengkap, bbox, dimensi, pixel_count, path relatif tetap dan PNG RGBA yang benar-benar dapat didekode.
-- Manifest mempertahankan foreground `human`, menambahkan UUID objek kategori beserta bbox/class_id/pixel_count. Polling tidak membocorkan file/path atau field arbitrer dari AI.
-- Race Windows ditemukan pada suite: rename manifest gagal EPERM saat reader terbuka. Diagnostik syscall membuktikannya. Job aktif kini dipolling dari snapshot terakhir yang berhasil disimpan; terminal tetap dari disk. Tidak ada retry/delay atau pemalsuan sukses.
-- D-022 mencatat kontrak dan alasan. Pipeline model, frontend, dependensi dan checkpoint tidak diganti.
+- Preview `GET /api/jobs/:id/objects/:objectId` dan attachment `GET /api/jobs/:id/objects/:objectId/download` tersedia untuk UUID objek yang terdaftar pada manifest job completed.
+- Job non-completed → 409; UUID invalid → 400; job/objek/file hilang → 404. Object ID lintas-job ditolak.
+- Nama file manifest dibatasi ke PNG hasil foreground/kategori; lokasi canonical diperiksa agar symlink/junction tidak mengalihkan file keluar lokasi yang diharapkan. File harus regular file; path client tidak digunakan dan static storage tidak dibuka.
+- Kedua endpoint mengirim byte PNG asli tanpa transformasi, nama `<object_id>.png`, disposition inline/attachment, no-store/private dan nosniff. Error aman tidak membocorkan path.
+- Pengujian kontrak akses/file ditambahkan ke suite job. D-023 mencatat keputusan; frontend, pipeline AI, dependensi dan checkpoint tidak berubah.
 
 ## Current task
 
-Tugas PNG kategori selesai dan diverifikasi. Berikutnya hanya penyajian PNG job individual berbasis manifest; UI/ZIP tetap terpisah.
+Tugas endpoint PNG individual selesai dan diverifikasi. Berikutnya hanya UI ekstraksi/galeri dengan preview serta unduhan individual; ZIP tetap terpisah.
 
 ## Working components
 
-- Input/preview/upload M2 dan ekstraksi full-frame/base64 M3 tetap lolos tes relevan.
-- Job queued → processing → completed/failed, antrean serial, restart, manifest privat dan polling.
-- Model asli menghasilkan foreground + Upper-clothes dan Pants pada smoke sintetis; crop dan RGB/alpha diverifikasi terhadap input.
-- Service uji FastAPI port 8018 sudah dihentikan, Express/storage/fixture temp dan script smoke dibersihkan. Jalankan ulang layanan sesuai README.
+- Input/preview/upload M2 dan pipeline M3 tidak diubah; hasil verifikasi sebelumnya tercatat di PROGRESS.
+- Job queued → processing → completed/failed, antrean serial, restart, manifest privat dan polling tetap PASS pada suite job.
+- Model asli menghasilkan foreground + Upper-clothes dan Pants pada smoke sintetis; preview dan attachment ketiganya sama persis dengan PNG disk, RGBA dan alpha 0/255.
+- Service uji FastAPI port 8019 dihentikan; Express serta storage temp dibersihkan. Smoke lewat stdin tidak membuat script permanen. Jalankan ulang layanan sesuai README.
 
 ## Modified files
 
-- `ai-service/extractor.py` — helper crop/export deterministik dan konstanta ambang bersama.
-- `ai-service/main.py` — kontrak objects_dir/objects pada kedua endpoint.
-- `ai-service/test_category_objects.py` — baru, tujuh tes tanpa checkpoint.
-- `ai-service/test_api.py` — tujuh tes API model asli, termasuk kategori dan perilaku lama.
-- `backend/src/ai-client.js` — pemetaan objectsDir.
-- `backend/src/job-manager.js` — validasi artefak kategori dan snapshot polling Windows.
-- `backend/test/jobs.test.js` — fixture kontrak baru, inventaris kategori nyata dan 34 kasus invalid.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` — kontrak aktual, batasan dan D-022.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — bukti dan tugas berikutnya.
+- `backend/src/job-manager.js` — resolusi objek manifest, validasi status/ID/nama file/lokasi canonical dan regular file.
+- `backend/src/jobs.js` — endpoint preview/attachment dengan header dan penanganan error aman.
+- `backend/test/jobs.test.js` — verifikasi HTTP kedua endpoint, byte PNG, akses dan storage invalid.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` — kontrak aktual dan D-023.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — bukti dan satu tugas berikutnya.
 
 ## Uncommitted changes / Git status
 
 Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat`, `git diff` bersih. Catatan uncommitted tugas sebelumnya sudah kedaluwarsa; tidak menimpa perubahan awal.
 
-Sebelas file existing dan satu file baru dalam Modified files diubah pada sesi ini dan belum di-commit. Script sementara `backend/.smoke-category.mjs` sudah dihapus. Tidak menjalankan staging/commit otomatis, instalasi atau download model.
+Delapan file existing dalam Modified files diubah pada sesi ini dan belum di-commit. Tidak ada file baru atau script sementara tersisa. Tidak menjalankan staging/commit otomatis, instalasi atau download model.
 
 ## Current errors / limitations
 
-- Kegagalan EPERM suite awal sudah diperbaiki; suite akhir 69/69 PASS. Satu proses backend tetap harus menjadi pemilik storage.
-- StarletteDeprecationWarning muncul pada TestClient/httpx; API 7/7 PASS. Tidak mengubah dependensi untuk warning ini.
-- UI job/galeri, preview/unduhan job/ZIP, batas antrean dan retensi belum tersedia. Ekstraksi sinkron M3 tetap di luar antrean job.
+- Tidak ada kegagalan tes pada tugas ini; suite job 45/45 PASS. Suite backend penuh 69/69 dan API Python 7/7 adalah bukti sesi sebelumnya, bukan dijalankan ulang.
+- UI job/galeri, ZIP, batas antrean dan retensi belum tersedia. Ekstraksi sinkron M3 tetap di luar antrean job.
 - Kategori ≤50 piksel tidak punya file kategori tetapi masih ada pada foreground. Semantic mask bukan pemisahan instance; kualitas foto nyata/occlusion belum diuji pada sesi ini.
-- Restart backend dan FastAPI bersama setelah pembaruan: job baru mensyaratkan kontrak objects AI. Job lama tidak dimigrasikan dan tidak dibuatkan kategori palsu.
+- Satu proses backend tetap menjadi pemilik storage privat. Validasi canonical menolak pengalihan path yang sudah ada, tetapi bukan proteksi terhadap proses lokal berbahaya yang mengganti file saat transfer.
+- Job lama tidak dimigrasikan dan tidak dibuatkan kategori palsu; foreground yang terdaftar tetap dapat diunduh.
 - Startup `server.js` masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); smoke memakai 30000 ms. Lisensi redistribusi checkpoint ATR belum terkonfirmasi.
 - LSP tidak dikonfigurasi; referensi dicari setelah tool menyatakan server tidak tersedia.
 
 ## Tests performed
 
-- **PASS** `ai-service/.venv-test/Scripts/python.exe -m unittest discover -s ai-service -p test_category_objects.py`: 7/7, tanpa model. RGB/alpha asli, padding/clipping, sepatu kiri/kanan, kelas disconnected, 50/51, kosong/tiny, storage failure.
-- **PASS** `ai-service/.venv-test/Scripts/python.exe ai-service/test_api.py`: 7/7 dalam 16.576s dengan checkpoint asli. Kedua endpoint, ekspor kategori saja, opsi tidak diberikan, crop nyata dan full-frame/base64 lama.
-- **FAIL lalu diperbaiki** `npm test --prefix backend` awal: EPERM pada rename manifest. Diagnostik Node dengan read handle terbuka membuktikan operasi penyebab; bukan kegagalan model.
-- **PASS** `npm test --prefix backend` sesudah perbaikan snapshot: 69/69, termasuk seluruh tes upload/ekstraksi/job dan kategori.
-- **PASS** `node .smoke-category.mjs` dari backend (script sementara): FastAPI nyata 8018 + Express port dinamis, queued → processing → completed, inferensi 2.3621s. Manifest tiga objek: human, Upper-clothes (104×85; 7547 piksel), Pants (94×104; 7989 piksel). RGB tepat, alpha biner/disjoint/subset foreground, respons publik tanpa file/path.
-- **PASS** cleanup server dan storage/fixture/script sementara. Tidak mengakses foto pribadi.
-- **NOT RUN** browser/build frontend, kualitas foto nyata, preview/unduhan job/ZIP. Frontend tidak berubah; fitur tersebut belum diimplementasikan pada tugas ini.
+- **PASS** `node --test backend/test/jobs.test.js`: 45/45. Lifecycle/kategori sebelumnya, preview/attachment foreground/crop, byte/header, restart, ID invalid/lintas-job, queued/processing/failed, hasil kosong, file hilang/non-file, path manifest tidak aman serta junction keluar job.
+- **PASS** smoke `node --input-type=module` melalui stdin dari backend: FastAPI/model asli port 8019 + Express dinamis, job completed, inferensi 2.05s. Preview dan attachment human 200×300, Upper-clothes 104×85, Pants 94×104 byte-identical dengan file manifest, RGBA dan alpha min/max 0/255.
+- **PASS** cleanup Express, storage temp dan FastAPI 8019. Tidak mengakses foto pribadi atau meninggalkan script smoke.
+- **NOT RUN** suite backend lain/Python, browser/build frontend, kualitas foto nyata dan ZIP. Pengujian dibatasi jalur job/endpoint yang berubah; frontend dan AI tidak diubah.
 
 ## Next action (only one)
 
-**Implementasikan penyajian PNG job individual berdasarkan manifest:** preview `GET /api/jobs/:id/objects/:objectId` dan attachment `GET /api/jobs/:id/objects/:objectId/download`. Batasi ke job completed dan object ID yang terdaftar, tanpa path dari client/static storage. Verifikasi foreground dan crop kategori serta penolakan ID invalid/tidak dikenal dan file hilang. Jangan mulai UI, ZIP atau M5 pada tugas ini.
+**Integrasikan UI ekstraksi/galeri dengan API yang tersedia:** tombol ekstraksi menggunakan upload_id, polling status, kartu preview objek dan unduhan PNG individual. Jaga lifecycle pilihan baru/hapus agar respons job lama tidak menimpa pilihan terbaru; tampilkan gagal/kosong dengan jujur. Verifikasi browser desktop/mobile. Jangan mulai ZIP atau M5 pada tugas ini.
 
 ## Handoff rules
 

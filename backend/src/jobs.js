@@ -50,12 +50,44 @@ export function createJobRouter(options) {
   router.get('/:id', async (request, response) => {
     try {
       const job = await manager.get(request.params.id);
-      // Filesystem references stay internal; download routes will resolve object IDs.
+      // Filesystem references stay internal; asset routes resolve manifest object IDs.
       const { mask_file, objects, ...publicJob } = job;
       response.json({ ...publicJob, objects: objects.map(({ file, ...object }) => object) });
     } catch (error) {
       fail(error, response);
     }
   });
+
+  function serveObject(disposition) {
+    return async (request, response, next) => {
+      try {
+        const { filePath, filename } = await manager.getObject(request.params.id, request.params.objectId);
+        response.sendFile(filePath, {
+          cacheControl: false,
+          lastModified: false,
+          acceptRanges: false,
+          headers: {
+            'Content-Type': 'image/png',
+            'Content-Disposition': `${disposition}; filename="${filename}"`,
+            'X-Content-Type-Options': 'nosniff',
+          },
+        }, error => {
+          if (!error) return;
+          if (response.headersSent) return next(error);
+          response.removeHeader('Content-Disposition');
+          response.removeHeader('Content-Type');
+          response.removeHeader('Content-Length');
+          fail(error.code === 'ENOENT' || error.status === 404
+            ? new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.')
+            : error, response);
+        });
+      } catch (error) {
+        fail(error, response);
+      }
+    };
+  }
+
+  router.get('/:id/objects/:objectId', serveObject('inline'));
+  router.get('/:id/objects/:objectId/download', serveObject('attachment'));
   return router;
 }
