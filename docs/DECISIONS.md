@@ -304,4 +304,32 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-028 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+## D-028 — API dan persistensi snapshot Classic Pixelation per objek
+
+- **Tanggal:** 2026-11-18.
+- **Status:** Accepted; suite test Express terintegrasi lulus 89/89, endpoint pixelate & serving teruji.
+- **Keputusan:**
+  - `POST /api/jobs/:id/pixelate` menerima JSON ketat `{"object_id": "<uuid>", "size": 16|32|64|128}` hanya untuk job `completed`. Memvalidasi `object_id` terdaftar pada manifest job, memanggil `pixelatePng`, dan menyimpan hasilnya ke direktori privat `<jobDirectory>/pixelations/<pixelationId>/`.
+  - Manifest publikasi ditulis atomik (`manifest.tmp` → `rename` ke `manifest.json`), memuat `pixelation_id`, `job_id`, `object_id`, `status: "completed"`, `size`, `width`, `height`, dan `created_at`.
+  - Respons HTTP 201 Created dengan header `Location` serta JSON metadata yang menyertakan `preview_url` (`/api/jobs/:id/pixelations/:pixelationId`) dan `download_url` (`/api/jobs/:id/pixelations/:pixelationId/download`).
+  - Serving file menggunakan `serveFile` dengan validasi canonical path, verifikasi regular file, larangan symlink/junction, serta header keamanan (`no-store, private`, `nosniff`, `image/png`).
+  - Endpoint tidak mengubah atau menimpa manifest job utama, file original PNG, atau ekspor ZIP yang sudah ada.
+- **Alasan:**
+  - Menjaga independensi hasil turunan dari terminal job agar polling job dan unduhan original PNG/ZIP tidak mengalami race condition atau mutasi data.
+  - Snapshot mandiri tetap dapat disajikan/diunduh secara persisten bahkan setelah backend di-restart.
+- **Alternatif:**
+  - Menyimpan array hasil pixelation di dalam `manifest.json` job utama: ditolak karena memerlukan read-modify-write pada manifest yang berisiko race condition di Windows.
+  - Streaming pixelation on-the-fly tanpa penyimpanan disk: ditolak karena menyulitkan preview/unduhan ulang yang efisien serta tidak sesuai dengan pola arsitektur snapshot yang dipakai pada M4 (ZIP exports).
+- **Konsekuensi:**
+  - Setiap request pixelate membuat folder dan file baru di `storage/jobs/<jobId>/pixelations/`; pembersihan otomatis mengikuti kebijakan retensi job (belum ada retensi otomatis terpisah).
+  - UI Frontend Studio untuk berinteraksi dengan API ini belum dibuat (tugas berikutnya).
+- **Bukti tes:**
+  - `node --test backend/test/jobs.test.js` (23/23 subtest suite PASS):
+    1. Publikasi snapshot independen, keutuhan file original & ZIP setelah restart, kesesuaian piksel sampling RGBA exact.
+    2. Validasi input ketat (shape request, ukuran 16/32/64/128, UUID format, isolasi cross-job).
+    3. Penolakan job non-completed (queued, processing, failed) dan objek kosong (409/404).
+    4. Proteksi kegagalan sumber (missing PNG, corrupt PNG) dan deteksi direktori storage yang dialihkan lewat symlink/junction.
+    5. Integritas manifest hasil dan verifikasi canonical path regular file.
+  - `npm test --prefix backend`: seluruh 89/89 tests PASS.
+
+**Format entri baru:** `D-029 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

@@ -54,6 +54,21 @@ export function createJobRouter(options) {
       fail(error, response);
     }
   });
+  router.post('/:id/pixelate', express.json({ limit: '2kb' }), async (request, response) => {
+    if (!request.is('application/json')) {
+      response.status(415).json({ error: { code: 'PIXELATION_INPUT_REQUIRED', message: 'Kirim JSON object_id dan size.' } });
+      return;
+    }
+    try {
+      const result = await manager.createPixelation(request.params.id, request.body);
+      const previewUrl = `/api/jobs/${result.job_id}/pixelations/${result.pixelation_id}`;
+      response.location(previewUrl).status(201).json({
+        ...result, preview_url: previewUrl, download_url: `${previewUrl}/download`,
+      });
+    } catch (error) {
+      fail(error, response);
+    }
+  });
   router.use((error, _request, response, _next) => {
     const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : 500;
     response.status(status).json({ error: { code: 'INVALID_JOB_REQUEST', message: 'Permintaan job tidak dapat diproses.' } });
@@ -106,5 +121,8 @@ export function createJobRouter(options) {
   router.get('/:id/exports/:exportId/download', serveFile(
     params => manager.getExport(params.id, params.exportId), 'application/zip', 'attachment', 'EXPORT_NOT_FOUND',
   ));
+  const pixelationFile = params => manager.getPixelation(params.id, params.pixelationId);
+  router.get('/:id/pixelations/:pixelationId', serveFile(pixelationFile, 'image/png', 'inline', 'PIXELATION_NOT_FOUND'));
+  router.get('/:id/pixelations/:pixelationId/download', serveFile(pixelationFile, 'image/png', 'attachment', 'PIXELATION_NOT_FOUND'));
   return router;
 }

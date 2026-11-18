@@ -98,16 +98,21 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Backend memakai Archiver 8.0.0. Setelah mengambil perubahan dependensi, jalankan `npm install --no-audit --no-fund` dari direktori `backend`. Pengujian ZIP `node --test backend/test/jobs.test.js` memakai pembaca stdlib Python (`py -3` di Windows, `python3` di platform lain) untuk memeriksa isi/CRC.
 - Cleanup retensi belum tersedia; setiap POST sukses membuat ekspor baru. Unduhan ditangani browser native; kegagalan transfer tidak memiliki dialog khusus di aplikasi.
 
-## Classic Pixelation — helper internal M5
+## Classic Pixelation — helper dan API M5
 
-- `backend/src/pixelation.js` menyediakan `await pixelatePng(inputBuffer, size)` → buffer PNG RGBA baru. Belum terhubung ke HTTP atau UI; bukan AI Stylization dan tidak mengubah PNG asli.
+- `backend/src/pixelation.js` menyediakan `await pixelatePng(inputBuffer, size)` → buffer PNG RGBA baru. Bukan AI Stylization dan tidak mengubah PNG asli.
 - Input adalah PNG objek **RGBA 8-bit statis yang sudah divalidasi** dari pipeline ekstraksi. Helper memeriksa tipe buffer, metadata, batas sisi 8192/24 megapiksel dan decode; bukan pengganti validator upload atau resolusi manifest/path.
 - `size` berupa angka **16/32/64/128**, berarti sisi output terpanjang tepat sebesar pilihan, termasuk memperbesar input yang lebih kecil. Sisi lain dibulatkan ke bilangan bulat terdekat, minimal 1. Contoh 200×300 pada ukuran 32 → 21×32; tanpa crop, padding atau pengembalian ke resolusi asli.
 - Sampling nearest-neighbour memakai pusat piksel output: `floor((x + 0.5) × inputWidth / outputWidth)` dan rumus setara untuk y. Tepat pada batas dua piksel, pilih indeks lebih besar. RGBA disalin utuh tanpa blending, quantization atau flatten; detail tipis dapat hilang saat diperkecil.
 - Sharp dipakai untuk decode/encode. Sampling RGBA langsung menghindari premultiplication alpha saat resize Sharp yang dapat mengubah RGB pada alpha rendah/nol. Bukan janji hasil byte-identical dengan algoritma rounding library lain.
-- Tes terarah: `node --test backend/test/pixelation.test.js`. Endpoint/persistensi turunan adalah tugas berikutnya; unduhan PNG/ZIP asli tetap independen.
+- Endpoint API:
+  - `POST /api/jobs/<job_id>/pixelate`: menerima JSON `{"object_id":"<uuid>","size":16|32|64|128}` hanya untuk job `completed`. Menghasilkan snapshot privat baru di `<job>/pixelations/<pixelation_id>/` dengan manifest terpisah, mengembalikan HTTP **201** + header `Location`. Respons memuat `pixelation_id`, dimensi, `preview_url`, dan `download_url`.
+  - `GET /api/jobs/<job_id>/pixelations/<pixelation_id>`: menyajikan inline PNG hasil pixelation dengan header `no-store, private` dan `nosniff`.
+  - `GET /api/jobs/<job_id>/pixelations/<pixelation_id>/download`: menyajikan attachment PNG hasil pixelation.
+- Pengujian: `node --test backend/test/pixelation.test.js` (5/5 PASS) dan `node --test backend/test/jobs.test.js` (23/23 subtest PASS).
+- UI Studio di frontend dan palet warna adalah tugas berikutnya; unduhan PNG/ZIP asli tetap independen.
 
-## Menjalankan Aplikasi (M1–M4)
+## Menjalankan Aplikasi (M1–M5 in-progress)
 
 Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3** dengan PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`).
 

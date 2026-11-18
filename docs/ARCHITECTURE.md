@@ -93,7 +93,9 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | GET | `/api/jobs/:id/objects/:objectId/download` | Tersedia: attachment PNG asli dengan nama UUID objek |
 | POST | `/api/jobs/:id/exports` | Tersedia: JSON all:true atau object_ids, HTTP 201 + Location setelah ZIP selesai |
 | GET | `/api/jobs/:id/exports/:exportId/download` | Tersedia: attachment ZIP privat berbasis manifest ekspor/job |
-| POST | `/api/jobs/:id/pixelate` | Pixelation pilihan objek / ukuran / warna |
+| POST | `/api/jobs/:id/pixelate` | Tersedia: JSON object_id & size (16/32/64/128), HTTP 201 + Location |
+| GET | `/api/jobs/:id/pixelations/:pixelationId` | Tersedia: inline PNG hasil pixelation deterministik |
+| GET | `/api/jobs/:id/pixelations/:pixelationId/download` | Tersedia: attachment PNG hasil pixelation |
 | POST | `/api/jobs/:id/stylize` | Fase lanjut: generative image-to-image |
 | GET | `/api/health` | Health Express (tersedia M1) |
 | GET | `/api/health/ai` | Express memanggil health FastAPI (tersedia M1) |

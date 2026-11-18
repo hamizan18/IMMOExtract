@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { writeZip } from './zip-export.js';
+import { pixelatePng } from './pixelation.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const atrLabels = [
@@ -275,6 +276,78 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       } catch (error) {
         if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
           throw new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.');
+        }
+        throw error;
+      }
+    },
+    async createPixelation(jobId, input) {
+      const id = validateId(jobId, 'JOB');
+      if (!input || typeof input !== 'object' || Array.isArray(input)
+          || Object.keys(input).length !== 2 || !Object.hasOwn(input, 'object_id')
+          || ![16, 32, 64, 128].includes(input.size)) {
+        throw new JobError(400, 'INVALID_PIXELATION_INPUT', 'Kirim hanya object_id dan size angka 16, 32, 64, atau 128.');
+      }
+      const objectId = validateId(input.object_id, 'OBJECT');
+      const { filePath } = await this.getObject(id, objectId);
+      const png = await pixelatePng(await readFile(filePath), input.size);
+      const { width, height } = await sharp(png).metadata();
+      const jobDirectory = join(await realpath(root), id);
+      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+      const resultsDirectory = join(jobDirectory, 'pixelations');
+      await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
+      if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid pixelation directory');
+      const pixelationId = randomUUID();
+      const directory = join(resultsDirectory, pixelationId);
+      await mkdir(directory, { mode: 0o700 });
+      try {
+        await writeFile(join(directory, 'image.tmp'), png, { flag: 'wx', mode: 0o600 });
+        await rename(join(directory, 'image.tmp'), join(directory, 'image.png'));
+        const manifest = {
+          pixelation_id: pixelationId, job_id: id, object_id: objectId, status: 'completed',
+          size: input.size, width, height, created_at: new Date().toISOString(),
+        };
+        await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
+          flag: 'wx', mode: 0o600,
+        });
+        // Publish last; the terminal job and its original PNG/ZIP files stay untouched.
+        await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+        return manifest;
+      } catch (error) {
+        await rm(directory, { recursive: true, force: true });
+        throw error;
+      }
+    },
+    async getPixelation(jobId, pixelationId) {
+      const id = validateId(jobId, 'JOB');
+      const key = validateId(pixelationId, 'PIXELATION');
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+      }
+      try {
+        const directory = join(await realpath(root), id, 'pixelations', key);
+        const manifestPath = join(directory, 'manifest.json');
+        if (await realpath(manifestPath) !== manifestPath) throw new Error('Invalid pixelation manifest location');
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+        if (manifest.pixelation_id !== key || manifest.job_id !== id || manifest.status !== 'completed'
+            || !job.objects.some(object => object.id === manifest.object_id)
+            || ![16, 32, 64, 128].includes(manifest.size)
+            || !Number.isInteger(manifest.width) || manifest.width < 1
+            || !Number.isInteger(manifest.height) || manifest.height < 1
+            || Math.max(manifest.width, manifest.height) !== manifest.size) {
+          throw new Error('Invalid pixelation manifest');
+        }
+        const expected = join(directory, 'image.png');
+        const filePath = await realpath(expected);
+        if (filePath !== expected) throw new Error('Invalid pixelation file location');
+        if (!(await stat(filePath)).isFile()) {
+          throw new JobError(404, 'PIXELATION_NOT_FOUND', 'File pixelation tidak ditemukan.');
+        }
+        return { filePath, filename: `${key}.png` };
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'PIXELATION_NOT_FOUND', 'File pixelation tidak ditemukan.');
         }
         throw error;
       }

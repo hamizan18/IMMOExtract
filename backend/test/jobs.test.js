@@ -601,3 +601,208 @@ test('ZIP streaming treats missing entry warnings and output failures as errors'
   await sharp({ create: { width: 2, height: 2, channels: 4, background: 'transparent' } }).png().toFile(source);
   await assert.rejects(writeZip([{ filePath: source, filename: 'object.png' }], join(root, 'missing-directory', 'archive.zip')));
 });
+
+async function pixelationRequest(base, jobId, body) {
+  return fetch(`${base}/api/jobs/${jobId}/pixelate`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+}
+
+async function assertPixelationFileError(base, jobId, resultId, status, code) {
+  for (const suffix of ['', '/download']) {
+    const response = await fetch(`${base}/api/jobs/${jobId}/pixelations/${resultId}${suffix}`);
+    assert.equal(response.headers.get('content-disposition'), null);
+    await assertExportError(response, status, code);
+  }
+}
+
+test('pixelation publishes independent PNG snapshots, preserving originals and ZIP across restart', async t => {
+  const { base, root, options, serve } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, job.job_id);
+  const manifestBytes = await readFile(join(directory, 'manifest.json'));
+  const manifest = JSON.parse(manifestBytes);
+  const originals = await Promise.all(manifest.objects.map(object => readFile(join(directory, object.file))));
+  const zipResponse = await exportRequest(base, job.job_id, { all: true });
+  assert.equal(zipResponse.status, 201);
+  const zip = await zipResponse.json();
+  const zipBytes = Buffer.from(await (await fetch(`${base}${zip.download_url}`)).arrayBuffer());
+  const sizes = [16, 32, 64, 128];
+  const responses = await Promise.all(sizes.map((size, index) => pixelationRequest(base, job.job_id.toUpperCase(), {
+    object_id: job.objects[index % 2].id.toUpperCase(), size,
+  })));
+  const results = [];
+  for (let index = 0; index < responses.length; index++) {
+    const response = responses[index];
+    assert.equal(response.status, 201);
+    assert.equal(response.headers.get('cache-control'), 'no-store, private');
+    const result = await response.json();
+    assert.equal(response.headers.get('location'), result.preview_url);
+    assert.equal(result.job_id, job.job_id);
+    assert.equal(result.object_id, job.objects[index % 2].id);
+    assert.equal(result.size, sizes[index]);
+    assert.equal(result.status, 'completed');
+    assert.ok(!JSON.stringify(result).includes(root));
+    const source = await sharp(originals[index % 2]).raw().toBuffer({ resolveWithObject: true });
+    for (const [url, disposition] of [[result.preview_url, 'inline'], [result.download_url, 'attachment']]) {
+      const file = await fetch(`${base}${url}`);
+      assert.equal(file.status, 200);
+      assert.equal(file.headers.get('content-type'), 'image/png');
+      assert.equal(file.headers.get('content-disposition'), `${disposition}; filename="${result.pixelation_id}.png"`);
+      assert.equal(file.headers.get('cache-control'), 'no-store, private');
+      assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+      const bytes = Buffer.from(await file.arrayBuffer());
+      const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+      assert.equal(info.width, result.size);
+      assert.equal(info.height, index % 2 ? result.size : result.size * 3 / 4);
+      assert.equal(info.width, result.width);
+      assert.equal(info.height, result.height);
+      assert.equal(info.channels, 4);
+      for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) {
+        const sx = Math.floor((2 * x + 1) * source.info.width / (2 * info.width));
+        const sy = Math.floor((2 * y + 1) * source.info.height / (2 * info.height));
+        const from = (sy * source.info.width + sx) * 4;
+        const to = (y * info.width + x) * 4;
+        assert.deepEqual(data.subarray(to, to + 4), source.data.subarray(from, from + 4));
+      }
+      result.bytes = bytes;
+    }
+    results.push(result);
+  }
+  assert.equal(new Set(results.map(result => result.pixelation_id)).size, 4);
+  assert.deepEqual(await readFile(join(directory, 'manifest.json')), manifestBytes);
+  for (let index = 0; index < originals.length; index++) {
+    assert.deepEqual(await readFile(join(directory, manifest.objects[index].file)), originals[index]);
+    const file = await fetch(`${base}/api/jobs/${job.job_id}/objects/${job.objects[index].id}/download`);
+    assert.equal(file.status, 200);
+    assert.deepEqual(Buffer.from(await file.arrayBuffer()), originals[index]);
+  }
+  assert.deepEqual(Buffer.from(await (await fetch(`${base}${zip.download_url}`)).arrayBuffer()), zipBytes);
+  const afterZip = await (await exportRequest(base, job.job_id, { all: true })).json();
+  const entries = await readZipEntries(Buffer.from(await (await fetch(`${base}${afterZip.download_url}`)).arrayBuffer()), join(root, 'after.zip'));
+  assert.deepEqual(entries.map(([name]) => name), job.objects.map(object => `${object.id}.png`));
+  entries.forEach(([, bytes], index) => assert.deepEqual(Buffer.from(bytes, 'base64'), originals[index]));
+  const restarted = await serve();
+  await rm(join(directory, 'objects', 'atr-4.png'));
+  for (const result of results) {
+    const file = await fetch(`${restarted}${result.download_url}`);
+    assert.equal(file.status, 200);
+    assert.deepEqual(Buffer.from(await file.arrayBuffer()), result.bytes);
+  }
+});
+
+test('pixelation validates request shape, sizes, identifiers and cross-job access', async t => {
+  const { base } = await setup(t, { extractPath: writeCategoryOutput });
+  const first = await submit(base);
+  const job = await poll(base, first.job_id, 'completed');
+  const second = await submit(base, first.upload_id);
+  const other = await poll(base, second.job_id, 'completed');
+  const valid = { object_id: job.objects[0].id, size: 16 };
+  for (const body of [[], {}, { object_id: valid.object_id }, { size: 16 },
+    { ...valid, path: '../private.png' }, { ...valid, size: '16' }, { ...valid, size: 0 },
+    { ...valid, size: 17 }, { ...valid, size: 16.5 }, { ...valid, size: null }]) {
+    await assertExportError(await pixelationRequest(base, job.job_id, body), 400, 'INVALID_PIXELATION_INPUT');
+  }
+  await assertExportError(await pixelationRequest(base, 'invalid', valid), 400, 'INVALID_JOB_ID');
+  await assertExportError(await pixelationRequest(base, randomUUID(), valid), 404, 'JOB_NOT_FOUND');
+  await assertExportError(await pixelationRequest(base, job.job_id, { ...valid, object_id: '../private.png' }), 400, 'INVALID_OBJECT_ID');
+  for (const id of [randomUUID(), other.objects[0].id]) {
+    await assertExportError(await pixelationRequest(base, job.job_id, { ...valid, object_id: id }), 404, 'OBJECT_NOT_FOUND');
+  }
+  for (const [body, status] of [['null', 400], ['{', 400], [' '.repeat(2100), 413]]) {
+    await assertExportError(await fetch(`${base}/api/jobs/${job.job_id}/pixelate`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    }), status, 'INVALID_JOB_REQUEST');
+  }
+  await assertExportError(await fetch(`${base}/api/jobs/${job.job_id}/pixelate`, {
+    method: 'POST', body: '16',
+  }), 415, 'PIXELATION_INPUT_REQUIRED');
+  const result = await (await pixelationRequest(base, job.job_id, valid)).json();
+  await assertPixelationFileError(base, job.job_id, 'invalid', 400, 'INVALID_PIXELATION_ID');
+  await assertPixelationFileError(base, 'invalid', result.pixelation_id, 400, 'INVALID_JOB_ID');
+  await assertPixelationFileError(base, randomUUID(), result.pixelation_id, 404, 'JOB_NOT_FOUND');
+  await assertPixelationFileError(base, job.job_id, randomUUID(), 404, 'PIXELATION_NOT_FOUND');
+  await assertPixelationFileError(base, other.job_id, result.pixelation_id, 404, 'PIXELATION_NOT_FOUND');
+});
+
+test('pixelation refuses non-completed jobs and empty results', async t => {
+  const { base, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const body = { object_id: job.objects[0].id, size: 16 };
+  const result = await (await pixelationRequest(base, job.job_id, body)).json();
+  const path = join(options.jobDir, job.job_id, 'manifest.json');
+  const manifest = JSON.parse(await readFile(path));
+  for (const status of ['queued', 'processing', 'failed']) {
+    await writeFile(path, JSON.stringify({ ...manifest, status }));
+    await assertExportError(await pixelationRequest(base, job.job_id, body), 409, 'JOB_NOT_COMPLETED');
+    await assertPixelationFileError(base, job.job_id, result.pixelation_id, 409, 'JOB_NOT_COMPLETED');
+  }
+  await writeFile(path, JSON.stringify({ ...manifest, objects: [] }));
+  await assertExportError(await pixelationRequest(base, job.job_id, body), 404, 'OBJECT_NOT_FOUND');
+  await assertPixelationFileError(base, job.job_id, result.pixelation_id, 500, 'JOB_FAILED');
+});
+
+test('pixelation source failures and redirected storage do not publish results or leak paths', async t => {
+  const { base, root, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, job.job_id);
+  const source = join(directory, 'objects', 'atr-4.png');
+  const original = await readFile(source);
+  const body = { object_id: job.objects[1].id, size: 16 };
+  await rm(source);
+  await assertExportError(await pixelationRequest(base, job.job_id, body), 404, 'OBJECT_FILE_NOT_FOUND');
+  await writeFile(source, 'corrupt PNG');
+  await assertExportError(await pixelationRequest(base, job.job_id, body), 500, 'JOB_FAILED');
+  assert.ok(!(await readdir(directory)).includes('pixelations'));
+  await writeFile(source, original);
+  const outside = join(root, 'private-category');
+  await rename(join(directory, 'objects'), outside);
+  await symlink(outside, join(directory, 'objects'), 'junction');
+  await assertExportError(await pixelationRequest(base, job.job_id, body), 500, 'JOB_FAILED');
+  await rm(join(directory, 'objects'));
+  await rename(outside, join(directory, 'objects'));
+  const resultsPath = join(directory, 'pixelations');
+  await writeFile(resultsPath, 'not a directory');
+  await assertExportError(await pixelationRequest(base, job.job_id, body), 500, 'JOB_FAILED');
+  await rm(resultsPath);
+  const privateResults = join(root, 'private-results');
+  await mkdir(privateResults);
+  await symlink(privateResults, resultsPath, 'junction');
+  await assertExportError(await pixelationRequest(base, job.job_id, body), 500, 'JOB_FAILED');
+  assert.deepEqual(await readdir(privateResults), []);
+  assert.deepEqual(await readFile(source), original);
+});
+
+test('pixelation files require matching published manifests and canonical regular files', async t => {
+  const { base, root, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const result = await (await pixelationRequest(base, job.job_id, { object_id: job.objects[1].id, size: 16 })).json();
+  const directory = join(options.jobDir, job.job_id, 'pixelations', result.pixelation_id);
+  const manifestPath = join(directory, 'manifest.json');
+  const manifestBytes = await readFile(manifestPath);
+  const manifest = JSON.parse(manifestBytes);
+  for (const changes of [{ job_id: randomUUID() }, { pixelation_id: randomUUID() }, { object_id: randomUUID() },
+    { status: 'processing' }, { size: 17 }, { width: 0 }, { height: 16.5 }, { width: 32 }]) {
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, ...changes }));
+    await assertPixelationFileError(base, job.job_id, result.pixelation_id, 500, 'JOB_FAILED');
+  }
+  await writeFile(manifestPath, '{');
+  await assertPixelationFileError(base, job.job_id, result.pixelation_id, 500, 'JOB_FAILED');
+  await rm(manifestPath);
+  await assertPixelationFileError(base, job.job_id, result.pixelation_id, 404, 'PIXELATION_NOT_FOUND');
+  await writeFile(manifestPath, manifestBytes);
+  const outside = join(root, 'private-pixelation');
+  await rename(directory, outside);
+  await symlink(outside, directory, 'junction');
+  await assertPixelationFileError(base, job.job_id, result.pixelation_id, 500, 'JOB_FAILED');
+  await rm(directory);
+  await rename(outside, directory);
+  await rm(join(directory, 'image.png'));
+  await assertPixelationFileError(base, job.job_id, result.pixelation_id, 404, 'PIXELATION_NOT_FOUND');
+  await mkdir(join(directory, 'image.png'));
+  await assertPixelationFileError(base, job.job_id, result.pixelation_id, 404, 'PIXELATION_NOT_FOUND');
+});
