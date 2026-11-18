@@ -276,6 +276,19 @@
 - **Bukti:** Build Vite PASS. Browser build preview → Express → model asli menghasilkan tiga objek; ZIP pilihan dua kategori/semua tiga objek cocok inventaris, CRC, byte PNG dan RGBA/alpha 0/255. PNG individual tetap byte-identical. Desktop/mobile tanpa overflow; error HTTP/network, URL respons tidak aman, respons JSON tertunda setelah ganti gambar/job kosong, single POST saat busy dan unduh ulang tanpa POST PASS.
 - **Konsekuensi:** M4 selesai pada jalur lokal teruji; tidak menjalankan M5 pada tugas ini. Reset browser bukan pembatalan ekspor server; retensi/batas ekspor dan dialog kegagalan transfer native belum tersedia. Kamera/mobile fisik dan kualitas pada foto nyata tidak diuji pada tugas ini.
 
+## D-027 — Classic Pixelation RGBA deterministik, sisi terpanjang sebagai ukuran
+
+- **Tanggal:** 2026-11-18.
+- **Status:** Accepted untuk helper internal pertama M5; API/persistensi/UI/palet belum tersedia.
+- **Kontrak:** `pixelatePng(inputBuffer, size)` menerima buffer PNG objek RGBA 8-bit statis dari pipeline tervalidasi dan menghasilkan buffer PNG baru. Size hanya angka 16/32/64/128. Tidak melakukan file I/O, inferensi, quantization atau perubahan original. Batas input mengikuti 8192 per sisi/24 megapiksel; bukan validator upload publik baru.
+- **Geometri:** Sisi terpanjang tepat size, sisi lain `max(1, round(sisi × size / sisiTerpanjang))`. Input kecil diperbesar. Tanpa stretch ke persegi, crop, padding atau upscale kembali ke resolusi sumber. Rasio aspek dipertahankan sejauh pembulatan grid integer memungkinkan.
+- **Sampling:** Koordinat sumber `floor((x + 0.5) × inputWidth / outputWidth)`, setara untuk y; tepat pada batas piksel memilih indeks lebih besar. Keempat channel RGBA disalin utuh, termasuk RGB di alpha 0 dan alpha parsial, tanpa blending/flatten.
+- **Alasan:** Sharp 0.35.5 existing tetap menangani decode/encode. Inspeksi `sharp/src/pipeline.cc` menunjukkan resize mem-premultiply lalu unpremultiply alpha; sampling RGBA langsung menghindari perubahan RGB akibat proses itu. Output maksimal 128×128, sehingga loop sederhana cukup tanpa dependensi/abstraksi tambahan.
+- **Alternatif:** Fit persegi akan mendistorsi atau memerlukan padding/crop; tidak dipilih. `.resize()` RGBA langsung tidak dipilih untuk kontrak channel exact. Bukan perubahan stack atau mode AI generatif.
+- **Bukti:** `node --test backend/test/pixelation.test.js` PASS 5/5: sampling reduction, alpha 0/1/127, enlargement, empat ukuran/rasio, sisi satu piksel, input invalid, determinisme dan buffer original tidak berubah. Smoke disk sementara membuktikan original tetap byte-identical.
+- **Perbedaan pembanding:** Smoke Pillow NEAREST cocok seluruh RGBA untuk output 16/32/64, tetapi FAIL pada size 128 (input 192×320 → 77×128). Diagnostik menemukan 128 piksel berbeda hanya pada kolom 38: koordinat pusat tepat x=96, helper memilih 96 dan Pillow memilih 95. Oracle integer independen memeriksa seluruh 9856 piksel output 128 dan PASS sesuai kontrak pusat; tidak mengubah aplikasi untuk mengikuti tie-breaking Pillow.
+- **Konsekuensi:** M5 belum selesai; helper belum terhubung ke endpoint/browser. Downsampling dapat menghilangkan detail tipis, bukan mempertahankan seluruh bentuk/mask. Pembacaan RGBA sumber memerlukan memori sesuai dimensi; batas input belum merupakan benchmark RAM.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -291,4 +304,4 @@
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-027 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-028 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

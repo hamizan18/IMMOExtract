@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** M1–M4 tersedia dan teruji pada Windows lokal, termasuk UI ZIP pilihan/semua. Retensi dan M5 belum tersedia. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** M1–M4 teruji pada Windows lokal. M5 berjalan: helper Classic Pixelation internal tersedia; API/persistensi turunan, UI Studio dan retensi belum tersedia. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -65,6 +65,9 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 **Ekspor ZIP aktual (D-025):** POST ekspor menerima JSON all:true atau object_ids unik; hanya objek manifest job completed. Manager memakai resolusi PNG yang sama dengan unduhan individual, lalu Archiver 8 menulis ZIP streaming dengan metode STORE. Setiap ekspor memiliki UUID dan manifest privat sendiri di `<job>/exports/<export_id>/`; ZIP diselesaikan dahulu, manifest dipublikasikan terakhir melalui rename. Tidak menulis ulang manifest job. Respons 201 berisi download_url setelah semua selesai, bukan antrean ekspor baru.
 
 **UI ZIP aktual (D-026):** Checkbox pada kartu galeri, jumlah pilihan dan tombol Unduh Pilihan/Semua memakai API D-025. Satu ekspor browser aktif; tombol/checkbox dikunci selama request. AbortController ekspor terpisah mengikuti reset upload yang sama; identitas operasi diperiksa setelah body JSON selesai agar respons lama tidak memicu unduhan. download_url wajib sesuai endpoint job/export UUID sebelum link native diklik. Link sukses dipertahankan untuk unduh ulang tanpa POST. Error tidak menghapus pilihan; timeout 15 detik, tanpa retry otomatis.
+
+**Pemrosesan Classic Pixelation aktual (D-027):** Helper internal `pixelatePng(Buffer, size)` menerima PNG objek RGBA8 statis yang telah divalidasi. Sharp melakukan decode/encode dengan batas 24 megapiksel; helper membatasi sisi 8192. Sisi output terpanjang 16/32/64/128, sisi lain round/minimum 1; input kecil diperbesar, tanpa padding/crop. Nearest-neighbour mengambil koordinat pusat output (floor, batas tepat memilih indeks lebih besar), menyalin keempat channel sekaligus tanpa premultiplication. Menghasilkan buffer baru, tidak membaca path atau menulis file; belum dipanggil route, belum ada metadata/download turunan atau UI. Caller berikutnya wajib memakai resolusi objek berbasis manifest dan menyimpan hasil terpisah dari PNG asli.
+
 
 **Alur lengkap yang dituju (retensi belum tersedia):**
 

@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1–M4 selesai pada jalur Windows lokal yang teruji: upload, ekstraksi SCHP, job/polling, galeri, PNG individual serta ZIP pilihan/semua melalui browser. M5 belum dimulai. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** M1–M4 selesai pada jalur Windows lokal yang teruji. M5 berjalan: helper Classic Pixelation satu PNG teruji; endpoint dan UI Studio belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -97,6 +97,15 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - HTTP 400 untuk pilihan/UUID invalid, 404 untuk ID/file hilang, 409 untuk job non-completed atau ekspor semua tanpa objek, 415 untuk tipe request bukan JSON, 413 untuk body >2 KiB. Kegagalan storage/path menghasilkan 500 aman, bukan ZIP sebagian.
 - Backend memakai Archiver 8.0.0. Setelah mengambil perubahan dependensi, jalankan `npm install --no-audit --no-fund` dari direktori `backend`. Pengujian ZIP `node --test backend/test/jobs.test.js` memakai pembaca stdlib Python (`py -3` di Windows, `python3` di platform lain) untuk memeriksa isi/CRC.
 - Cleanup retensi belum tersedia; setiap POST sukses membuat ekspor baru. Unduhan ditangani browser native; kegagalan transfer tidak memiliki dialog khusus di aplikasi.
+
+## Classic Pixelation — helper internal M5
+
+- `backend/src/pixelation.js` menyediakan `await pixelatePng(inputBuffer, size)` → buffer PNG RGBA baru. Belum terhubung ke HTTP atau UI; bukan AI Stylization dan tidak mengubah PNG asli.
+- Input adalah PNG objek **RGBA 8-bit statis yang sudah divalidasi** dari pipeline ekstraksi. Helper memeriksa tipe buffer, metadata, batas sisi 8192/24 megapiksel dan decode; bukan pengganti validator upload atau resolusi manifest/path.
+- `size` berupa angka **16/32/64/128**, berarti sisi output terpanjang tepat sebesar pilihan, termasuk memperbesar input yang lebih kecil. Sisi lain dibulatkan ke bilangan bulat terdekat, minimal 1. Contoh 200×300 pada ukuran 32 → 21×32; tanpa crop, padding atau pengembalian ke resolusi asli.
+- Sampling nearest-neighbour memakai pusat piksel output: `floor((x + 0.5) × inputWidth / outputWidth)` dan rumus setara untuk y. Tepat pada batas dua piksel, pilih indeks lebih besar. RGBA disalin utuh tanpa blending, quantization atau flatten; detail tipis dapat hilang saat diperkecil.
+- Sharp dipakai untuk decode/encode. Sampling RGBA langsung menghindari premultiplication alpha saat resize Sharp yang dapat mengubah RGB pada alpha rendah/nol. Bukan janji hasil byte-identical dengan algoritma rounding library lain.
+- Tes terarah: `node --test backend/test/pixelation.test.js`. Endpoint/persistensi turunan adalah tugas berikutnya; unduhan PNG/ZIP asli tetap independen.
 
 ## Menjalankan Aplikasi (M1–M4)
 

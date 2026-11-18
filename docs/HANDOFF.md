@@ -4,70 +4,64 @@
 
 ## Last agent
 
-OMP — integrasi UI pilihan objek/ZIP dan verifikasi browser desktop/mobile, 2026-11-18.
+OMP — helper Classic Pixelation RGBA deterministik dan verifikasi piksel/alpha, 2026-11-18.
 
 ## Current milestone
 
-**M4 — Job, object gallery, download individual/ZIP — Complete pada jalur Windows lokal teruji.**
-UI ZIP kini terhubung ke API existing; PNG individual tetap berfungsi. M5 belum dimulai pada sesi ini. Kualitas pada foto nyata, retensi dan hardening masih memiliki batasan di bawah.
+**M5 — Classic Pixelation Studio — In progress.**
+M4 selesai pada jalur Windows lokal teruji. Tugas pertama M5 menyediakan helper internal satu PNG; endpoint, penyimpanan hasil turunan, UI Studio dan palet belum tersedia.
 
 ## Last completed task
 
-- Checkbox per kartu, jumlah pilihan, Unduh Pilihan dan Unduh Semua memakai API D-025; semua mencakup foreground manusia beserta kategori. Pilihan awal kosong; hasil kosong menonaktifkan kedua aksi.
-- Satu request ekspor aktif; tombol/checkbox terkunci selama pembuatan ZIP. Error mempertahankan pilihan; tidak ada retry otomatis, timeout 15 detik.
-- AbortController ekspor terpisah mengikuti reset upload/gambar/kamera/pagehide. Identitas operasi diperiksa setelah JSON selesai sehingga respons lama tidak memicu unduhan atau mengganti job terbaru.
-- Respons sukses memvalidasi job/export UUID, status dan download_url exact sebelum link native diklik. Link unduh ulang tetap tersedia tanpa POST baru; tidak menyalin archive ke blob atau mengklaim transfer selesai.
-- D-026 mencatat keputusan. Tidak mengubah backend, model, dependensi, stack atau spesifikasi.
+- `backend/src/pixelation.js`: `await pixelatePng(inputBuffer, size)` → buffer PNG RGBA baru, tanpa file I/O atau modifikasi original.
+- Size angka 16/32/64/128 adalah sisi output terpanjang; sisi lain round/minimum 1. Input kecil diperbesar, tanpa crop/padding atau resize kembali ke ukuran awal.
+- Sharp existing decode/encode; sampling nearest pusat menyalin RGBA utuh agar RGB pada alpha rendah/nol tidak berubah karena premultiplication. Tepat pada batas piksel, pilih indeks lebih besar.
+- Kontrak input internal: PNG objek RGBA8 statis tervalidasi, bukan path client atau pengganti validasi upload. Batas 8192 per sisi/24 megapiksel mengikuti pipeline existing.
+- Lima tes baru mencakup fidelity RGBA/alpha, geometri, input invalid, determinisme dan original tidak berubah. D-027 mencatat kontrak serta perbedaan tie-breaking Pillow; tidak mengubah dependensi/stack.
 
 ## Current task
 
-UI ZIP selesai dan terverifikasi. Tidak ada implementasi setengah jadi pada tugas ini; tugas berikutnya satu pemrosesan dasar Classic Pixelation M5.
+Helper dasar selesai dan terverifikasi sesuai kontrak sampling pusat. Berikutnya satu integrasi API/persistensi hasil pixelation berbasis manifest; jangan membuat UI Studio atau palet sekaligus.
 
 ## Working components
 
-- Browser build preview 5176 → Express 3122 → FastAPI/model asli 8022: upload fixture sintetis, ekstraksi, tiga kartu, ZIP pilihan/semua dan PNG individual.
-- zipfile/Pillow Python membuktikan CRC/inventaris ZIP tepat, byte PNG identik dengan file manifest, RGBA dan alpha 0/255.
-- Browser desktop 1365×1000/mobile 390×844 tanpa overflow. Error HTTP/network, URL respons tidak aman, busy/single POST, unduh ulang tanpa POST dan respons JSON usang setelah ganti gambar/job kosong PASS.
-- Tab/ketiga layanan uji ditutup; fixture/storage temp dan empat file unduhan dihapus. Tanpa foto pribadi, script smoke permanen atau akses kamera.
+- `pixelatePng` menghasilkan PNG 16/32/64/128 dengan dimensi rasio aspek terbulatkan, tanpa blending, flatten atau quantization.
+- Tes unit terarah 5/5 PASS. Smoke disk membuktikan byte original tidak berubah; output ukuran 16/32/64 cocok penuh dengan Pillow NEAREST.
+- Size 128 memiliki mismatch pembanding di satu kolom; diagnostik integer independen membuktikan seluruh 9856 piksel helper sesuai kontrak pusat. Detail bukti pada Tests performed dan D-027.
+- Fixture/file temp dibersihkan melalui finally; diagnostik kedua seluruhnya in-memory. Tidak menjalankan layanan/browser/AI atau memakai foto pribadi.
 
 ## Modified files
 
-- `frontend/index.html` — kontrol ZIP, status/link unduh ulang dan checkbox kartu.
-- `frontend/src/extraction-workspace.js` — pilihan, request ekspor, validasi respons dan lifecycle abort/reset.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — penggunaan, D-026, bukti, status dan next task.
+- `backend/src/pixelation.js` — baru, helper pemrosesan PNG.
+- `backend/test/pixelation.test.js` — baru, lima tes fidelity/geometri/input.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — kontrak D-027, bukti dan next task.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal `git status --short`, `git diff --stat`, `git diff` menemukan **sepuluh file modified dan satu untracked** dari tugas ZIP sebelumnya; `git diff --cached --stat` kosong. Perubahan sebelumnya dipertahankan, bukan working tree bersih:
+Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat`, `git diff` bersih; catatan perubahan pending tugas UI ZIP sebelumnya sudah kedaluwarsa.
 
-- `backend/package.json`, `backend/package-lock.json`, `backend/src/job-manager.js`, `backend/src/jobs.js`, `backend/test/jobs.test.js` serta helper untracked `backend/src/zip-export.js`.
-- Lima dokumen README/ARCHITECTURE/DECISIONS/PROGRESS/HANDOFF sudah modified sebelumnya dan diperbarui lagi pada sesi ini.
-
-Dua file frontend pada Modified files ditambahkan ke perubahan belum commit. Tidak staging/commit, instalasi atau download model. Git tidak dijalankan ulang setelah edit; daftar berdasarkan inspeksi awal dan operasi sesi.
+Dua file baru dan lima dokumen pada Modified files diubah pada sesi ini dan belum di-commit. Tidak staging/commit, instalasi atau download model. Tidak mengubah source existing frontend/backend/AI; Git tidak dijalankan ulang setelah edit.
 
 ## Current errors / limitations
 
-- Tidak ada error aplikasi tersisa pada skenario UI ZIP yang dijalankan. Suite backend sesi sebelumnya 51/52 lalu koreksi ekspektasi JSON null PASS terarah 1/1; seluruh suite tidak diulang pada sesi ini karena backend tidak diubah.
-- Batas antrean/ekspor dan retensi belum tersedia. Tiap POST sukses membuat ekspor baru; crash sebelum publikasi dapat menyisakan direktori privat tanpa manifest.
-- UI tidak memulihkan job setelah reload; reset browser bukan pembatalan job/ekspor server. Unduhan native tidak memiliki dialog error transfer khusus; status sukses hanya menyatakan ZIP siap/unduhan diminta.
-- Ekstraksi sinkron M3 tetap di luar antrean; storage dimiliki satu proses backend. Pemeriksaan canonical bukan proteksi terhadap proses lokal berbahaya yang mengganti file saat transfer.
-- Startup server.js masih memakai AI_HEALTH_TIMEOUT_MS bersama (default 3000 ms); smoke memakai 30000 ms. Lisensi redistribusi checkpoint ATR belum terkonfirmasi.
-- Linux/macOS, kamera/mobile fisik dan kualitas foto nyata tidak diuji pada sesi ini. Skenario timeout 15 detik, reset melalui kamera/pagehide tidak diuji ulang khusus ZIP; ganti gambar saat JSON tertunda diuji langsung.
-- LSP tidak tersedia pada sesi ini; referensi setUploadedImage diperiksa dengan pencarian sebelum perubahan.
+- API/persistensi/preview/download pixelation dan UI Studio/palet belum tersedia; helper belum digunakan route. Pengguna browser belum dapat menjalankan pixelation.
+- Smoke pembanding Pillow size 128 awal FAIL: 128 piksel pada kolom 38 berbeda, bukan alpha blending. Helper memilih source x=96 tepat pada batas pusat, Pillow memilih x=95. Seluruh output helper cocok oracle integer sesuai kontrak; tidak mengklaim hasil identik dengan Pillow untuk semua ukuran.
+- Nearest-neighbour dapat menghilangkan detail tipis. Pembulatan grid memengaruhi rasio aspek; ini bukan rekonstruksi objek atau AI generatif.
+- Input helper harus berasal dari PNG objek statis tervalidasi; caller harus menyelesaikan UUID/manifest/path aman sebelum membaca file. Jangan langsung menerima buffer/path publik tanpa validator yang sesuai.
+- Decode RGBA membutuhkan memori mengikuti dimensi input; belum ada benchmark RAM puncak. Retensi/batas antrean/ekspor, riwayat UI, lisensi redistribusi checkpoint dan dukungan platform lain tetap terbuka.
+- LSP tidak dikonfigurasi. Tidak ada perubahan simbol exported existing atau caller existing pada tugas helper ini.
 
 ## Tests performed
 
-- **PASS** `npm run build` dari cwd frontend: Vite 7 modul.
-- **PASS** browser Chromium build preview → Express → model asli: upload/ekstraksi sintetis, tiga preview terdecode, checkbox dan aksi ZIP, PNG individual.
-- **PASS** klik Unduh Pilihan/Unduh Semua dan pemeriksaan `ai-service/.venv-test/Scripts/python.exe -` (stdin zipfile/Pillow): ZIP dua kategori 1202 byte/semua 3824 byte, CRC, inventaris, byte PNG, RGBA/alpha 0/255; PNG individual 451 byte identik.
-- **PASS** screenshot desktop/mobile tanpa overflow, deselection, link unduh ulang tanpa POST, error HTTP 404 dengan pilihan dipertahankan, pemulihan mengunduh satu kategori.
-- **PASS** injeksi network failure/URL eksternal, JSON ekspor nyata ditahan lalu gambar diganti dan job kosong diselesaikan: tidak ada unduhan usang, signal aborted, kontrol sesuai job terbaru, hanya satu POST saat busy.
-- **PASS** browser errors kosong; cleanup tab, layanan uji, fixture/storage dan unduhan temp.
-- **NOT RUN** suite backend/Python, foto nyata/kamera/mobile fisik, M5. Backend/model tidak diubah; pengujian fitur memakai browser dan pemeriksaan archive.
+- **PASS** `node --test backend/test/pixelation.test.js`: 5/5, reduction nearest tanpa blending, alpha 0/1/127, RGB tersembunyi, enlargement, seluruh ukuran, portrait/landscape/square/sisi satu piksel, input invalid, determinisme dan original buffer tidak berubah.
+- **FAIL pembanding 128** smoke `node --input-type=module` via stdin (cwd backend), Python `.venv-test`/Pillow: original disk byte-identical, size 16/32/64 cocok seluruh piksel Pillow; size 128 (77×128) berbeda. Cleanup file temp tetap berjalan.
+- **PASS diagnosis** stdin Node/Python untuk size 128: seluruh 9856 piksel sesuai oracle integer `((2*x+1)*sourceWidth)//(2*outputWidth)` dan rumus setara y. Pillow berbeda hanya di kolom 38 (source x=95 versus kontrak x=96). Source aplikasi tidak diubah setelah diagnosis.
+- **PASS** original buffer tetap identik pada diagnostik; file/fixture temp smoke dibersihkan. Tidak ada script sementara permanen.
+- **NOT RUN** suite backend existing, AI, build/browser frontend, endpoint/UI pixelation. Tidak ada source existing yang diubah; tugas hanya helper internal, bukan fitur UI selesai.
 
 ## Next action (only one)
 
-**Mulai satu tugas M5:** implementasikan pemrosesan Classic Pixelation deterministik untuk satu PNG objek, ukuran 16/32/64/128 dengan nearest-neighbour dan alpha tetap terjaga. Tetapkan arti ukuran/aspect ratio secara eksplisit, gunakan Sharp existing, buktikan piksel/dimensi/alpha tanpa mengubah PNG asli. UI Studio, palet dan AI Stylization bukan bagian tugas pertama ini.
+**Integrasikan API satu objek M5:** `POST /api/jobs/:id/pixelate` menerima object_id dan size untuk job completed. Gunakan resolver manifest existing, simpan PNG hasil/metadata privat terpisah dan sediakan preview/unduhan lewat ID hasil tervalidasi. Jangan menerima path client atau menimpa PNG/manifest original. Verifikasi HTTP nyata, dimensi/alpha, input/akses invalid serta PNG/ZIP original tetap identik. UI Studio dan palet tetap tugas terpisah.
 
 ## Handoff rules
 

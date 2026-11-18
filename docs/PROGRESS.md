@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M4 memiliki bukti verifikasi Windows lokal. UI ZIP pilihan/semua kini terhubung dan teruji bersama PNG individual. M5 belum dimulai; retensi dan evaluasi kualitas foto nyata tetap terbuka.
+> **Status aktual:** M1–M4 memiliki bukti verifikasi Windows lokal. M5 berjalan: helper Classic Pixelation satu PNG tersedia dan teruji; API/persistensi hasil turunan, UI Studio dan palet belum tersedia. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
 
 ## Ringkasan
 
-- **Current milestone:** M4 — Job, object gallery, download individual/ZIP — Complete pada jalur lokal teruji.
-- **Current task:** Integrasi UI ZIP selesai; tidak memulai M5 pada sesi ini.
-- **Overall status:** Browser upload → ekstraksi → galeri → PNG/ZIP pilihan/semua tersedia tanpa pixelation. Lifecycle ekspor mencegah respons lama memicu unduhan setelah reset gambar.
-- **Last verification:** 2026-11-18 — Build Vite PASS; browser desktop/mobile dengan model asli PASS. ZIP dua kategori/semua tiga objek: CRC, inventaris, byte PNG, RGBA/alpha benar; PNG individual tetap byte-identical. Error dan race respons tertunda teruji.
+- **Current milestone:** M5 — Classic Pixelation Studio — In progress.
+- **Current task:** Pemrosesan dasar satu PNG selesai; berikutnya API/persistensi hasil pixelation berbasis manifest.
+- **Overall status:** Helper menghasilkan PNG RGBA grid 16/32/64/128 secara deterministik tanpa mengubah original. Belum tersedia melalui HTTP/browser; alur PNG/ZIP M4 tetap independen.
+- **Last verification:** 2026-11-18 — Tes helper 5/5 PASS. Smoke file original tidak berubah; Pillow NEAREST cocok size 16/32/64, mismatch tie pada 128. Diagnostik integer seluruh 9856 piksel output 128 PASS sesuai kontrak pusat (D-027).
 
 ## Milestone
 
@@ -17,7 +17,7 @@
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
-| M5 | Classic Pixelation Studio | ⬜ Not started | Ukuran, nearest-neighbour, palet/alpha diuji |
+| M5 | Classic Pixelation Studio | In progress | Helper PNG RGBA/ukuran/nearest/alpha teruji; API, UI Studio dan palet belum tersedia |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
@@ -98,9 +98,13 @@
 - Respons ZIP divalidasi terhadap job/export UUID dan endpoint privat. Setelah sukses, link native diklik tanpa menyalin archive ke blob; link dapat dipakai ulang tanpa POST. Pemeriksaan identitas setelah JSON menolak respons lama setelah penggantian gambar.
 - Git awal sesi UI ZIP memuat sepuluh file modified dan satu helper ZIP untracked dari tugas sebelumnya; staged diff kosong. Semuanya dipertahankan. Sesi ini mengubah dua file frontend dan lima dokumen, tanpa backend/model/dependensi baru, staging atau commit. LSP tidak tersedia; referensi lifecycle diperiksa dengan pencarian.
 
+- Dasar M5 (2026-11-18, D-027): `backend/src/pixelation.js` menyediakan helper buffer-to-buffer `pixelatePng`. Size adalah sisi terpanjang, sisi lain round/minimum 1, input kecil diperbesar. Sharp decode/encode; sampling pusat nearest menyalin RGBA utuh untuk menghindari perubahan RGB akibat premultiplication alpha.
+- `backend/test/pixelation.test.js` menutup risiko blending, RGB transparan/alpha rendah, rounding/rasio dan satu-piksel, ukuran/input invalid, determinisme serta original tidak berubah. Belum ada endpoint, persistensi turunan, UI atau palet; tanpa dependensi baru.
+- Git awal tugas helper bersih termasuk index; catatan uncommitted handoff sebelumnya sudah kedaluwarsa. Dua file baru dan lima dokumen diubah, tanpa staging/commit. LSP tidak dikonfigurasi.
+
 ## In progress
 
-- Tidak ada implementasi setengah jadi pada tugas UI ZIP. M4 selesai pada jalur teruji; M5 belum dimulai.
+- M5: helper dasar selesai; API pixelation berbasis manifest dan penyimpanan/download hasil turunan adalah tugas berikutnya. UI Studio/palet belum tersedia; jangan menandai milestone selesai.
 
 ## Blockers / risks
 
@@ -118,11 +122,12 @@
 - `test_api.py` memunculkan StarletteDeprecationWarning mengenai integrasi httpx TestClient; 7 tes tetap PASS. Tidak mengganti dependensi pada tugas ini.
 - State job UI tidak dipulihkan setelah reload. Ganti/hapus pilihan hanya menghentikan pengamatan browser, bukan job server. Unduhan memakai browser native; tidak ada dialog error unduhan khusus aplikasi.
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
+- Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Alpha/RGB piksel yang dipilih tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Mulai satu tugas M5: implementasikan pemrosesan Classic Pixelation deterministik untuk satu PNG objek, ukuran 16/32/64/128 dengan nearest-neighbour dan alpha tetap terjaga. Tetapkan arti ukuran/aspect ratio secara eksplisit, gunakan Sharp yang sudah tersedia, buktikan piksel/dimensi/alpha tanpa mengubah PNG asli. UI Studio, palet dan AI Stylization bukan bagian tugas pertama ini.
+Integrasikan helper M5 ke API satu objek berbasis manifest: `POST /api/jobs/:id/pixelate` menerima object_id dan size, hanya untuk job completed; simpan PNG turunan serta metadata privat terpisah dan sediakan preview/unduhan melalui ID hasil tervalidasi. Gunakan resolver objek existing, jangan menerima path client atau menimpa PNG/manifest original. Verifikasi HTTP nyata, geometri/alpha, input/akses invalid serta PNG/ZIP original tetap identik. UI Studio dan palet tetap tugas terpisah.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -272,6 +277,11 @@ Mulai satu tugas M5: implementasikan pemrosesan Classic Pixelation deterministik
 | 2026-11-18 | Tahan pembacaan JSON ekspor nyata; ganti gambar lalu ekstrak input putih sebelum melepas respons | PASS | Tombol/checkbox terkunci, hanya satu POST, signal aborted saat ganti. Job baru completed kosong; ekspor nonaktif, link/status kosong, tidak ada klik unduhan usang |
 | 2026-11-18 | Suite backend/Python, kamera/mobile fisik, kualitas foto nyata, M5 | NOT RUN | Backend/model tidak berubah; pengujian fitur melalui browser dan pemeriksaan archive, bukan pengulangan suite lama. Fixture sintetis tanpa foto pribadi |
 | 2026-11-18 | Cleanup browser/layanan/artefak uji | PASS | Tab serta layanan 5176/3122/8022 ditutup; fixture/storage temp dan empat file unduhan dihapus. Tidak ada script sementara atau foto pribadi |
+| 2026-11-18 | Tugas helper M5: inspeksi awal Git status/diff/index | PASS | Working tree/index bersih; perubahan tugas UI ZIP tidak lagi pending |
+| 2026-11-18 | `node --test backend/test/pixelation.test.js` | PASS | 5/5: nearest tanpa blending, RGB alpha 0/1/127, enlargement, ukuran/rasio/sisi satu piksel, penolakan input, determinisme dan buffer original tetap identik |
+| 2026-11-18 | Smoke `node --input-type=module` via stdin, cwd backend; PNG temp + pembaca Pillow melalui Python venv | FAIL pembanding 128 | File original tetap byte-identical; semua piksel output 16/32/64 cocok Pillow NEAREST. Perbandingan output 77×128 gagal; file temp dibersihkan melalui finally |
+| 2026-11-18 | Diagnostik stdin Node/Python untuk output 128, oracle koordinat pusat integer | PASS | Seluruh 9856 piksel RGBA sesuai kontrak. Pillow berbeda 128 piksel di kolom 38 saja: helper mengambil x=96 tepat di batas, Pillow x=95. Tidak ada perubahan source untuk menyamakan pembanding |
+| 2026-11-18 | Suite backend lain, AI, build/browser frontend, API pixelation dan UI Studio | NOT RUN | Source existing tidak diubah; tugas hanya helper internal. API/UI belum tersedia, tidak mengklaim fitur browser selesai |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
