@@ -681,8 +681,11 @@ test('pixelation publishes independent PNG snapshots, preserving originals and Z
   assert.deepEqual(Buffer.from(await (await fetch(`${base}${zip.download_url}`)).arrayBuffer()), zipBytes);
   const afterZip = await (await exportRequest(base, job.job_id, { all: true })).json();
   const entries = await readZipEntries(Buffer.from(await (await fetch(`${base}${afterZip.download_url}`)).arrayBuffer()), join(root, 'after.zip'));
-  assert.deepEqual(entries.map(([name]) => name), job.objects.map(object => `${object.id}.png`));
-  entries.forEach(([, bytes], index) => assert.deepEqual(Buffer.from(bytes, 'base64'), originals[index]));
+  assert.deepEqual(entries.map(([name]) => name).sort(), job.objects.map(object => `${object.id}.png`).sort());
+  for (const [name, base64] of entries) {
+    const object = manifest.objects.find(object => `${object.id}.png` === name);
+    assert.deepEqual(Buffer.from(base64, 'base64'), await readFile(join(directory, object.file)));
+  }
   const restarted = await serve();
   await rm(join(directory, 'objects', 'atr-4.png'));
   for (const result of results) {

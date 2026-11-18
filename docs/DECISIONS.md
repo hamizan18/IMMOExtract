@@ -332,4 +332,28 @@
     5. Integritas manifest hasil dan verifikasi canonical path regular file.
   - `npm test --prefix backend`: seluruh 89/89 tests PASS.
 
-**Format entri baru:** `D-029 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+## D-029 — UI Classic Pixelation Studio terintegrasi per objek
+
+- **Tanggal:** 2026-11-18.
+- **Status:** Accepted; frontend build lulus (Vite 7 modul) dan terintegrasi dengan API M5.
+- **Keputusan:**
+  - Menambahkan kontrol Classic Pixelation di setiap kartu objek pada galeri ekstraksi (`frontend/index.html` dan `frontend/src/extraction-workspace.js`).
+  - Pemilih ukuran grid dengan dropdown `<select data-pixel-size>` (pilihan 16, 32, 64, 128 px; default 32 px) dan tombol aksi `<button data-pixelate-button>`.
+  - Setiap kartu mengelola status request-nya sendiri (status loading `Sedang memproses pixelation...`, disable tombol saat proses berlangsung).
+  - Panggilan API ke `POST /api/jobs/:id/pixelate` mengirim payload `{ object_id, size }` dengan validasi respons ketat (UUID format, job_id, object_id, size, dimensi integer, preview_url, download_url).
+  - Hasil pixelation ditampilkan langsung di bawah kartu dengan styling `pixelated-render` (`image-rendering: pixelated; image-rendering: crisp-edges;`) di atas grid transparansi (`transparency-grid`), dimensi aktual/grid, serta tombol `Unduh PNG pixelated` langsung ke `download_url`.
+  - Menggunakan `AbortController` per kartu (`pixelationControllers`) yang dibatalkan otomatis jika kartu di-pixelate ulang, atau jika gambar diganti/dihapus melalui `setUploadedImage`. Pengecekan `jobSnapshotId` memastikan respons usang tidak merusak tampilan job baru.
+- **Alasan:**
+  - Mengintegrasikan preview pixel art langsung di galeri objek yang sudah ada memberikan alur kerja before/after yang intuitif tanpa navigasi halaman tambahan.
+  - Perenderan CSS `image-rendering: pixelated` menjaga ketajaman piksel integer tanpa efek blur bilinear bawaan browser.
+- **Alternatif:**
+  - Halaman terpisah / modal pop-up: ditolak untuk menjaga kesederhanaan alur kerja MVP dan konsistensi layout responsif mobile/desktop.
+  - Pixelation massal sekaligus untuk seluruh objek: ditolak pada tahap awal M5 karena beban decode/encode sharp lebih terkontrol jika dipicu sesuai kebutuhan pengguna per objek.
+- **Konsekuensi:**
+  - Pengguna browser kini dapat menghasilkan dan mengunduh pixel art PNG transparan beresolusi 16–128 px langsung dari browser.
+  - Palet warna / color quantization masih merupakan fitur lanjutan M5 yang belum diimplementasikan.
+- **Bukti tes:**
+  - `npm run build --prefix frontend`: PASS (Vite 7 modul, bundle dihasilkan bersih dalam 129ms).
+  - `npm test --prefix backend`: PASS (89/89 tests lulus di seluruh suite backend).
+
+**Format entri baru:** `D-030 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

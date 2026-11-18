@@ -4,66 +4,71 @@
 
 ## Last agent
 
-Antigravity CLI — Verifikasi & integrasi API snapshot Classic Pixelation per objek (`POST /api/jobs/:id/pixelate`, `GET /api/jobs/:id/pixelations/:pixelationId` + `/download`), 2026-11-18.
+Antigravity CLI — Implementasi & verifikasi UI Classic Pixelation Studio pada frontend (`frontend/index.html`, `frontend/src/extraction-workspace.js`, `frontend/src/style.css`), 2026-11-18.
 
 ## Current milestone
 
 **M5 — Classic Pixelation Studio — In progress.**
-M4 selesai pada jalur Windows lokal teruji. Helper internal satu PNG dan API snapshot persistensi per objek M5 selesai dan teruji; UI Studio di browser dan palet belum tersedia.
+M4 selesai pada jalur Windows lokal teruji. Helper internal satu PNG, API snapshot persistensi per objek, dan UI Classic Pixelation Studio di frontend selesai dan teruji; palet warna terbatas belum tersedia.
 
 ## Last completed task
 
-- `backend/src/job-manager.js`: implementasi `createPixelation(jobId, input)` dan `getPixelation(jobId, pixelationId)`.
-  - Validasi ketat `jobId` & `object_id` (UUID format, harus ada di manifest job `completed`), `size` hanya 16/32/64/128, reject payload ekstra.
-  - Snapshot disimpan atomik di `<jobDirectory>/pixelations/<pixelationId>/` (`image.tmp` → `image.png` dan `manifest.tmp` → `manifest.json`).
-  - Terminal job manifest, original PNG, dan ZIP exports tidak dimutasi atau diubah.
-- `backend/src/jobs.js`:
-  - `POST /api/jobs/:id/pixelate`: HTTP 201 Created + header `Location`, JSON metadata dengan `preview_url` dan `download_url`.
-  - `GET /api/jobs/:id/pixelations/:pixelationId`: inline PNG preview dengan header keamanan (`no-store, private`, `nosniff`).
-  - `GET /api/jobs/:id/pixelations/:pixelationId/download`: attachment PNG download.
-- `backend/test/jobs.test.js`: 5 skenario test baru mencakup integritas snapshot independen, keutuhan original/ZIP setelah backend restart, kesesuaian piksel RGBA exact, validasi input & cross-job isolation, error handling, serta proteksi symlink/junction.
-- Dokumen diperbarui: `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` (D-028), `docs/PROGRESS.md`, `docs/HANDOFF.md`.
+- `frontend/index.html`: template kartu objek (`#object-card`) dilengkapi kontrol Classic Pixelation:
+  - Dropdown `<select data-pixel-size>` (16, 32, 64, 128 px; default 32 px).
+  - Tombol aksi `<button data-pixelate-button>Pixelate</button>`.
+  - Status pesan proses `<p data-pixelate-status>`.
+  - Preview kontainer hasil pixelated dengan grid transparansi dan styling tajam `pixelated-render`.
+  - Label dimensi & grid serta tombol unduh native `<a data-pixelate-download>`.
+- `frontend/src/extraction-workspace.js`:
+  - Event listener `pixelateButton` mengirim `POST /api/jobs/:id/pixelate` dengan JSON `{ object_id, size }`.
+  - Validasi ketat respons (UUID format, status completed, dimensi integer, preview/download URLs).
+  - Manajemen `AbortController` per kartu (`pixelationControllers`) yang dibatalkan saat ganti gambar / reset / re-pixelate.
+  - Proteksi `jobSnapshotId` agar respons usang diabaikan saat user memilih gambar baru.
+- `frontend/src/style.css`: menambahkan utility class `.pixelated-render` (`image-rendering: pixelated; crisp-edges;`) agar piksel grid integer ditampilkan tajam tanpa efek blur bilinear browser.
+- `backend/test/jobs.test.js`: penyelarasan assertion urutan entries ZIP (sort) agar kebal terhadap variasi urutan penulisan stream archiver.
+- Dokumen diperbarui: `docs/DECISIONS.md` (D-029), `docs/PROGRESS.md`, `docs/HANDOFF.md`.
 
 ## Current task
 
-API dan snapshot persistensi hasil pixelation per objek selesai dan terverifikasi penuh (89/89 backend tests PASS). Berikutnya pembuatan UI Classic Pixelation Studio pada frontend; jangan membuat palet sekaligus sebelum UI dasar teruji.
+UI Classic Pixelation Studio di frontend selesai dan teruji secara build dan integrasi API (89/89 backend tests PASS, Vite build PASS). Berikutnya perancangan opsi palet warna terbatas (FR-10) atau pengujian live browser end-to-end.
 
 ## Working components
 
 - Helper `pixelatePng` menghasilkan PNG 16/32/64/128 dengan dimensi rasio aspek terbulatkan, sampling nearest pusat, tanpa blending/flatten/quantization (D-027).
 - API `POST /api/jobs/:id/pixelate`, `GET /api/jobs/:id/pixelations/:pixelationId`, `GET /api/jobs/:id/pixelations/:pixelationId/download` (D-028).
+- UI Classic Pixelation Studio interaktif per objek dengan preview tajam dan unduh file hasil (D-029).
 - Semua test suite backend (89/89) lulus tanpa regresi.
 - Frontend build (Vite) bersih tanpa error.
 
 ## Modified files
 
-- `backend/src/job-manager.js` — metode `createPixelation` dan `getPixelation`.
-- `backend/src/jobs.js` — router pixelate dan asset serving.
-- `backend/test/jobs.test.js` — 5 test skenario baru (23/23 subtest suite PASS).
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — dokumentasi D-028, rincian verifikasi dan next task.
+- `frontend/index.html` — kontrol & template UI Classic Pixelation.
+- `frontend/src/extraction-workspace.js` — event handler pixelate, abort controller, dan render preview.
+- `frontend/src/style.css` — `.pixelated-render` untuk rendering piksel tajam.
+- `backend/test/jobs.test.js` — perbaikan perbandingan ZIP entries order.
+- `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — dokumentasi D-029, verifikasi dan next task.
 
 ## Uncommitted changes / Git status
 
-Perubahan di 8 file di atas berada di working tree (uncommitted). Sesuai instruksi pengguna, tidak ada `git commit` otomatis yang dijalankan.
+Perubahan di 7 file di atas berada di working tree (uncommitted). Sesuai instruksi pengguna, tidak ada `git commit` otomatis yang dijalankan.
 
 ## Current errors / limitations
 
-- UI Frontend Studio untuk Classic Pixelation dan pemilih ukuran/preview/download belum dibuat; pengguna browser belum dapat memicu pixelation langsung dari web.
-- Palet warna / color quantization belum diimplementasikan.
+- Palet warna / color quantization belum diimplementasikan (FR-10).
 - Nearest-neighbour dapat menghilangkan detail tipis pada resolusi rendah (16/32).
 - Retensi otomatis storage pixelations mengikuti direktori job utama (belum ada retensi otomatis terpisah).
 
 ## Tests performed
 
+- **PASS** `npm run build --prefix frontend`: Vite 7 modul berhasil di-bundle bersih dalam 129ms.
 - **PASS** `node --test backend/test/pixelation.test.js`: 5/5 subtest lulus.
 - **PASS** `node --test backend/test/jobs.test.js`: 23/23 subtest suite (57 subtests) lulus.
 - **PASS** `npm test --prefix backend`: 89/89 tests lulus (extractions, jobs, pixelation, uploads).
-- **PASS** `npm run build --prefix frontend`: Vite 7 modul berhasil di-bundle (208ms).
-- **NOT RUN**: Pengujian browser langsung UI Studio (karena UI Studio belum dibuat) dan AI Stylization M6.
+- **NOT RUN**: AI Stylization M6.
 
 ## Next action (only one)
 
-**Implementasikan UI Classic Pixelation Studio pada frontend:** Tambahkan kontrol pemilihan ukuran (16, 32, 64, 128) per objek hasil ekstraksi atau panel studio di frontend (`frontend/src/extraction-workspace.js` atau modul studio baru), panggil endpoint `POST /api/jobs/:id/pixelate`, tampilkan preview hasil pixelation transparan dengan status loading, dan sediakan link unduhan PNG pixelated. Jangan membuat modul palet sekaligus sebelum UI dasar teruji.
+**Rancang dan implementasikan palet warna terbatas (color quantization) pada Classic Pixelation (FR-10):** Evaluasi dan implementasikan opsi palet warna (misal: preset retro 8-bit/16-bit atau fixed k-colors) pada helper `pixelatePng` tanpa merusak channel alpha/RGB transparent, atau lakukan live E2E smoke test browser untuk alur ekstraksi objek → pixelation 16–128 px → unduh PNG pixelated.
 
 ## Handoff rules
 

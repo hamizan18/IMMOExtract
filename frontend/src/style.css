@@ -8,3 +8,8 @@
   );
   background-size: 20px 20px;
 }
+
+.pixelated-render {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}

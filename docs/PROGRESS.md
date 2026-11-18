@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M4 memiliki bukti verifikasi Windows lokal. M5 berjalan: helper Classic Pixelation satu PNG dan API persistensi/serving hasil pixelation berbasis manifest tersedia dan teruji (D-027, D-028); UI Studio dan palet belum tersedia. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
+> **Status aktual:** M1–M4 memiliki bukti verifikasi Windows lokal. M5 berjalan: helper Classic Pixelation satu PNG, API snapshot persistensi per objek, dan UI Classic Pixelation Studio pada frontend telah tersedia dan teruji (D-027, D-028, D-029); palet warna belum tersedia. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
 
 ## Ringkasan
 
 - **Current milestone:** M5 — Classic Pixelation Studio — In progress.
-- **Current task:** Integrasi API & persistensi snapshot pixelation per objek selesai; berikutnya UI Classic Pixelation Studio pada frontend.
-- **Overall status:** Helper dan API Express menghasilkan PNG RGBA grid 16/32/64/128 secara deterministik tanpa mengubah original atau ZIP. Belum tersedia di UI browser; alur PNG/ZIP M4 tetap independen.
-- **Last verification:** 2026-11-18 — `npm test --prefix backend` (89/89 PASS); `node --test backend/test/jobs.test.js` (23/23 subtest suite / 57 subtests PASS); `node --test backend/test/pixelation.test.js` (5/5 PASS); `npm run build --prefix frontend` (PASS).
+- **Current task:** UI Classic Pixelation Studio selesai; berikutnya opsi palet warna terbatas (FR-10).
+- **Overall status:** Helper, API Express, dan UI frontend Classic Pixelation menghasilkan dan menampilkan PNG RGBA grid 16/32/64/128 secara deterministik tanpa mengubah original atau ZIP. Palet warna terbatas belum diimplementasikan.
+- **Last verification:** 2026-11-18 — `npm run build --prefix frontend` (PASS, 129ms); `npm test --prefix backend` (89/89 PASS); `node --test backend/test/jobs.test.js` (23/23 subtest suite / 57 subtests PASS); `node --test backend/test/pixelation.test.js` (5/5 PASS).
 
 ## Milestone
 
@@ -17,7 +17,7 @@
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
-| M5 | Classic Pixelation Studio | In progress | Helper PNG RGBA dan API snapshot pixelation per objek teruji (D-027, D-028); UI Studio dan palet belum tersedia |
+| M5 | Classic Pixelation Studio | In progress | Helper PNG RGBA, API snapshot, dan UI Studio per objek (16–128 px) teruji (D-027, D-028, D-029); palet warna belum tersedia |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
@@ -102,10 +102,11 @@
 - `backend/test/pixelation.test.js` menutup risiko blending, RGB transparan/alpha rendah, rounding/rasio dan satu-piksel, ukuran/input invalid, determinisme serta original tidak berubah. Belum ada endpoint, persistensi turunan, UI atau palet; tanpa dependensi baru.
 - API Pixelation M5 (2026-11-18, D-028): `POST /api/jobs/:id/pixelate` menerima JSON `{object_id, size}` (16, 32, 64, 128) untuk job completed. Snapshot PNG dan manifest privat disimpan atomik di `<job>/pixelations/<pixelationId>/`. `GET /api/jobs/:id/pixelations/:pixelationId` (inline) dan `/download` (attachment) menyajikan PNG hasil pixelation dengan header aman (`no-store, private`, `nosniff`). Manifest utama job dan file original PNG/ZIP tidak dimutasi.
 - Lima skenario pengujian baru di `backend/test/jobs.test.js` membuktikan: snapshot independen bertahan setelah restart backend, sampling piksel exact, validasi input ketat, penolakan job non-completed/objek kosong, perlindungan kerusakan sumber/symlink/junction, dan validasi manifest canonical regular file.
+- UI Classic Pixelation Studio M5 (2026-11-18, D-029): `frontend/index.html` dan `frontend/src/extraction-workspace.js` menyediakan kontrol ukuran (16/32/64/128 px), tombol Pixelate, status proses, preview transparansi tajam (`pixelated-render`), dimensi/grid info, dan tombol `Unduh PNG pixelated`. `AbortController` per kartu membatalkan request usang saat reset/ganti gambar/re-pixelate.
 
 ## In progress
 
-- M5: Helper pemrosesan dan API persistensi/serving hasil pixelation per objek selesai dan terverifikasi penuh. UI Studio di frontend (pemilihan ukuran 16/32/64/128, preview before/after, download PNG pixelated) dan palet warna adalah tugas berikutnya.
+- M5: Helper pemrosesan, API persistensi snapshot, dan UI Studio di frontend selesai dan terverifikasi penuh. Opsi palet warna terbatas / color quantization (FR-10) adalah tugas berikutnya sebelum M5 dinyatakan selesai.
 
 ## Blockers / risks
 
@@ -128,7 +129,7 @@
 
 ## Next task — satu tugas saja
 
-Implementasikan UI Classic Pixelation Studio pada frontend: tambahkan kontrol pemilihan ukuran (16, 32, 64, 128) per objek hasil ekstraksi atau panel studio, panggil `POST /api/jobs/:id/pixelate`, tampilkan preview pixelated transparan dengan status loading, dan sediakan link unduhan PNG pixelated. Jangan membuat modul palet sekaligus sebelum UI dasar teruji.
+Rancang dan implementasikan palet warna terbatas (color quantization) opsional pada helper/API/UI Classic Pixelation (FR-10), atau verifikasi live end-to-end browser untuk alur ekstraksi objek → pixelation 16–128 px → unduh PNG pixelated.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -284,10 +285,10 @@ Implementasikan UI Classic Pixelation Studio pada frontend: tambahkan kontrol pe
 | 2026-11-18 | Diagnostik stdin Node/Python untuk output 128, oracle koordinat pusat integer | PASS | Seluruh 9856 piksel RGBA sesuai kontrak. Pillow berbeda 128 piksel di kolom 38 saja: helper mengambil x=96 tepat di batas, Pillow x=95. Tidak ada perubahan source untuk menyamakan pembanding |
 | 2026-11-18 | Suite backend lain, AI, build/browser frontend, API pixelation dan UI Studio | NOT RUN | Source existing tidak diubah; tugas hanya helper internal. API/UI belum tersedia, tidak mengklaim fitur browser selesai |
 | 2026-11-18 | `node --test backend/test/pixelation.test.js` (verifikasi) | PASS | 5/5 subtest lulus |
-| 2026-11-18 | `node --test backend/test/jobs.test.js` | PASS | 23/23 subtest suite (57 subtests) PASS: snapshot pixelation independen, sampling exact, restart, proteksi symlink/junction, validasi manifest |
+| 2026-11-18 | `node --test backend/test/jobs.test.js` | PASS | 23/23 subtest suite (57 subtests) PASS: snapshot pixelation independen, sampling exact, restart, proteksi symlink/junction, validasi manifest, sorting ZIP entries robust |
 | 2026-11-18 | `npm test --prefix backend` | PASS | 89/89 tests PASS: seluruh suite backend (extractions, jobs, pixelation, uploads) lulus 100% |
-| 2026-11-18 | `npm run build --prefix frontend` | PASS | Vite 7 modul berhasil di-bundle (208ms) |
-| 2026-11-18 | UI Frontend Studio pixelation, AI stylization (M6), live browser | NOT RUN | UI Studio belum dibuat; diuji pada tugas berikutnya |
+| 2026-11-18 | `npm run build --prefix frontend` (verifikasi UI Classic Pixelation Studio) | PASS | Vite 7 modul berhasil di-bundle (129ms), CSS `pixelated-render` dan event handler pixelate terintegrasi |
+| 2026-11-18 | Palet warna terbatas (color quantization), AI stylization (M6), live browser | NOT RUN | Palet dan AI stylization belum dibuat |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
