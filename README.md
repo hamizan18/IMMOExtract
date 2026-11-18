@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** Input/preview/upload M2 dan ekstraksi foreground SCHP lokal M3 tersedia. M4 sedang berjalan: job asynchronous, polling, PNG/crop kategori ATR, UI galeri serta preview/unduhan PNG individual teruji. ZIP belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** M1–M4 selesai pada jalur Windows lokal yang teruji: upload, ekstraksi SCHP, job/polling, galeri, PNG individual serta ZIP pilihan/semua melalui browser. M5 belum dimulai. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -77,12 +77,26 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - `objects` berisi foreground `human` full-frame bila ada, ditambah PNG per label ATR dengan **>50 piksel**. Crop memakai padding 2 piksel yang dipotong pada batas input; RGB asli dan alpha khusus kategori dipertahankan. `bbox` berkoordinat asli `[left, top, right, bottom]`, right/bottom eksklusif; metadata juga memuat `class_id`, dimensi, dan `pixel_count`. Label sama tetap satu mask semantik, bukan instance terpisah.
 - Preview: `GET /api/jobs/<job_id>/objects/<object_id>`. Unduh PNG asli: `GET /api/jobs/<job_id>/objects/<object_id>/download`. Gunakan `objects[].id` dari polling job completed, bukan nama/path file. Kedua endpoint menyajikan byte PNG yang sama tanpa pixelation; disposition `inline` atau `attachment`, nama `<object_id>.png`, cache privat/no-store dan `nosniff`.
 - Job belum completed ditolak HTTP 409; UUID invalid 400; job/objek/file tidak ditemukan 404. Object ID hanya berlaku pada job pemiliknya. Manifest dengan path tidak aman atau symlink/junction pengalihan ditolak dengan error 500 aman; storage tidak dibuka sebagai folder statis.
-- Di browser, tunggu upload berhasil lalu tekan **Ekstrak objek**. UI menampilkan tahap queued/processing, kemudian kartu preview, label, dimensi dan **Unduh PNG asli**. Pola kotak-kotak hanya latar transparansi, tidak disertakan dalam PNG. Layout dua panel di desktop, ditumpuk di mobile; ZIP dan pixel art belum tersedia.
+- Di browser, tunggu upload berhasil lalu tekan **Ekstrak objek**. UI menampilkan tahap queued/processing, kemudian kartu preview, label, dimensi dan **Unduh PNG asli**. Pola kotak-kotak hanya latar transparansi, tidak disertakan dalam PNG. Layout dua panel di desktop, ditumpuk di mobile; pixel art belum tersedia.
 - Polling serial tiap 1 detik setelah respons, timeout request 15 detik. Jika pemeriksaan terputus, **Periksa status** melanjutkan job yang sama tanpa POST baru. Tidak ada retry otomatis; jika POST belum terkonfirmasi, UI memperingatkan bahwa mengirim lagi dapat membuat job baru.
 - Mengganti/menghapus gambar, membuka kamera atau meninggalkan halaman membatalkan request/polling browser dan membersihkan galeri. Job server tidak dibatalkan/dihapus. Hasil kosong/gagal dan kegagalan file preview ditampilkan apa adanya. Setelah job terminal, gunakan **Hapus pilihan** lalu pilih gambar untuk memulai lagi; tidak ada pemulihan job otomatis setelah reload.
 - Manifest dan hasil berada di `storage/jobs/<uuid>/`; jika `UPLOAD_DIR` diubah, direktori jobs default sejajar direktori upload. Jangan jalankan beberapa backend pada storage yang sama. Retensi/batas antrean belum tersedia.
 - Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); gunakan misalnya `30000` bila inferensi memerlukan waktu lebih panjang, lalu restart backend.
 - Restart backend dan AI service bersama setelah pembaruan kontrak kategori. Job lama tetap dapat dipolling, tetapi tidak ditambahi file kategori secara otomatis. Polling job aktif memakai snapshot yang sudah berhasil disimpan, menghindari konflik pembacaan/penggantian manifest di Windows.
+
+### Ekspor ZIP melalui browser dan API
+
+- Centang **Pilih untuk ZIP** pada kartu, lalu **Unduh Pilihan**. **Unduh Semua** mencakup foreground manusia dan seluruh kategori, tanpa perlu mencentang. Tidak ada pilihan awal; tombol pilihan nonaktif bila kosong, kedua tombol nonaktif bila tidak ada hasil.
+- Saat ZIP dibuat, tombol ekspor dan checkbox dikunci. Setelah respons sukses, unduhan diminta ke browser; **Unduh ulang ZIP siap** memakai archive yang sama tanpa POST baru. Status ini bukan konfirmasi file telah tersimpan di perangkat.
+- Error pembuatan/koneksi mempertahankan pilihan; mencoba lagi adalah permintaan ekspor baru, bukan retry otomatis. Ganti/hapus gambar, buka kamera atau tinggalkan halaman membatalkan pengamatan ekspor dan membersihkan link. Respons lama tidak memicu unduhan; proses/file yang sudah diterima server tidak dibatalkan.
+
+- `POST /api/jobs/<job_id>/exports`, `Content-Type: application/json`, dengan **salah satu** `{"all":true}` atau `{"object_ids":["<uuid>","<uuid>"]}`. ID harus terdaftar pada job completed; pilihan kosong/duplikat atau field tambahan ditolak. `all` mencakup foreground manusia dan seluruh kategori yang terdaftar.
+- HTTP **201** hanya setelah ZIP dan manifest ekspor selesai disimpan. Respons: `{export_id, job_id, status:"completed", object_ids, created_at, download_url}`; header `Location` sama dengan `download_url`.
+- `GET /api/jobs/<job_id>/exports/<export_id>/download` mengunduh attachment `<export_id>.zip`, no-store/private dan nosniff. Isi hanya `<object_id>.png` yang dipilih, byte asli tanpa pixelation; tidak memuat input, mask atau metadata privat.
+- ZIP disimpan privat di `<job>/exports/<export_id>/archive.zip` dengan manifest terpisah. Ekspor tidak mengubah manifest job; dapat diunduh setelah restart. ZIP selesai adalah snapshot, tidak bergantung pada keberadaan PNG sumber saat diunduh.
+- HTTP 400 untuk pilihan/UUID invalid, 404 untuk ID/file hilang, 409 untuk job non-completed atau ekspor semua tanpa objek, 415 untuk tipe request bukan JSON, 413 untuk body >2 KiB. Kegagalan storage/path menghasilkan 500 aman, bukan ZIP sebagian.
+- Backend memakai Archiver 8.0.0. Setelah mengambil perubahan dependensi, jalankan `npm install --no-audit --no-fund` dari direktori `backend`. Pengujian ZIP `node --test backend/test/jobs.test.js` memakai pembaca stdlib Python (`py -3` di Windows, `python3` di platform lain) untuk memeriksa isi/CRC.
+- Cleanup retensi belum tersedia; setiap POST sukses membuat ekspor baru. Unduhan ditangani browser native; kegagalan transfer tidak memiliki dialog khusus di aplikasi.
 
 ## Menjalankan Aplikasi (M1–M4)
 

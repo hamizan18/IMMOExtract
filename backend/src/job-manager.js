@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, realpath, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { writeZip } from './zip-export.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const atrLabels = [
@@ -274,6 +275,83 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       } catch (error) {
         if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
           throw new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.');
+        }
+        throw error;
+      }
+    },
+    async createExport(jobId, selection) {
+      const id = validateId(jobId, 'JOB');
+      if (!selection || typeof selection !== 'object' || Array.isArray(selection)
+          || Object.keys(selection).length !== 1
+          || !(selection.all === true || (Array.isArray(selection.object_ids) && selection.object_ids.length > 0))) {
+        throw new JobError(400, 'INVALID_EXPORT_INPUT', 'Kirim hanya all: true atau object_ids yang tidak kosong.');
+      }
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+      }
+      const objectIds = (selection.all === true ? job.objects.map(object => object.id) : selection.object_ids)
+        .map(objectId => validateId(objectId, 'OBJECT'));
+      if (!objectIds.length) throw new JobError(409, 'EXPORT_EMPTY', 'Tidak ada objek untuk diekspor.');
+      if (new Set(objectIds).size !== objectIds.length) {
+        throw new JobError(400, 'DUPLICATE_OBJECT_ID', 'Setiap objek hanya boleh dipilih satu kali.');
+      }
+      const files = [];
+      for (const objectId of objectIds) files.push(await this.getObject(id, objectId));
+      const jobDirectory = join(await realpath(root), id);
+      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+      const exportsDirectory = join(jobDirectory, 'exports');
+      await mkdir(exportsDirectory, { recursive: true, mode: 0o700 });
+      if (await realpath(exportsDirectory) !== exportsDirectory) throw new Error('Invalid export directory');
+      const exportId = randomUUID();
+      const directory = join(exportsDirectory, exportId);
+      await mkdir(directory, { mode: 0o700 });
+      try {
+        await writeZip(files, join(directory, 'archive.tmp'));
+        await rename(join(directory, 'archive.tmp'), join(directory, 'archive.zip'));
+        const manifest = {
+          export_id: exportId, job_id: id, status: 'completed',
+          object_ids: objectIds, created_at: new Date().toISOString(),
+        };
+        await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
+          flag: 'wx', mode: 0o600,
+        });
+        // Publish only after ZIP completion, without rewriting the job manifest.
+        await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+        return manifest;
+      } catch (error) {
+        await rm(directory, { recursive: true, force: true });
+        throw error;
+      }
+    },
+    async getExport(jobId, exportId) {
+      const id = validateId(jobId, 'JOB');
+      const key = validateId(exportId, 'EXPORT');
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+      }
+      try {
+        const directory = join(await realpath(root), id, 'exports', key);
+        const manifestPath = join(directory, 'manifest.json');
+        if (await realpath(manifestPath) !== manifestPath) throw new Error('Invalid export manifest location');
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+        if (manifest.export_id !== key || manifest.job_id !== id || manifest.status !== 'completed'
+            || !Array.isArray(manifest.object_ids) || !manifest.object_ids.length
+            || new Set(manifest.object_ids).size !== manifest.object_ids.length
+            || manifest.object_ids.some(objectId => !job.objects.some(object => object.id === objectId))) {
+          throw new Error('Invalid export manifest');
+        }
+        const expected = join(directory, 'archive.zip');
+        const filePath = await realpath(expected);
+        if (filePath !== expected) throw new Error('Invalid export file location');
+        if (!(await stat(filePath)).isFile()) throw new JobError(404, 'EXPORT_NOT_FOUND', 'File ekspor tidak ditemukan.');
+        return { filePath, filename: `${key}.zip` };
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'EXPORT_NOT_FOUND', 'File ekspor tidak ditemukan.');
         }
         throw error;
       }

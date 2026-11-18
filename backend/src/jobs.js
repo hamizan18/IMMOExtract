@@ -41,6 +41,19 @@ export function createJobRouter(options) {
     }
     return submit(body.upload_id, response);
   });
+  router.post('/:id/exports', express.json({ limit: '2kb' }), async (request, response) => {
+    if (!request.is('application/json')) {
+      response.status(415).json({ error: { code: 'EXPORT_INPUT_REQUIRED', message: 'Kirim JSON all atau object_ids.' } });
+      return;
+    }
+    try {
+      const result = await manager.createExport(request.params.id, request.body);
+      const downloadUrl = `/api/jobs/${result.job_id}/exports/${result.export_id}/download`;
+      response.location(downloadUrl).status(201).json({ ...result, download_url: downloadUrl });
+    } catch (error) {
+      fail(error, response);
+    }
+  });
   router.use((error, _request, response, _next) => {
     const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : 500;
     response.status(status).json({ error: { code: 'INVALID_JOB_REQUEST', message: 'Permintaan job tidak dapat diproses.' } });
@@ -58,16 +71,16 @@ export function createJobRouter(options) {
     }
   });
 
-  function serveObject(disposition) {
+  function serveFile(resolveFile, contentType, disposition, missingCode) {
     return async (request, response, next) => {
       try {
-        const { filePath, filename } = await manager.getObject(request.params.id, request.params.objectId);
+        const { filePath, filename } = await resolveFile(request.params);
         response.sendFile(filePath, {
           cacheControl: false,
           lastModified: false,
           acceptRanges: false,
           headers: {
-            'Content-Type': 'image/png',
+            'Content-Type': contentType,
             'Content-Disposition': `${disposition}; filename="${filename}"`,
             'X-Content-Type-Options': 'nosniff',
           },
@@ -78,7 +91,7 @@ export function createJobRouter(options) {
           response.removeHeader('Content-Type');
           response.removeHeader('Content-Length');
           fail(error.code === 'ENOENT' || error.status === 404
-            ? new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.')
+            ? new JobError(404, missingCode, 'File hasil tidak ditemukan.')
             : error, response);
         });
       } catch (error) {
@@ -87,7 +100,11 @@ export function createJobRouter(options) {
     };
   }
 
-  router.get('/:id/objects/:objectId', serveObject('inline'));
-  router.get('/:id/objects/:objectId/download', serveObject('attachment'));
+  const objectFile = params => manager.getObject(params.id, params.objectId);
+  router.get('/:id/objects/:objectId', serveFile(objectFile, 'image/png', 'inline', 'OBJECT_FILE_NOT_FOUND'));
+  router.get('/:id/objects/:objectId/download', serveFile(objectFile, 'image/png', 'attachment', 'OBJECT_FILE_NOT_FOUND'));
+  router.get('/:id/exports/:exportId/download', serveFile(
+    params => manager.getExport(params.id, params.exportId), 'application/zip', 'attachment', 'EXPORT_NOT_FOUND',
+  ));
   return router;
 }

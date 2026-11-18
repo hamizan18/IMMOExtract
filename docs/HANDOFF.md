@@ -4,74 +4,70 @@
 
 ## Last agent
 
-OMP — UI ekstraksi/galeri, polling dan unduhan PNG individual, 2026-11-17.
+OMP — integrasi UI pilihan objek/ZIP dan verifikasi browser desktop/mobile, 2026-11-18.
 
 ## Current milestone
 
-**M4 — Job, object gallery, download individual/ZIP — In progress.**
-Orchestrator/polling, PNG foreground/kategori, UI galeri serta preview/unduhan individual terverifikasi. ZIP belum tersedia; jangan menandai M4 selesai atau mulai M5.
+**M4 — Job, object gallery, download individual/ZIP — Complete pada jalur Windows lokal teruji.**
+UI ZIP kini terhubung ke API existing; PNG individual tetap berfungsi. M5 belum dimulai pada sesi ini. Kualitas pada foto nyata, retensi dan hardening masih memiliki batasan di bawah.
 
 ## Last completed task
 
-- Modul `extraction-workspace.js` menerima upload_id/reset dari lifecycle `image-input.js`. Tombol aktif setelah upload sukses; POST hanya upload_id, polling serial tiap 1 detik dan timeout request 15 detik.
-- UI menampilkan antrean/proses, gagal/kosong atau kartu label/dimensi/preview/unduhan PNG asli. Desktop dua panel, mobile bertumpuk; belum ada ZIP/pixelation.
-- Ganti/hapus pilihan, buka kamera dan pagehide meng-abort request, membatalkan timer dan mengosongkan galeri. Identitas operasi menolak respons usang.
-- Putus polling menampilkan Periksa status untuk job yang sama tanpa POST baru. POST tidak terkonfirmasi diberi peringatan potensi job sudah diterima; tidak ada retry otomatis.
-- Keterangan fitur lama pada halaman diganti. D-024 mencatat keputusan; backend, model, dependensi dan checkpoint tidak berubah.
+- Checkbox per kartu, jumlah pilihan, Unduh Pilihan dan Unduh Semua memakai API D-025; semua mencakup foreground manusia beserta kategori. Pilihan awal kosong; hasil kosong menonaktifkan kedua aksi.
+- Satu request ekspor aktif; tombol/checkbox terkunci selama pembuatan ZIP. Error mempertahankan pilihan; tidak ada retry otomatis, timeout 15 detik.
+- AbortController ekspor terpisah mengikuti reset upload/gambar/kamera/pagehide. Identitas operasi diperiksa setelah JSON selesai sehingga respons lama tidak memicu unduhan atau mengganti job terbaru.
+- Respons sukses memvalidasi job/export UUID, status dan download_url exact sebelum link native diklik. Link unduh ulang tetap tersedia tanpa POST baru; tidak menyalin archive ke blob atau mengklaim transfer selesai.
+- D-026 mencatat keputusan. Tidak mengubah backend, model, dependensi, stack atau spesifikasi.
 
 ## Current task
 
-UI ekstraksi/galeri dan unduhan individual selesai serta diverifikasi. Berikutnya hanya endpoint ZIP backend; UI ZIP tetap terpisah.
+UI ZIP selesai dan terverifikasi. Tidak ada implementasi setengah jadi pada tugas ini; tugas berikutnya satu pemrosesan dasar Classic Pixelation M5.
 
 ## Working components
 
-- Browser build preview → Express → model asli: upload, queued/processing/completed, tiga kartu dan unduhan PNG.
-- PNG unduhan browser identik dengan file kategori disk, RGBA 104×85, alpha 0/255.
-- Hasil kosong model asli, AI mati → failed, polling terputus → pemeriksaan manual, respons usang, error preview/upload, capture sintetis dan pagehide terverifikasi.
-- FastAPI 8020, backend 3120 dan preview 5175 uji dihentikan; tab ditutup, storage/fixture temp serta PNG unduhan dibersihkan. Jalankan ulang layanan sesuai README.
+- Browser build preview 5176 → Express 3122 → FastAPI/model asli 8022: upload fixture sintetis, ekstraksi, tiga kartu, ZIP pilihan/semua dan PNG individual.
+- zipfile/Pillow Python membuktikan CRC/inventaris ZIP tepat, byte PNG identik dengan file manifest, RGBA dan alpha 0/255.
+- Browser desktop 1365×1000/mobile 390×844 tanpa overflow. Error HTTP/network, URL respons tidak aman, busy/single POST, unduh ulang tanpa POST dan respons JSON usang setelah ganti gambar/job kosong PASS.
+- Tab/ketiga layanan uji ditutup; fixture/storage temp dan empat file unduhan dihapus. Tanpa foto pribadi, script smoke permanen atau akses kamera.
 
 ## Modified files
 
-- `frontend/index.html` — panel ekstraksi/galeri, template kartu dan layout responsif.
-- `frontend/src/image-input.js` — koneksi reset/upload sukses ke workspace.
-- `frontend/src/extraction-workspace.js` — baru; submit, polling/lifecycle, status dan galeri.
-- `frontend/src/style.css` — pola transparansi preview.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` — panduan UI, kontrak dan D-024.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — bukti aktual dan satu next task.
+- `frontend/index.html` — kontrol ZIP, status/link unduh ulang dan checkbox kartu.
+- `frontend/src/extraction-workspace.js` — pilihan, request ekspor, validasi respons dan lifecycle abort/reset.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — penggunaan, D-026, bukti, status dan next task.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal `git status --short`, `git diff --stat`, `git diff --cached --stat`, `git diff` bersih. Catatan uncommitted tugas sebelumnya sudah kedaluwarsa; tidak menimpa perubahan awal.
+Inspeksi awal `git status --short`, `git diff --stat`, `git diff` menemukan **sepuluh file modified dan satu untracked** dari tugas ZIP sebelumnya; `git diff --cached --stat` kosong. Perubahan sebelumnya dipertahankan, bukan working tree bersih:
 
-Delapan file existing dan satu file baru dalam Modified files diubah pada sesi ini dan belum di-commit. Tidak ada script sementara tersisa. Tanpa staging/commit otomatis, instalasi atau download model.
+- `backend/package.json`, `backend/package-lock.json`, `backend/src/job-manager.js`, `backend/src/jobs.js`, `backend/test/jobs.test.js` serta helper untracked `backend/src/zip-export.js`.
+- Lima dokumen README/ARCHITECTURE/DECISIONS/PROGRESS/HANDOFF sudah modified sebelumnya dan diperbarui lagi pada sesi ini.
+
+Dua file frontend pada Modified files ditambahkan ke perubahan belum commit. Tidak staging/commit, instalasi atau download model. Git tidak dijalankan ulang setelah edit; daftar berdasarkan inspeksi awal dan operasi sesi.
 
 ## Current errors / limitations
 
-- Build dan skenario browser tugas ini PASS. Error harness (runtime document/assert dan pemilihan file sama) sudah diselesaikan tanpa perubahan aplikasi; detail di PROGRESS.
-- ZIP, batas antrean dan retensi belum tersedia. Ekstraksi sinkron M3 tetap di luar antrean job.
-- UI tidak memulihkan job setelah reload. Ganti/hapus pilihan menghentikan pengamatan browser, bukan job server. Setelah terminal, gunakan Hapus pilihan lalu pilih gambar untuk job baru.
-- Unduhan browser native tidak memiliki dialog error khusus aplikasi. Preview file gagal memiliki pesan per kartu.
-- Kategori ≤50 piksel tetap pada foreground tetapi tanpa file kategori. Semantic mask bukan instance; foto nyata/occlusion dan kamera/mobile fisik tidak diuji pada sesi ini.
-- Satu proses backend tetap menjadi pemilik storage privat; perlindungan path bukan proteksi terhadap proses lokal berbahaya yang mengganti file saat transfer.
-- Startup `server.js` masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); smoke memakai 30000 ms. Lisensi redistribusi checkpoint ATR belum terkonfirmasi.
-- LSP tidak dikonfigurasi; referensi dicari setelah tool menyatakan server tidak tersedia.
+- Tidak ada error aplikasi tersisa pada skenario UI ZIP yang dijalankan. Suite backend sesi sebelumnya 51/52 lalu koreksi ekspektasi JSON null PASS terarah 1/1; seluruh suite tidak diulang pada sesi ini karena backend tidak diubah.
+- Batas antrean/ekspor dan retensi belum tersedia. Tiap POST sukses membuat ekspor baru; crash sebelum publikasi dapat menyisakan direktori privat tanpa manifest.
+- UI tidak memulihkan job setelah reload; reset browser bukan pembatalan job/ekspor server. Unduhan native tidak memiliki dialog error transfer khusus; status sukses hanya menyatakan ZIP siap/unduhan diminta.
+- Ekstraksi sinkron M3 tetap di luar antrean; storage dimiliki satu proses backend. Pemeriksaan canonical bukan proteksi terhadap proses lokal berbahaya yang mengganti file saat transfer.
+- Startup server.js masih memakai AI_HEALTH_TIMEOUT_MS bersama (default 3000 ms); smoke memakai 30000 ms. Lisensi redistribusi checkpoint ATR belum terkonfirmasi.
+- Linux/macOS, kamera/mobile fisik dan kualitas foto nyata tidak diuji pada sesi ini. Skenario timeout 15 detik, reset melalui kamera/pagehide tidak diuji ulang khusus ZIP; ganti gambar saat JSON tertunda diuji langsung.
+- LSP tidak tersedia pada sesi ini; referensi setUploadedImage diperiksa dengan pencarian sebelum perubahan.
 
 ## Tests performed
 
-- **PASS** `npm run build --prefix frontend`: Vite 7 modul.
-- **PASS** browser build preview 5175 → Express 3120 → model asli 8020: upload, queued/processing/completed, tiga kartu human/Upper-clothes/Pants terdecode; input putih menghasilkan completed kosong.
-- **PASS** klik unduhan browser lalu Node/Sharp via stdin: PNG 451 byte identik dengan file kategori, RGBA 104×85, alpha 0/255.
-- **PASS** screenshot desktop 1365×1000/mobile 390×844, tanpa overflow horizontal.
-- **PASS** JSON POST tertunda → hapus, GET tertunda → ganti; signal aborted dan hasil usang tidak menimpa UI.
-- **PASS** gangguan polling → Periksa status: satu POST, job sama, galeri pulih; preview 404/upload gagal menampilkan state sesuai.
-- **PASS** kamera canvas sintetis → reset/capture/upload/track ended; navigasi pagehide saat POST tertunda → abort dan UI reset.
-- **PASS** AI dihentikan lalu ekstraksi: failed, tanpa kartu palsu, preview input tetap tersedia.
-- **PASS** cleanup tab, layanan uji, fixture/upload/job temp dan PNG unduhan.
-- **NOT RUN** suite backend/Python, kamera/mobile fisik, foto nyata dan ZIP. Backend/model tidak berubah; ZIP belum tersedia.
+- **PASS** `npm run build` dari cwd frontend: Vite 7 modul.
+- **PASS** browser Chromium build preview → Express → model asli: upload/ekstraksi sintetis, tiga preview terdecode, checkbox dan aksi ZIP, PNG individual.
+- **PASS** klik Unduh Pilihan/Unduh Semua dan pemeriksaan `ai-service/.venv-test/Scripts/python.exe -` (stdin zipfile/Pillow): ZIP dua kategori 1202 byte/semua 3824 byte, CRC, inventaris, byte PNG, RGBA/alpha 0/255; PNG individual 451 byte identik.
+- **PASS** screenshot desktop/mobile tanpa overflow, deselection, link unduh ulang tanpa POST, error HTTP 404 dengan pilihan dipertahankan, pemulihan mengunduh satu kategori.
+- **PASS** injeksi network failure/URL eksternal, JSON ekspor nyata ditahan lalu gambar diganti dan job kosong diselesaikan: tidak ada unduhan usang, signal aborted, kontrol sesuai job terbaru, hanya satu POST saat busy.
+- **PASS** browser errors kosong; cleanup tab, layanan uji, fixture/storage dan unduhan temp.
+- **NOT RUN** suite backend/Python, foto nyata/kamera/mobile fisik, M5. Backend/model tidak diubah; pengujian fitur memakai browser dan pemeriksaan archive.
 
 ## Next action (only one)
 
-**Implementasikan endpoint ZIP backend berbasis manifest:** `POST /api/jobs/:id/exports` untuk semua atau object_ids dan `GET /api/jobs/:id/exports/:exportId/download`. Hanya job completed dan objek terdaftar; ZIP privat, tanpa path client. Verifikasi isi sesuai pilihan/semua serta penolakan ID invalid/file hilang. Jangan mulai UI ZIP atau M5 pada tugas ini.
+**Mulai satu tugas M5:** implementasikan pemrosesan Classic Pixelation deterministik untuk satu PNG objek, ukuran 16/32/64/128 dengan nearest-neighbour dan alpha tetap terjaga. Tetapkan arti ukuran/aspect ratio secara eksplisit, gunakan Sharp existing, buktikan piksel/dimensi/alpha tanpa mengubah PNG asli. UI Studio, palet dan AI Stylization bukan bagian tugas pertama ini.
 
 ## Handoff rules
 

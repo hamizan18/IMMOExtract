@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import sharp from 'sharp';
 import { createApp } from '../src/app.js';
+import { writeZip } from '../src/zip-export.js';
 
 async function setup(t, aiClient) {
   const root = await mkdtemp(join(tmpdir(), 'immo-jobs-'));
@@ -409,4 +411,193 @@ test('object routes refuse a category directory redirected outside its job', asy
   await rename(directory, outside);
   await symlink(outside, directory, 'junction');
   await assertObjectError(base, queued.job_id, completed.objects[1].id, 500, 'JOB_FAILED');
+});
+
+async function exportRequest(base, jobId, body) {
+  return fetch(`${base}/api/jobs/${jobId}/exports`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+}
+
+async function assertExportError(response, status, code) {
+  assert.equal(response.status, status);
+  assert.equal(response.headers.get('cache-control'), 'no-store, private');
+  const body = await response.json();
+  assert.equal(body.error.code, code);
+  assert.ok(!JSON.stringify(body).includes('immo-jobs-'));
+}
+
+async function readZipEntries(bytes, path) {
+  await writeFile(path, bytes);
+  // Independent stdlib ZIP reader validates central directory, payloads and CRCs.
+  const script = 'import base64,json,sys,zipfile\nwith zipfile.ZipFile(sys.argv[1]) as z:\n assert z.testzip() is None\n print(json.dumps([[i.filename,base64.b64encode(z.read(i)).decode()] for i in z.infolist()]))';
+  const command = process.platform === 'win32' ? 'py' : 'python3';
+  const args = process.platform === 'win32' ? ['-3', '-c', script, path] : ['-c', script, path];
+  return JSON.parse(execFileSync(command, args, { encoding: 'utf8' }));
+}
+
+test('concurrent ZIP exports contain exactly selected/all original PNGs and survive restart', async t => {
+  const { base, root, options, serve } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, job.job_id);
+  const manifestBytes = await readFile(join(directory, 'manifest.json'));
+  const manifest = JSON.parse(manifestBytes);
+  const ids = job.objects.map(object => object.id);
+  const selections = [{ all: true }, { object_ids: [ids[1].toUpperCase()] }, { object_ids: [...ids].reverse() }];
+  const responses = await Promise.all(selections.map(selection => exportRequest(base, job.job_id, selection)));
+  const exports = [];
+  for (const response of responses) {
+    assert.equal(response.status, 201);
+    const result = await response.json();
+    assert.equal(response.headers.get('location'), result.download_url);
+    assert.equal(result.status, 'completed');
+    assert.equal(result.job_id, job.job_id);
+    assert.ok(!JSON.stringify(result).includes(options.jobDir));
+    exports.push(result);
+  }
+  assert.equal(new Set(exports.map(item => item.export_id)).size, 3);
+  const restarted = await serve();
+  for (let index = 0; index < exports.length; index++) {
+    const result = exports[index];
+    const expectedIds = index === 0 ? ids : selections[index].object_ids.map(id => id.toLowerCase());
+    assert.deepEqual(result.object_ids, expectedIds);
+    const response = await fetch(`${restarted}${result.download_url}`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/zip');
+    assert.equal(response.headers.get('content-disposition'), `attachment; filename="${result.export_id}.zip"`);
+    assert.equal(response.headers.get('cache-control'), 'no-store, private');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    const entries = await readZipEntries(Buffer.from(await response.arrayBuffer()), join(root, `download-${index}.zip`));
+    assert.deepEqual(entries.map(([name]) => name).sort(), expectedIds.map(id => `${id}.png`).sort());
+    for (const [name, base64] of entries) {
+      const object = manifest.objects.find(object => `${object.id}.png` === name);
+      assert.deepEqual(Buffer.from(base64, 'base64'), await readFile(join(directory, object.file)));
+    }
+  }
+  assert.deepEqual(await readFile(join(directory, 'manifest.json')), manifestBytes);
+});
+
+test('ZIP selection rejects malformed JSON, IDs, duplicate IDs and unregistered objects', async t => {
+  const { base } = await setup(t, { extractPath: writeCategoryOutput });
+  const first = await submit(base);
+  const job = await poll(base, first.job_id, 'completed');
+  const second = await submit(base, first.upload_id);
+  const other = await poll(base, second.job_id, 'completed');
+  for (const body of [[], {}, { all: false }, { all: 'true' }, { object_ids: [] },
+    { object_ids: 'all' }, { all: true, object_ids: [job.objects[0].id] }, { all: true, path: '../private' }]) {
+    await assertExportError(await exportRequest(base, job.job_id, body), 400, 'INVALID_EXPORT_INPUT');
+  }
+  await assertExportError(await exportRequest(base, 'invalid', { all: true }), 400, 'INVALID_JOB_ID');
+  await assertExportError(await exportRequest(base, randomUUID(), { all: true }), 404, 'JOB_NOT_FOUND');
+  await assertExportError(await exportRequest(base, job.job_id, { object_ids: ['../private.png'] }), 400, 'INVALID_OBJECT_ID');
+  await assertExportError(await exportRequest(base, job.job_id, {
+    object_ids: [job.objects[0].id, job.objects[0].id.toUpperCase()],
+  }), 400, 'DUPLICATE_OBJECT_ID');
+  for (const id of [randomUUID(), other.objects[0].id]) {
+    await assertExportError(await exportRequest(base, job.job_id, { object_ids: [id] }), 404, 'OBJECT_NOT_FOUND');
+  }
+  for (const [body, status] of [['null', 400], ['{', 400], [JSON.stringify({ object_ids: ['x'.repeat(3000)] }), 413]]) {
+    await assertExportError(await fetch(`${base}/api/jobs/${job.job_id}/exports`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    }), status, 'INVALID_JOB_REQUEST');
+  }
+  await assertExportError(await fetch(`${base}/api/jobs/${job.job_id}/exports`, {
+    method: 'POST', body: 'all',
+  }), 415, 'EXPORT_INPUT_REQUIRED');
+});
+
+test('ZIP creation/download rejects non-completed jobs and empty results', async t => {
+  const { base, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const response = await exportRequest(base, job.job_id, { all: true });
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  const path = join(options.jobDir, job.job_id, 'manifest.json');
+  const manifest = JSON.parse(await readFile(path));
+  for (const status of ['queued', 'processing', 'failed']) {
+    await writeFile(path, JSON.stringify({ ...manifest, status }));
+    await assertExportError(await exportRequest(base, job.job_id, { all: true }), 409, 'JOB_NOT_COMPLETED');
+    await assertExportError(await fetch(`${base}${result.download_url}`), 409, 'JOB_NOT_COMPLETED');
+  }
+  await writeFile(path, JSON.stringify({ ...manifest, objects: [] }));
+  await assertExportError(await exportRequest(base, job.job_id, { all: true }), 409, 'EXPORT_EMPTY');
+});
+
+test('missing selected PNG fails ZIP creation without artifacts; unselected missing PNG does not block', async t => {
+  const { base, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const directory = join(options.jobDir, job.job_id);
+  await rm(join(directory, 'objects', 'atr-4.png'));
+  await assertExportError(await exportRequest(base, job.job_id, { all: true }), 404, 'OBJECT_FILE_NOT_FOUND');
+  assert.ok(!(await readdir(directory)).includes('exports'));
+  const response = await exportRequest(base, job.job_id, { object_ids: [job.objects[0].id] });
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  await rm(join(directory, 'extracted.png'));
+  // The completed archive is a snapshot; it does not need to reopen source PNGs.
+  const download = await fetch(`${base}${result.download_url}`);
+  assert.equal(download.status, 200);
+  await download.arrayBuffer();
+});
+
+test('ZIP downloads require a matching published manifest and reject missing archives or junctions', async t => {
+  const { base, root, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const response = await exportRequest(base, job.job_id, { all: true });
+  assert.equal(response.status, 201);
+  const result = await response.json();
+  const second = await submit(base, queued.upload_id);
+  await poll(base, second.job_id, 'completed');
+  const url = id => `${base}/api/jobs/${job.job_id}/exports/${id}/download`;
+  await assertExportError(await fetch(url('invalid')), 400, 'INVALID_EXPORT_ID');
+  await assertExportError(await fetch(url(randomUUID())), 404, 'EXPORT_NOT_FOUND');
+  await assertExportError(await fetch(`${base}/api/jobs/${second.job_id}/exports/${result.export_id}/download`), 404, 'EXPORT_NOT_FOUND');
+  const directory = join(options.jobDir, job.job_id, 'exports', result.export_id);
+  const manifestPath = join(directory, 'manifest.json');
+  const manifestBytes = await readFile(manifestPath);
+  const manifest = JSON.parse(manifestBytes);
+  for (const changes of [{ job_id: second.job_id }, { export_id: randomUUID() }, { status: 'processing' }, { object_ids: [randomUUID()] }]) {
+    await writeFile(manifestPath, JSON.stringify({ ...manifest, ...changes }));
+    await assertExportError(await fetch(url(result.export_id)), 500, 'JOB_FAILED');
+  }
+  await rm(manifestPath);
+  await assertExportError(await fetch(url(result.export_id)), 404, 'EXPORT_NOT_FOUND');
+  await writeFile(manifestPath, manifestBytes);
+  const outside = join(root, 'outside-export');
+  await rename(directory, outside);
+  await symlink(outside, directory, 'junction');
+  await assertExportError(await fetch(url(result.export_id)), 500, 'JOB_FAILED');
+  await rm(directory);
+  await rename(outside, directory);
+  await rm(join(directory, 'archive.zip'));
+  await assertExportError(await fetch(url(result.export_id)), 404, 'EXPORT_NOT_FOUND');
+});
+
+test('ZIP storage failures and redirected export folders do not expose files outside the job', async t => {
+  const { base, root, options } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const exportsPath = join(options.jobDir, job.job_id, 'exports');
+  await writeFile(exportsPath, 'not a directory');
+  await assertExportError(await exportRequest(base, job.job_id, { all: true }), 500, 'JOB_FAILED');
+  await rm(exportsPath);
+  const outside = join(root, 'private-exports');
+  await mkdir(outside);
+  await symlink(outside, exportsPath, 'junction');
+  await assertExportError(await exportRequest(base, job.job_id, { all: true }), 500, 'JOB_FAILED');
+  assert.deepEqual(await readdir(outside), []);
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
+});
+
+test('ZIP streaming treats missing entry warnings and output failures as errors', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'immo-zip-stream-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await assert.rejects(writeZip([{ filePath: join(root, 'missing.png'), filename: 'object.png' }], join(root, 'partial.zip')));
+  const source = join(root, 'source.png');
+  await sharp({ create: { width: 2, height: 2, channels: 4, background: 'transparent' } }).png().toFile(source);
+  await assert.rejects(writeZip([{ filePath: source, filename: 'object.png' }], join(root, 'missing-directory', 'archive.zip')));
 });

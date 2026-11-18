@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Fondasi M1/M2, ekstraksi foreground M3, orchestrator/polling, PNG kategori ATR, UI galeri serta preview/unduhan PNG individual M4 tersedia. ZIP tetap rancangan. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** M1–M4 tersedia dan teruji pada Windows lokal, termasuk UI ZIP pilihan/semua. Retensi dan M5 belum tersedia. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -62,7 +62,11 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 **Integrasi browser aktual (D-024):** Lifecycle `image-input.js` memanggil `setUploadedImage()` pada modul `extraction-workspace.js` saat reset dan upload sukses. Tombol ekstraksi mengirim hanya upload_id; polling GET serial tiap 1 detik sampai terminal, timeout request 15 detik. AbortController dan identitas operasi menolak respons usang. Putus polling menyediakan pemeriksaan manual job yang sama, bukan POST ulang. Galeri memakai metadata polling dan URL preview/download D-023; label melalui textContent, tanpa HTML dari respons. State job tidak dipulihkan setelah reload.
 
-**Alur lengkap yang dituju (ZIP dan retensi belum tersedia):**
+**Ekspor ZIP aktual (D-025):** POST ekspor menerima JSON all:true atau object_ids unik; hanya objek manifest job completed. Manager memakai resolusi PNG yang sama dengan unduhan individual, lalu Archiver 8 menulis ZIP streaming dengan metode STORE. Setiap ekspor memiliki UUID dan manifest privat sendiri di `<job>/exports/<export_id>/`; ZIP diselesaikan dahulu, manifest dipublikasikan terakhir melalui rename. Tidak menulis ulang manifest job. Respons 201 berisi download_url setelah semua selesai, bukan antrean ekspor baru.
+
+**UI ZIP aktual (D-026):** Checkbox pada kartu galeri, jumlah pilihan dan tombol Unduh Pilihan/Semua memakai API D-025. Satu ekspor browser aktif; tombol/checkbox dikunci selama request. AbortController ekspor terpisah mengikuti reset upload yang sama; identitas operasi diperiksa setelah body JSON selesai agar respons lama tidak memicu unduhan. download_url wajib sesuai endpoint job/export UUID sebelum link native diklik. Link sukses dipertahankan untuk unduh ulang tanpa POST. Error tidak menghapus pilihan; timeout 15 detik, tanpa retry otomatis.
+
+**Alur lengkap yang dituju (retensi belum tersedia):**
 
 1. `POST /api/jobs`: upload satu gambar valid; Express buat `job_id` acak, simpan input, metadata status `queued`.
 2. Worker mengambil pekerjaan; ubah ke `processing`.
@@ -84,8 +88,8 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | GET | `/api/jobs/:id/objects` | Manifest objek hasil ekstraksi |
 | GET | `/api/jobs/:id/objects/:objectId` | Tersedia: preview PNG, hanya objek manifest job completed |
 | GET | `/api/jobs/:id/objects/:objectId/download` | Tersedia: attachment PNG asli dengan nama UUID objek |
-| POST | `/api/jobs/:id/exports` | Pilih `all` / `object_ids[]`, mulai ZIP |
-| GET | `/api/jobs/:id/exports/:exportId/download` | Ambil ZIP yang sudah siap |
+| POST | `/api/jobs/:id/exports` | Tersedia: JSON all:true atau object_ids, HTTP 201 + Location setelah ZIP selesai |
+| GET | `/api/jobs/:id/exports/:exportId/download` | Tersedia: attachment ZIP privat berbasis manifest ekspor/job |
 | POST | `/api/jobs/:id/pixelate` | Pixelation pilihan objek / ukuran / warna |
 | POST | `/api/jobs/:id/stylize` | Fase lanjut: generative image-to-image |
 | GET | `/api/health` | Health Express (tersedia M1) |

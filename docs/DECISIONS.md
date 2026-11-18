@@ -251,6 +251,31 @@
 - **Bukti:** Build Vite PASS (7 modul). Browser build preview → Express → model asli: tiga kartu, download byte-identical RGBA/alpha 0/255, blank input → kosong, AI dihentikan → failed. Desktop 1365×1000/mobile 390×844 tanpa overflow. Fault injection polling/preview/upload, respons JSON tertunda, capture sintetis dan navigasi pagehide PASS.
 - **Konsekuensi:** ZIP masih tugas M4. Gunakan Hapus pilihan dan pilih gambar untuk job baru; tidak ada riwayat UI/pembatalan server. Kegagalan unduhan ditangani browser, bukan dialog khusus aplikasi. Tidak menguji foto pribadi/kamera fisik.
 
+## D-025 — ZIP streaming pilihan/semua dengan manifest ekspor terpisah
+
+- **Tanggal:** 2026-11-17.
+- **Status:** Accepted; pengujian job/ZIP dan smoke model asli selesai.
+- **API:** `POST /api/jobs/:id/exports` menerima hanya `{"all":true}` atau `{"object_ids":[...]}` tidak kosong, UUID dinormalisasi dan duplikat ditolak. Hanya job completed dan objek terdaftar. Respons HTTP 201 + Location setelah file selesai: export_id, job_id, status completed, object_ids, created_at, download_url. Tidak menambah antrean/background export atau endpoint polling.
+- **Penyimpanan:** `<job>/exports/<export_id>/archive.zip` dan `manifest.json`. UUID per ekspor; streaming ke archive.tmp, rename ZIP, lalu tulis/rename manifest terakhir. Kegagalan setelah direktori ekspor dibuat membersihkan direktori tersebut. Manifest job tidak diubah, sehingga ekspor paralel tidak berebut penulisan dengan polling.
+- **Isi:** Hanya PNG terpilih dengan nama `<object_id>.png`, tanpa foto input, mask atau metadata privat. `all` mencakup foreground manusia dan kategori. Byte PNG tidak ditransformasi; metode ZIP STORE menghindari kompresi ulang PNG. ZIP selesai menjadi snapshot mandiri, dapat diunduh setelah restart atau PNG sumber hilang.
+- **Dependensi:** Pin [Archiver 8.0.0](https://registry.npmjs.org/archiver/8.0.0) (ESM, MIT, Node >=18) dan lockfile npm; penggunaan `ZipArchive` mengikuti README paket. Sesuai stack yang direncanakan; bukan mengganti teknologi. Error/warning sumber ZIP wajib menggagalkan ekspor, bukan melewatkan entry.
+- **Akses:** GET `/api/jobs/:id/exports/:exportId/download` memeriksa job completed, manifest ekspor cocok, inventaris objek, lokasi canonical dan regular file. Symlink/junction pengalihan ditolak; tidak menerima path client/static storage. Header application/zip, attachment UUID.zip, no-store/private dan nosniff. JSON dibatasi 2 KiB, mengikuti router job.
+- **Alasan/alternatif:** Manifest ekspor terpisah menghindari perubahan job terminal serta race rename Windows. Publikasi setelah selesai dipilih daripada streaming langsung ke HTTP agar file hilang/kegagalan storage tidak menghasilkan unduhan parsial yang dilabeli sukses.
+- **Bukti:** Suite job awal 51/52 PASS; satu ekspektasi tes JSON null salah (parser strict menghasilkan INVALID_JOB_REQUEST, bukan INVALID_EXPORT_INPUT). Setelah koreksi tes, pengujian terarah PASS 1/1. Source aplikasi tidak diubah untuk koreksi ini. Tes lain membuktikan isi byte-identical melalui zipfile Python, konkurensi/restart, akses/status/input invalid, file hilang, junction, dan kegagalan stream/storage.
+- **Smoke:** Model asli FastAPI 8021 + Express terisolasi, inferensi 2.1146s; ZIP dua kategori 1202 byte dan ZIP semua tiga objek 3824 byte. CRC, inventaris, byte PNG, RGBA dan alpha 0/255 PASS.
+- **Konsekuensi:** UI ZIP dan retensi belum tersedia; tiap POST sukses membuat ekspor baru. Crash proses sebelum publikasi dapat meninggalkan direktori tanpa manifest yang tidak dapat diunduh; cleanup retensi masih terpisah. Storage privat tetap diasumsikan dimiliki satu proses backend.
+
+## D-026 — UI ZIP mengikuti lifecycle galeri tanpa menyalin archive ke browser
+
+- **Tanggal:** 2026-11-18.
+- **Status:** Accepted; build dan browser desktop/mobile dengan model asli PASS.
+- **Keputusan:** Checkbox tiap kartu tanpa pilihan awal; Unduh Pilihan mengirim object_ids yang dicentang, Unduh Semua mengirim all:true termasuk foreground. Jumlah pilihan ditampilkan; tidak ada hasil/pilihan menonaktifkan aksi terkait.
+- **Lifecycle:** Satu request ekspor aktif di browser, checkbox/tombol terkunci hingga selesai. AbortController terpisah dibatalkan oleh reset upload/gambar/kamera/pagehide. Pemeriksaan identitas setelah JSON selesai menolak respons usang. Timeout 15 detik; tidak ada retry otomatis. Error mempertahankan pilihan dan memperingatkan kemungkinan ekspor sudah tersimpan.
+- **Unduhan:** Validasi job_id, status, UUID export_id dan kesamaan download_url dengan endpoint privat yang diharapkan. Klik link attachment native setelah sukses; link tetap tersedia untuk unduh ulang tanpa POST. Tidak memuat seluruh ZIP sebagai blob atau mengklaim transfer selesai.
+- **Alasan/alternatif:** Memakai galeri/lifecycle/API yang ada tanpa dependensi/state store baru. Link native menghindari salinan archive di memori browser; link eksplisit mengatasi unduhan otomatis yang diblokir browser.
+- **Bukti:** Build Vite PASS. Browser build preview → Express → model asli menghasilkan tiga objek; ZIP pilihan dua kategori/semua tiga objek cocok inventaris, CRC, byte PNG dan RGBA/alpha 0/255. PNG individual tetap byte-identical. Desktop/mobile tanpa overflow; error HTTP/network, URL respons tidak aman, respons JSON tertunda setelah ganti gambar/job kosong, single POST saat busy dan unduh ulang tanpa POST PASS.
+- **Konsekuensi:** M4 selesai pada jalur lokal teruji; tidak menjalankan M5 pada tugas ini. Reset browser bukan pembatalan ekspor server; retensi/batas ekspor dan dialog kegagalan transfer native belum tersedia. Kamera/mobile fisik dan kualitas pada foto nyata tidak diuji pada tugas ini.
+
 ## Keputusan yang masih terbuka
 
 - [x] Versi runtime dan dependensi AI M3 setelah smoke CPU (D-015: torch 2.15.0+cpu, torchvision 0.29.2+cpu, numpy 2.5.4, pillow 13.0.0 pada Python 3.14.3).
@@ -260,10 +285,10 @@
 - [x] Endpoint FastAPI AI service (`POST /extract`, `POST /extract-path`, `GET /health`) dan model lifecycle management (D-019).
 - [x] Integrasi Express backend dengan FastAPI AI service (`AiClient`, `/api/uploads/:uploadId/extract`, asset serving PNG/mask) (D-020).
 - [x] Arsitektur Job Orchestrator & Polling status untuk ekstraksi asynchronous di M4 (D-021).
-- [ ] Pembuatan archive ZIP beberapa/semua objek (M4); galeri serta unduhan PNG individual tersedia (D-023/D-024).
+- [x] Integrasi UI pemilihan objek/ZIP (M4), endpoint D-025 dan UI D-026 terverifikasi.
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
 - [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
 - [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
 
-**Format entri baru:** `D-025 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+**Format entri baru:** `D-027 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
