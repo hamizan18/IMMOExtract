@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. Classic Pixelation tersedia melalui helper, API snapshot dan UI per objek, termasuk palet Retro 16 opsional. M6 belum dimulai. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. Classic Pixelation tersedia melalui helper, API snapshot dan UI per objek, termasuk palet Retro 16 opsional. M6 sedang evaluasi kelayakan; AI Stylization belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -112,6 +112,12 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
   - `GET /api/jobs/<job_id>/pixelations/<pixelation_id>/download`: menyajikan attachment PNG hasil pixelation.
 - Di kartu objek, pilih **Ukuran** dan **Palet**, lalu **Pixelate**. Default **Warna asli**; **Retro 16 warna** mengubah warna, bukan alpha. Preview, keterangan hasil dan link unduhan menyebut palet hasil tersebut. Ganti pilihan tidak mengubah snapshot sebelumnya sampai Pixelate ditekan. Ukuran/palet/tombol terkunci selama request; reset upload meng-abort pengamatan hasil usang.
 - Pengujian 2026-11-19: `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` **64/64 PASS**; build frontend dan browser model asli empat grid Retro, kembali ke Warna asli, unduhan, alpha/RGB transparan, serta original/ZIP tetap identik **PASS**. Unduhan PNG/ZIP asli tetap independen.
+
+## Kesiapan AI Stylization (M6)
+
+Evaluasi awal memilih SD 1.5 img2img CPU sebagai kandidat POC, dengan LoRA pixel-art opsional setelah baseline terbukti. Belum ada engine/bobot generatif terpasang pada runtime proyek atau inferensi generatif yang diuji. RAM bebas saat inventaris 2.20 GiB; metadata bobot FP32 termasuk safety checker sekitar 5.10 GiB belum menghitung aktivasi, sehingga risiko memori tinggi. Angka tersebut bukan benchmark. Rincian kandidat, lisensi, strategi alpha sumber dan gerbang pembuktian ada di [D-031](docs/DECISIONS.md#d-031--readiness-m6-kandidat-cpu-terisolasi-belum-mengaktifkan-stylization).
+
+Tidak ada download model otomatis atau perubahan environment SCHP. AI Stylization tetap ditandai belum tersedia; Classic Pixelation bukan pengganti generasi AI.
 
 ## Menjalankan Aplikasi (M1–M5)
 

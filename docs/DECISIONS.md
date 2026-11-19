@@ -370,4 +370,59 @@
 - **Browser:** Build preview 5178 → Express 3124 → model asli 8024, fixture sintetis: empat ukuran Retro dan kembali ke Warna asli; tujuh unduhan aktual termasuk original/ZIP. Python/Pillow memverifikasi seluruh piksel terhadap oracle terpisah, alpha/hidden RGB, metadata snapshot, preview=download dan CRC ZIP. Desktop/mobile tanpa overflow; accessibility tree memberi nama kedua pemilih. Fault injection HTTP 500, palette respons salah, busy controls dan reset ketika JSON respons nyata ditahan PASS.
 - **Konsekuensi:** M6 tidak dimulai pada tugas ini. Retensi, kualitas foto nyata dan keterbatasan detail sampling tetap terbuka. LSP tidak tersedia; referensi helper ditelusuri lewat pencarian sebelum perubahan.
 
-**Format entri baru:** `D-031 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+## D-031 — Readiness M6: kandidat CPU terisolasi, belum mengaktifkan stylization
+
+- **Tanggal:** 2026-11-19.
+- **Status:** Accepted untuk arah preflight; model/engine final, kelayakan inferensi, kualitas dan latensi **belum terbukti**. M6 mulai tahap evaluasi; bukan fitur selesai.
+- **Fakta lokal:** Windows 11 10.0.26200, Ryzen 5 7430U (6 core/12 thread), RAM terlihat 7.40 GiB dan bebas 2.20 GiB saat inventaris, disk D: bebas 26.04 GiB. GPU terdeteksi hanya AMD Radeon Graphics, AdapterRAM 512 MiB (bukan total shared memory). Python terdaftar hanya 3.14.3; `.venv-test` memakai torch 2.15.0+cpu/torchvision 0.29.2+cpu, CUDA/HIP build `None`, CUDA unavailable. Diffusers/Transformers/Accelerate/Safetensors/ONNX Runtime/DirectML tidak terpasang di environment itu. Dalam `ai-service/models` hanya checkpoint SCHP 267,445,237 byte.
+- **Batas bukti:** Inventaris dan inspeksi source tidak menemukan integrasi generatif proyek. Tidak melakukan instalasi, download bobot, inferensi generatif, benchmark RAM/latensi atau perubahan environment. Tidak menyimpulkan generasi mustahil hanya dari inventaris.
+
+### Kandidat dan engine
+
+| Kandidat | Bukti primer / lisensi | Keputusan readiness |
+| --- | --- | --- |
+| SD 1.5 img2img, prompt pixel art | [Model card mirror](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5), [panduan img2img](https://huggingface.co/docs/diffusers/en/using-diffusers/img2img); model dilatih 512×512, CreativeML OpenRAIL-M | Kandidat baseline CPU FP32, batch 1; bukan model pixel-art khusus dan belum terbukti menjaga detail objek |
+| SD 1.5 + PixelArtRedmond15V LoRA | [Card pembuat](https://huggingface.co/artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5), trigger `pixel art, PixArFK`; adapter memerlukan base SD 1.5 | Kandidat tahap setelah baseline lolos, bukan pengganti base model yang jauh lebih besar |
+| SDXL | Panduan img2img menyebut base lebih besar dan refiner opsional | Tidak menjadi POC pertama pada headroom RAM ini; bukan klaim semua konfigurasi SDXL mustahil |
+
+- **Engine calon:** Diffusers dalam environment POC terpisah memberi kontrol img2img/alpha tanpa UI engine tambahan; belum dipasang ke FastAPI. [Metadata PyPI](https://pypi.org/pypi/diffusers/json) menunjukkan 0.43.0, Python >=3.11 dan extra torch >=2.6. Ini bukan bukti seluruh dependensi bekerja di Python 3.14/Windows atau pin versi final. Jangan downgrade Python/torch existing berdasarkan asumsi.
+- **Alternatif:** [ComfyUI upstream](https://github.com/Comfy-Org/ComfyUI) mendokumentasikan CPU-only, Python 3.14 dan workflow/API lokal; masih kandidat engine, bukan kebutuhan memasang desktop/portable CUDA pada laptop ini. Bila dievaluasi kelak, hanya core lokal/offline, tanpa partner/cloud nodes atau custom nodes tak diaudit. Tidak mengganti stack Express–FastAPI.
+- **GPU:** Ryzen 7430U tidak tercantum pada daftar Ryzen [matriks ROCm 10.2.0 yang diperiksa](https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html). Tidak menjanjikan akselerasi ROCm dan tidak memasang driver/override GPU. [DirectML Microsoft](https://learn.microsoft.com/en-us/windows/ai/directml/pytorch-windows) adalah jalur preview untuk DX12, bukan bukti kompatibilitas pipeline/wheel CPython 3.14 yang tersedia. Evaluasi GPU harus terpisah, bukan mengganti torch CPU SCHP.
+
+### Resource dan lisensi
+
+Ukuran berikut berasal dari metadata [tree SD 1.5](https://huggingface.co/api/models/stable-diffusion-v1-5/stable-diffusion-v1-5/tree/main?recursive=true) dan [tree LoRA](https://huggingface.co/api/models/artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5/tree/main?recursive=true); **bukan RAM puncak atau binary/hash yang telah diverifikasi lokal**. Jangan mengunduh seluruh repo yang berisi varian duplikat.
+
+| Pilihan berkas safetensors | Total byte | GiB |
+| --- | ---: | ---: |
+| SD15 FP32 UNet + text encoder + VAE | 4,265,076,690 | 3.97 |
+| SD15 FP32 di atas + safety checker | 5,481,058,520 | 5.10 |
+| SD15 FP16 empat komponen termasuk safety checker | 2,740,623,950 | 2.55 |
+| PixelArtRedmond15V adapter saja | 27,216,848 | 0.025 |
+
+- **[INFERENCE] Risiko memori:** Bobot FP32 melebihi RAM bebas terukur sebelum menghitung aktivasi, interpreter, loader dan SCHP. Disk tersedia bukan bukti RAM cukup. FP16 lebih kecil di disk tidak membuktikan operator CPU cepat/kompatibel; jangan menonaktifkan safety checker untuk mengejar angka. [CPU offload Diffusers](https://huggingface.co/docs/diffusers/en/optimization/memory) memindahkan bobot GPU↔CPU, bukan solusi otomatis bagi CPU-only dengan RAM terbatas.
+- **Lisensi SD15:** [CreativeML OpenRAIL-M lengkap](https://huggingface.co/spaces/CompVis/stable-diffusion-license/raw/main/license.txt) memuat pembatasan penggunaan, kewajiban meneruskan lisensi/notices/restriksi saat distribusi, dan tidak memberi lisensi dataset. Card menyatakan intended research dan keterbatasan safety/identitas. Ini bukan bobot MIT atau izin bebas tanpa syarat; jangan bundling sebelum audit distribusi.
+- **Lisensi LoRA:** Card menunjuk [ketentuan bespoke](https://multimodal.art/civitai-licenses?allowNoCredit=True&allowCommercialUse=Rent&allowDerivatives=True&allowDifferentLicense=False): penjualan gambar/layanan generasi diizinkan, penjualan model/merge dan perubahan izin merge tidak diizinkan. Ketentuan base tetap berlaku. Simpan salinan lisensi/revisi saat download kelak; tidak menjanjikan hak komersial/redistribusi menyeluruh.
+
+### Alpha dan gerbang pembuktian
+
+- **Fakta:** [Konfigurasi VAE SD15](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/raw/main/vae/config.json) memiliki `in_channels: 3`, `out_channels: 3`; `latent_channels: 4` bukan RGBA. Model ini tidak otomatis menghasilkan transparansi.
+- **Rancangan POC, belum kode:** Ambil PNG objek manifest, simpan alpha sumber, komposit RGB ke latar netral dan letterbox tanpa stretch; jalankan img2img lokal; undo padding/resize ke dimensi crop asli, lalu pasang kembali alpha sumber. Hasil adalah **AI stylization dengan silhouette sumber**, bukan ekstraksi asli atau alpha yang diprediksi model. Konten dapat bergeser melewati mask atau membentuk halo; cek tepi/occlusion sebelum menerima hasil. Mask baru/manual correction tetap pekerjaan M6 terpisah.
+- **Urutan aman:** Preflight dependensi tanpa bobot dahulu. Setelah hasilnya dan izin download eksplisit, pin revision/hash/berkas/lisensi, uji satu gambar sintetis batch 1 dalam proses terisolasi; jangan muat SCHP dan generator bersamaan pada POC pertama. Ukur waktu load/inferensi, peak RAM/commit dan headroom sistem; uji 256 lalu 512 sebagai probe, bukan klaim kualitas pada resolusi di luar training.
+- **Syarat sebelum integrasi:** Inferensi asli offline, hasil generatif berlabel jujur, alpha/ukuran/unduhan benar, original tidak berubah, kualitas tepi layak, kegagalan resource aman dan biaya runtime terukur. Bila belum lolos, UI tetap menyatakan AI Stylization belum tersedia; jangan menggantinya dengan Classic Pixelation yang dilabeli AI.
+- **Next single task:** Preflight resolusi dependensi Diffusers CPU untuk Windows/Python 3.14 secara `pip --dry-run --only-binary=:all:` dengan constraint torch CPU existing dan report sementara. Tanpa instalasi, perubahan `.venv`/`.venv-test`, atau download checkpoint; hasil resolver bukan tes inferensi.
+
+## D-032 — Preflight dependensi Diffusers CPU tanpa instalasi
+
+- **Tanggal:** 2026-11-19.
+- **Status:** Accepted sebagai rencana pin untuk smoke runtime terisolasi; bukan runtime teruji atau pemilihan engine final.
+- **Perintah aktual:** `ai-service/.venv-test/Scripts/python.exe -B -m pip --isolated --disable-pip-version-check install --dry-run --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --constraint <constraints-temp> --report <report-temp.json> "diffusers[torch]==0.43.0" transformers accelerate safetensors`. pip 25.3, CPython 3.14.3, Windows AMD64. Constraint: `torch==2.15.0+cpu`, `torchvision==0.29.2+cpu`, `numpy==2.5.4`, `pillow==13.0.0`.
+- **Bukti:** Exit 0; 28 paket direncanakan, semua URL report berupa wheel. Tidak ada penggantian empat paket terlindungi. Inventaris nama/versi distribusi `.venv` dan `.venv-test` sebelum/sesudah identik. Hanya metadata wheel diunduh; tanpa instalasi, checkpoint, import generatif atau perubahan source. Report sementara dan constraint dihapus sesudah hasil dicatat.
+- **Rencana pin langsung:** `diffusers[torch]==0.43.0`, `transformers==5.23.0`, `accelerate==1.16.0`, `safetensors==0.8.0`, dengan torch CPU/torchvision/NumPy/Pillow sesuai constraint di atas. Sumber resolusi [PyPI simple index](https://pypi.org/simple); versi ini kandidat smoke, bukan pin requirements aplikasi.
+- **Rencana transitif baru dari report:** `huggingface_hub==2.4.0`, `hf-xet==1.8.0`, `httpx2==2.16.2`, `httpcore2==2.16.2`, `tokenizers==0.23.3`, `packaging==26.3`, `PyYAML==6.0.3`, `regex==2026.11.19`, `tqdm==4.70.1`, `truststore==0.10.5`, `colorama==0.4.6`, `importlib_metadata==10.2.0`, `lazy-importer==0.1.0`, `zipp==4.1.2`, `psutil==7.2.2`, `requests==2.34.2`, `charset-normalizer==3.5.2`, `urllib3==2.8.0`, `typer==0.29.2`, `rich==15.0.0`, `Pygments==2.21.0`, `markdown-it-py==4.3.0`, `mdurl==0.1.2`, `shellingham==1.5.4`.
+- **Wheel native:** regex/PyYAML/charset-normalizer memakai cp314-win_amd64; Safetensors/Tokenizers/hf-xet/psutil memakai ABI3 Windows AMD64. Resolver tidak meminta source build. Ini belum membuktikan DLL/import/operator CPU berjalan.
+- **Alasan/alternatif:** Constraint eksplisit mencegah resolver mengganti runtime CPU yang sudah bekerja. `--isolated`, index eksplisit dan `--no-cache-dir` menghindari konfigurasi pip pengguna serta penulisan cache. Tidak memakai upgrade/install di environment SCHP atau mengganti Python tanpa konflik nyata.
+- **Batas:** Ini resolusi inkremental terhadap paket existing, bukan lock lengkap environment kosong. Paket yang sudah memenuhi syarat tidak masuk daftar install report; constraint bukan sumber wheel torch CPU untuk environment baru. Kompatibilitas API Diffusers–Transformers, PEFT/LoRA, import dan inferensi SD15 belum diuji. Tidak ada alasan dari hasil resolver ini untuk downgrade runtime.
+- **Next single task:** Siapkan environment POC terpisah tanpa akses paket `.venv-test`, pasang kandidat pin dengan wheel torch dari index CPU resmi, lalu smoke import pipeline SD15 dan forward komponen kecil berkonfigurasi sintetis tanpa bobot unduhan. Jangan mengubah environment SCHP atau requirements aplikasi. Download checkpoint/benchmark model asli tetap memerlukan izin eksplisit dan pemeriksaan resource D-031.
+
+**Format entri baru:** `D-033 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

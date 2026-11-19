@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. Classic Pixelation helper/API/UI mendukung empat grid serta palet Retro 16 opsional tanpa mengubah alpha/RGB transparan (D-030). M6 belum dimulai; retensi serta evaluasi kualitas foto nyata tetap terbuka.
+> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6 mulai evaluasi kelayakan (D-031); belum ada implementasi/inferensi AI Stylization atau koreksi mask. Classic Pixelation tetap tersedia dan independen. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
 
 ## Ringkasan
 
-- **Current milestone:** M5 — Classic Pixelation Studio — Complete pada jalur lokal teruji; M6 belum dimulai.
-- **Current task:** Palet opsional FR-10 selesai end-to-end; berikutnya evaluasi kelayakan M6.
-- **Overall status:** Empat ukuran, mode Warna asli/Retro 16, snapshot privat dan unduhan teruji. Original PNG/ZIP tetap independen. Palet tetap bukan AI generatif atau palet adaptif dari foto.
-- **Last verification:** 2026-11-19 — `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` PASS 64/64; `npm run build` di frontend PASS; browser build preview → model asli, unduhan dan oracle Python/Pillow PASS. Detail pada verification log.
+- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress (readiness saja).
+- **Current task:** Preflight resolver dependensi CPU tanpa bobot selesai (D-032); berikutnya smoke runtime dalam environment POC terpisah tanpa checkpoint.
+- **Overall status:** Resolver wheel Windows/Python 3.14 lolos dengan torch CPU existing; SD 1.5 img2img tetap kandidat, bukan fitur siap pakai. Headroom RAM terbatas; engine/model final belum dipilih lewat benchmark. M5 tetap complete pada jalur lokal teruji.
+- **Last verification:** 2026-11-19 — pip 25.3 `install --dry-run --only-binary=:all:` PASS, 28 paket wheel direncanakan tanpa penggantian torch/torchvision/NumPy/Pillow. Inventaris distribusi kedua venv sebelum/sesudah identik; tanpa instalasi atau download checkpoint.
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
+| M6 | AI stylization lokal dan koreksi mask | In progress (readiness) | Inventaris D-031 dan resolver wheel CPU D-032 selesai; runtime/inferensi, kualitas/alpha dan koreksi mask belum terbukti |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -110,10 +110,17 @@
 - Pemilih ukuran/palet memiliki label serta nama aksesibel per objek; keduanya dikunci selama request. UI memvalidasi palette respons dan mencantumkan mode pada hasil/unduhan. Temuan combobox tanpa nama dari smoke sebelumnya sudah diperbaiki.
 - Tes helper/job 64/64 PASS; build PASS. Browser model asli memproses empat grid Retro dan kembali ke original; Python/Pillow memeriksa semua piksel lima hasil, hidden RGB dan alpha, byte preview/download, original/ZIP serta CRC. Fault injection HTTP error/palette mismatch dan respons tertunda saat reset PASS; screenshot desktop/mobile tanpa overflow. M5 selesai; tidak menjalankan implementasi M6.
 - Git awal tugas FR-10 bersih termasuk index. Perubahan: dua source backend, dua source frontend, dua file tes serta README/ARCHITECTURE/DECISIONS/PROGRESS/HANDOFF. Tanpa dependensi/model baru, staging atau commit.
+- Readiness M6 (2026-11-19, D-031): source/backend belum memuat integrasi generatif. Windows CIM: Ryzen 5 7430U 6C/12T, RAM terlihat 7.40 GiB/bebas 2.20 GiB, Radeon Graphics AdapterRAM 512 MiB (bukan total shared memory), D: bebas 26.04 GiB. Python 3.14.3, torch 2.15.0+cpu, CUDA/HIP build None; paket generatif/DirectML tidak ada di `.venv-test`, model lokal hanya SCHP.
+- Sumber primer SD15, LoRA PixelArtRedmond15V, Diffusers, ComfyUI, ROCm/DirectML dan lisensi diperiksa tanpa binary. Kandidat POC CPU terisolasi; tidak memilih GPU/downgrade runtime secara spekulatif. Metadata bobot FP32 dengan safety checker 5.10 GiB, FP16 2.55 GiB; bukan pengukuran RAM. Risiko kehabisan RAM tinggi dibanding headroom aktual, bukan bukti inferensi pasti gagal.
+- VAE SD15 input/output RGB tiga channel; alpha memerlukan mask sumber/post-processing. Rancangan mempertahankan silhouette sumber dicatat sebagai proposal belum diuji, bukan kemampuan alpha model. Lisensi base OpenRAIL-M dan LoRA bespoke memiliki kewajiban/restriksi berbeda.
+- Git awal readiness bersih termasuk index; sebelas perubahan FR-10 sebelumnya tidak lagi pending. Sesi ini hanya mengubah README, DECISIONS, PROGRESS dan HANDOFF; tanpa source, install, download model, staging atau commit.
+- Preflight M6 (2026-11-19, D-032): pip dry-run binary-only pada CPython 3.14.3/Windows AMD64 berhasil dengan constraint torch 2.15.0+cpu, torchvision 0.29.2+cpu, NumPy 2.5.4 dan Pillow 13.0.0. Kandidat langsung: Diffusers 0.43.0, Transformers 5.23.0, Accelerate 1.16.0 dan Safetensors 0.8.0; total 28 wheel baru tanpa penggantian paket terlindungi.
+- Inventaris distribusi `.venv`/`.venv-test` sebelum dan sesudah identik. Report/constraint sementara dihapus; tidak memasang paket, mengunduh checkpoint, menjalankan generasi atau mengubah source/requirements. Resolusi inkremental bukan bukti environment kosong atau kompatibilitas runtime.
+- Git awal preflight memuat empat dokumen modified dari readiness (README/DECISIONS/PROGRESS/HANDOFF), index kosong; perubahan tersebut dipertahankan. Sesi ini memperbarui tiga dokumen docs saja; README tidak diubah lagi. Tanpa staging/commit.
 
 ## In progress
 
-- Tidak ada implementasi setengah jadi pada tugas palet M5. Tugas berikutnya adalah evaluasi kelayakan M6, bukan langsung memasang model generatif.
+- M6: preflight resolver selesai; smoke import/komponen sintetis di environment POC terpisah tanpa checkpoint adalah langkah berikutnya. Integrasi generatif belum tersedia; koreksi mask belum dikerjakan. Tidak menyamakan hasil resolver dengan keberhasilan fitur.
 
 ## Blockers / risks
 
@@ -133,11 +140,13 @@
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
 - Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Mode original mempertahankan RGBA piksel terpilih; Retro mengubah RGB terlihat ke palet tetap, bukan menjaga warna asli. Alpha/hidden RGB tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
 - Retro 16 membatasi RGB terlihat saja; PNG tetap RGBA8 dan dapat memiliki lebih dari 16 kombinasi RGBA karena alpha parsial/hidden RGB. Palet tidak adaptif/perseptual dan tidak memakai dithering.
+- Readiness M6: 2.20 GiB RAM bebas adalah snapshot, bukan kapasitas terjamin. Peak RAM/latensi/compatibility Diffusers pada Python 3.14 dan kualitas img2img belum diukur. Ryzen 7430U tidak tercantum pada matriks ROCm 10.2.0 yang diperiksa; DirectML belum diuji, tidak menjanjikan akselerasi GPU.
+- Alpha sumber yang dipasang kembali tidak menjamin hasil generatif sejajar dengan silhouette; risiko halo/detail terpotong. Download/benchmark bobot harus mendapat izin eksplisit; lisensi SD15/LoRA tidak disamakan dengan lisensi kode.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Evaluasi kelayakan AI Stylization lokal M6 pada hardware/runtime existing, termasuk kandidat model, lisensi, kebutuhan RAM/CPU/GPU dan strategi alpha; tanpa mengunduh model besar atau mengganti environment sebelum izin pengguna.
+Siapkan environment POC terpisah dan smoke runtime kandidat pin D-032 (import pipeline SD15 + forward komponen kecil sintetis), tanpa checkpoint/model unduhan dan tanpa mengubah `.venv`, `.venv-test` atau requirements aplikasi. Wheel torch harus berasal dari index CPU resmi; daftar hasil resolver inkremental bukan lock environment kosong. Download checkpoint/benchmark model asli tetap memerlukan izin eksplisit.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -311,6 +320,17 @@ Evaluasi kelayakan AI Stylization lokal M6 pada hardware/runtime existing, terma
 | 2026-11-19 | Browser fault injection dan screenshot desktop/mobile | PASS | HTTP 500 membuka kembali kontrol; palette respons tidak cocok ditolak; kedua pemilih/tombol terkunci saat busy; reset meng-abort JSON nyata tertunda dan galeri tetap kosong. Desktop 1365×1000/mobile 390×844 tanpa overflow/page error |
 | 2026-11-19 | Cleanup FR-10 | PASS | Tab/layanan 5178/3124/8024 ditutup; tujuh unduhan dan fixture/uploads/jobs temp dihapus; tidak membuat script permanen atau menyentuh foto pengguna |
 | 2026-11-19 | Suite upload/ekstraksi sinkron/Python AI, kamera/mobile fisik, kualitas foto nyata, timeout/pagehide pixelation dan M6 | NOT RUN | Verifikasi terarah helper/job serta browser; jalur lain tidak diubah |
+| 2026-11-19 | Readiness M6: Git status/diff/index dan pencarian integrasi generatif di source terkait | PASS inspeksi | Working tree/index bersih; belum ada integrasi generatif proyek |
+| 2026-11-19 | PowerShell `Get-CimInstance` CPU/OS/GPU, `Get-Volume -DriveLetter D`; `py --list-paths` | PASS inventaris | Total/bebas RAM 7,762,112/2,308,148 KiB; disk bebas 27,956,240,384 byte; Ryzen 7430U, AMD iGPU, hanya Python 3.14.3 |
+| 2026-11-19 | `.venv-test/Scripts/python.exe -` via stdin: importlib.metadata, torch, daftar model | PASS inventaris | torch 2.15.0+cpu/vision 0.29.2+cpu, CUDA/HIP None, CUDA false; paket generatif belum terpasang; hanya SCHP 267,445,237 byte pada direktori model |
+| 2026-11-19 | Baca model cards/API tree/lisensi SD15 dan PixelArtRedmond, VAE config, panduan Diffusers/ComfyUI/ROCm/DirectML; kalkulasi ukuran metadata | PASS pemeriksaan | D-031 memuat URL sumber, batas lisensi, ukuran file bukan RAM, dan proposal alpha. Tidak mendownload binary model |
+| 2026-11-19 | URL LICENSE pada root mirror SD15 | HTTP 404 sumber | Tree tidak memiliki file tersebut; teks lisensi lengkap diperoleh dari `CompVis/stable-diffusion-license/raw/main/license.txt` yang dirujuk card; bukan error aplikasi |
+| 2026-11-19 | Resolver/install dependensi, download/forward model generatif, peak RAM/latensi, kualitas/alpha, build/suite aplikasi/browser | NOT RUN | Tugas hanya investigasi readiness; tidak ada perubahan source atau environment |
+| 2026-11-19 | Preflight: Git status/diff dan `git diff --cached` sebelum perubahan | PASS inspeksi | Empat dokumen readiness masih modified, index kosong; perubahan sebelumnya dipertahankan |
+| 2026-11-19 | `.venv-test/Scripts/python.exe -m pip --version`; inventaris importlib.metadata | PASS inventaris | pip 25.3, CPython 3.14.3; runtime CPU existing sesuai constraint D-032 |
+| 2026-11-19 | `.venv-test/Scripts/python.exe -B -m pip --isolated --disable-pip-version-check install --dry-run --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --constraint <temp> --report <temp.json> "diffusers[torch]==0.43.0" transformers accelerate safetensors` | PASS | Exit 0; 28 paket baru; semua URL wheel Windows-compatible; tanpa penggantian torch/torchvision/NumPy/Pillow. Pin langsung/transitif di D-032 |
+| 2026-11-19 | Harness stdin Python: bandingkan inventaris distribusi `.venv`/`.venv-test` sebelum/sesudah; cleanup report/constraint | PASS | Nama/versi paket identik; report TemporaryDirectory dan constraint tugas dihapus, tidak ada script permanen |
+| 2026-11-19 | Install/import generatif, forward model, benchmark RAM/latensi, kualitas/alpha, build/suite aplikasi/browser | NOT RUN | Tugas hanya resolver metadata; source/environment aplikasi tidak diubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

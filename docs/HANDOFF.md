@@ -4,64 +4,61 @@
 
 ## Last agent
 
-OMP — Implementasi palet warna opsional FR-10, 2026-11-19.
+OMP — Preflight resolver dependensi Diffusers CPU, 2026-11-19. Dokumentasi saja; tanpa instalasi atau perubahan source/environment.
 
 ## Current milestone
 
-**M5 — Classic Pixelation Studio — Complete pada jalur Windows lokal teruji.**
-Empat grid, helper/API snapshot/UI, unduhan dan palet opsional tersedia; M6 belum dimulai.
+**M6 — AI Stylization lokal dan koreksi mask — In progress (readiness saja).**
+M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
 
 ## Last completed task
 
-- `pixelatePng(input, size, palette = 'original')` mendukung `original` dan `retro16`. Retro memakai palet tetap bergaya EGA dan jarak kuadrat RGB sesudah sampling. Alpha tetap exact termasuk parsial; RGB alpha 0 tidak diubah. Tanpa dithering/dependensi baru.
-- POST pixelate menerima palette opsional tervalidasi, menyimpan pilihan pada snapshot dan respons. Manifest invalid ditolak; snapshot historis tanpa palette tetap dapat diunduh tanpa migrasi.
-- UI per kartu menyediakan Warna asli / Retro 16 warna, validasi palette respons, label mode hasil/unduhan, locking kedua pemilih selama request dan lifecycle abort existing.
-- Label ukuran yang sebelumnya tidak terhubung kini terhubung; ukuran dan palet memiliki nama aksesibel per objek, terbukti pada accessibility tree.
-- Tes helper/job 64/64, build frontend, browser model asli dan oracle PNG independen PASS. Original PNG/ZIP tidak berubah. M5 ditutup berdasarkan bukti tersebut (D-030); M6 tidak diimplementasikan.
+- Memeriksa empat dokumen modified dari readiness (README/DECISIONS/PROGRESS/HANDOFF), index kosong; seluruh perubahan sebelumnya dipertahankan.
+- Memeriksa requirements dan service AI existing: pipeline SCHP tetap terpisah, tidak menambah endpoint generatif.
+- Menjalankan pip 25.3 dry-run binary-only pada CPython 3.14.3/Windows AMD64 dengan constraint torch 2.15.0+cpu, torchvision 0.29.2+cpu, NumPy 2.5.4 dan Pillow 13.0.0.
+- Resolver exit 0: 28 paket wheel baru; kandidat langsung Diffusers 0.43.0, Transformers 5.23.0, Accelerate 1.16.0 dan Safetensors 0.8.0. Tidak ada penggantian empat paket terlindungi; rencana pin transitif dicatat di D-032.
+- Membandingkan inventaris nama/versi distribusi `.venv` dan `.venv-test` sebelum/sesudah: identik. Metadata wheel saja diunduh, tidak memasang paket atau mengunduh checkpoint.
+- Report temporary directory dan constraint sementara dihapus. Tidak membuat script permanen, service atau fixture baru.
 
 ## Current task
 
-FR-10 selesai. Berikutnya satu tugas evaluasi kelayakan M6, tanpa instalasi/download model besar otomatis.
+Preflight resolver selesai. Berikutnya smoke runtime kandidat pin D-032 dalam environment POC terpisah tanpa checkpoint; jangan memasang dependensi generatif ke environment SCHP.
 
 ## Working components
 
-- Ekstraksi lokal, PNG asli, ZIP serta Classic Pixelation dua mode palet dan empat ukuran teruji.
-- Browser → build preview 5178 → Express 3124 → model asli 8024 menghasilkan tiga objek dari fixture sintetis, empat unduhan Retro dan satu hasil kembali ke original.
-- Semua layanan/tab uji ditutup; tujuh unduhan dan fixture/uploads/jobs temp dihapus. Tanpa foto pribadi atau script permanen.
+- Ekstraksi lokal, PNG/ZIP asli dan Classic Pixelation dua palet/empat ukuran memiliki bukti M1–M5 sebelumnya; tidak diuji ulang pada sesi dokumentasi ini.
+- UI existing tetap menyatakan AI Stylization belum tersedia. Tidak membuat hasil AI palsu.
 
 ## Modified files
 
-- `backend/src/pixelation.js` — kuantisasi deterministik RGB terlihat.
-- `backend/src/job-manager.js` — validasi request/manifest dan persistensi palet.
-- `frontend/index.html`, `frontend/src/extraction-workspace.js` — pemilih palet, label aksesibel, lifecycle dan validasi respons.
-- `backend/test/pixelation.test.js`, `backend/test/jobs.test.js` — alpha/hidden RGB/tie-break/batas warna, kedua mode snapshot, invalid input/manifest dan snapshot lama.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — kontrak, panduan, bukti, batasan dan next task.
+- `docs/DECISIONS.md` — D-032: perintah/bukti resolver, rencana pin langsung/transitif, batas bukti dan gerbang berikutnya.
+- `docs/PROGRESS.md` — hasil preflight, verifikasi inventaris environment, NOT RUN dan satu tugas berikutnya.
+- `docs/HANDOFF.md` — status handoff ini.
+- `README.md` sudah modified dari tugas readiness sebelumnya; tidak diubah lagi pada sesi ini.
 
 ## Uncommitted changes / Git status
 
-Working tree/index bersih pada inspeksi awal; perubahan dua dokumen dari sesi sebelumnya tidak lagi pending. Sebelas file di atas diubah pada sesi ini, belum di-commit; tidak staging atau commit otomatis. Model/dependensi/stack tidak berubah.
+Pada inspeksi awal, README/DECISIONS/PROGRESS/HANDOFF masih modified dan index kosong. Tiga dokumen docs diperbarui pada sesi ini di atas perubahan tersebut; README sebelumnya dipertahankan. Semuanya belum di-commit oleh sesi ini. Tanpa staging/commit, perubahan source/requirements, instalasi atau download model. Constraint sementara tugas sudah dihapus.
 
 ## Current errors / limitations
 
-- Tidak ada kegagalan pada verifikasi yang dijalankan.
-- Palet Retro tetap, bukan adaptif/perseptual; hanya RGB terlihat dibatasi ≤16. PNG tetap RGBA8, alpha parsial dan hidden RGB dapat menambah kombinasi RGBA.
-- Downsampling dapat menghilangkan detail tipis. Retensi, benchmark batas RAM dan kualitas foto nyata masih terbuka.
-- Kamera/mobile fisik, timeout/pagehide pixelation tidak diuji pada sesi ini. Tidak mengklaim kesiapan produksi/M6.
-- LSP tidak tersedia; referensi helper diperiksa dengan pencarian sebelum perubahan.
+- Kelayakan inferensi generatif **belum terbukti**: resolver metadata PASS, tetapi import/API Diffusers–Transformers, forward, peak RAM/commit, latensi dan kualitas/alpha **NOT RUN**.
+- Resolusi memakai paket existing `.venv-test`, bukan environment kosong atau lock lengkap. Daftar install report mengecualikan paket yang sudah memenuhi syarat. Untuk environment baru, torch harus diperoleh dari index CPU resmi; constraint versi saja tidak menentukan sumber wheel.
+- RAM bebas 2.20 GiB pada inventaris D-031 adalah snapshot lama, bukan pengukuran sesi ini. Risiko memori dan alpha/halo tetap terbuka; tidak menjanjikan FP16, ROCm/DirectML atau CPU cepat.
+- Tidak ada error resolver pada sesi ini. PEFT/LoRA tidak termasuk preflight baseline; koreksi mask, retensi dan evaluasi foto nyata belum dikerjakan.
+- Model/base/LoRA belum boleh dibundle hanya karena kode berlisensi terbuka; lihat kewajiban distribusi D-031.
 
-## Tests performed
+## Tests / checks performed
 
-- **PASS** `node --test backend/test/pixelation.test.js backend/test/jobs.test.js`: 64/64, termasuk delapan snapshot dua mode/empat ukuran, restart, original/ZIP tetap utuh.
-- **PASS** `npm run build` di frontend: Vite 7 modul, 388 ms.
-- **PASS** Browser model asli: empat grid Retro, kembali ke Warna asli, preview/unduhan, nama aksesibel kedua pemilih, screenshot desktop 1365×1000/mobile 390×844 tanpa overflow/page error.
-- **PASS** `ai-service/.venv-test/Scripts/python.exe -` (stdin Pillow/zipfile/urllib): 18.640 piksel lima hasil sesuai oracle, alpha/hidden RGB utuh, metadata palet dan preview=download, PNG asli/ZIP/CRC tetap benar.
-- **PASS** Fault injection HTTP 500, palette respons salah, busy locking, reset ketika JSON respons nyata ditahan; kontrol pulih dan hasil usang tidak tampil.
-- **PASS** Cleanup layanan/tab/storage uji dan tujuh unduhan.
-- **NOT RUN** Suite upload/ekstraksi sinkron/Python AI, kualitas foto nyata, kamera/mobile fisik, timeout/pagehide pixelation dan M6; verifikasi dibatasi jalur terkait.
+- **PASS inspeksi** Git status/diff/index sebelum perubahan; source requirements/service dan dokumentasi terkait.
+- **PASS inventaris** `.venv-test/Scripts/python.exe -m pip --version` dan `importlib.metadata`: pip 25.3, CPython 3.14.3, versi constraint tersedia.
+- **PASS resolver** `.venv-test/Scripts/python.exe -B -m pip --isolated --disable-pip-version-check install --dry-run --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --constraint <temp> --report <temp.json> "diffusers[torch]==0.43.0" transformers accelerate safetensors`: exit 0, 28 wheel, tanpa penggantian torch/torchvision/NumPy/Pillow.
+- **PASS pemeriksaan report/inventaris** Harness Python stdin memeriksa URL wheel dan paket terlindungi; inventaris distribusi kedua venv sebelum/sesudah identik. Report/constraint sementara dihapus.
+- **NOT RUN** Install/import generatif, forward/benchmark model, kualitas/alpha, build/suite aplikasi/browser. Tidak ada perubahan perilaku aplikasi; bukti M1–M5 sebelumnya tidak diuji ulang.
 
 ## Next action (only one)
 
-**Evaluasi kelayakan AI Stylization lokal M6 pada hardware/runtime existing:** kandidat model, lisensi, kebutuhan RAM/CPU/GPU dan strategi alpha. Jangan download model besar atau mengganti environment sebelum persetujuan pengguna; jangan menyamakan Classic Pixelation dengan AI generatif.
+**Smoke runtime tanpa checkpoint di environment POC terpisah:** gunakan kandidat pin D-032, wheel torch dari index CPU resmi dan environment baru yang tidak memakai site-packages `.venv-test`. Buktikan import pipeline SD15 serta forward komponen kecil berkonfigurasi sintetis, tanpa `from_pretrained`/download bobot. Jangan mengubah `.venv`, `.venv-test` atau requirements aplikasi. Resolusi environment kosong perlu diperiksa saat instalasi; hasil dry-run inkremental bukan lock lengkap. Download checkpoint/benchmark model asli tetap memerlukan izin eksplisit dan pemeriksaan resource D-031.
 
 ## Handoff rules
 
