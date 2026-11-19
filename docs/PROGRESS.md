@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6 mulai evaluasi kelayakan (D-031); belum ada implementasi/inferensi AI Stylization atau koreksi mask. Classic Pixelation tetap tersedia dan independen. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
+> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6 memiliki smoke runtime CPU terisolasi tanpa checkpoint (D-033); belum ada inferensi AI Stylization pretrained atau koreksi mask. Classic Pixelation tetap tersedia dan independen. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
 
 ## Ringkasan
 
-- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress (readiness saja).
-- **Current task:** Preflight resolver dependensi CPU tanpa bobot selesai (D-032); berikutnya smoke runtime dalam environment POC terpisah tanpa checkpoint.
-- **Overall status:** Resolver wheel Windows/Python 3.14 lolos dengan torch CPU existing; SD 1.5 img2img tetap kandidat, bukan fitur siap pakai. Headroom RAM terbatas; engine/model final belum dipilih lewat benchmark. M5 tetap complete pada jalur lokal teruji.
-- **Last verification:** 2026-11-19 — pip 25.3 `install --dry-run --only-binary=:all:` PASS, 28 paket wheel direncanakan tanpa penggantian torch/torchvision/NumPy/Pillow. Inventaris distribusi kedua venv sebelum/sesudah identik; tanpa instalasi atau download checkpoint.
+- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress (POC runtime tanpa checkpoint).
+- **Current task:** Smoke runtime kandidat D-032 selesai pada environment POC terpisah (D-033); berikutnya rencana POC checkpoint asli dan izin download.
+- **Overall status:** Import pipeline SD15 dan forward komponen kecil CPU PASS; bukan bukti kelayakan model penuh. Engine/model final belum dipilih lewat benchmark. M5 tetap complete pada jalur lokal teruji.
+- **Last verification:** 2026-11-19 — instalasi POC selesai, `pip check` dan smoke offline CLIP/VAE/UNet/DDIM PASS. Inventaris distribusi kedua environment aplikasi sebelum/sesudah identik; tanpa checkpoint atau perubahan requirements.
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress (readiness) | Inventaris D-031 dan resolver wheel CPU D-032 selesai; runtime/inferensi, kualitas/alpha dan koreksi mask belum terbukti |
+| M6 | AI stylization lokal dan koreksi mask | In progress (POC runtime) | D-031/D-032 dan smoke runtime CPU D-033 selesai; inferensi pretrained, kualitas/alpha dan koreksi mask belum terbukti |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -117,10 +117,15 @@
 - Preflight M6 (2026-11-19, D-032): pip dry-run binary-only pada CPython 3.14.3/Windows AMD64 berhasil dengan constraint torch 2.15.0+cpu, torchvision 0.29.2+cpu, NumPy 2.5.4 dan Pillow 13.0.0. Kandidat langsung: Diffusers 0.43.0, Transformers 5.23.0, Accelerate 1.16.0 dan Safetensors 0.8.0; total 28 wheel baru tanpa penggantian paket terlindungi.
 - Inventaris distribusi `.venv`/`.venv-test` sebelum dan sesudah identik. Report/constraint sementara dihapus; tidak memasang paket, mengunduh checkpoint, menjalankan generasi atau mengubah source/requirements. Resolusi inkremental bukan bukti environment kosong atau kompatibilitas runtime.
 - Git awal preflight memuat empat dokumen modified dari readiness (README/DECISIONS/PROGRESS/HANDOFF), index kosong; perubahan tersebut dipertahankan. Sesi ini memperbarui tiga dokumen docs saja; README tidak diubah lagi. Tanpa staging/commit.
+- Smoke runtime M6 (2026-11-19, D-033): environment baru `ai-service/.venv-stylization-poc`, tanpa system site-packages; torch/vision dari index CPU resmi, kandidat pin D-032 terpasang. Resolusi environment baru menambah 38 wheel generatif/transitif, bukan hanya 28 dari preflight inkremental.
+- Import pipeline SD15 dan forward komponen acak kecil secara offline PASS: CLIP conditioning → VAE encode → UNet → DDIM → VAE decode. CPU FP32, tensor finite/bentuk sesuai; tidak memakai `from_pretrained`, checkpoint atau foto. Warning BOS/EOS default CLIP di luar vocab kecil dicatat di D-033, bukan hasil model pretrained.
+- `pip check` PASS; inventaris `.venv` (15 distribusi) dan `.venv-test` (31) identik sebelum/sesudah. Smoke 26.633s termasuk import, peak working set 414,453,760 byte dan private akhir 789,704,704 byte; bukan benchmark SD15 penuh. RAM bebas sebelum setup hanya 262,060 KiB.
+- Instalasi CPU awal timeout 600s; RECORD torch tidak menunjukkan file hilang/ukuran salah, torchvision belum terpasang dan dilanjutkan sendiri. Instalasi generatif kemudian sukses. Error harness encoding report cp1252 diselesaikan dengan UTF-8.
+- Git awal sesi bersih termasuk index; catatan perubahan pending handoff lama kedaluwarsa. Sesi mengubah README/DECISIONS/PROGRESS/HANDOFF dan membuat environment lokal ignored beserta pin/report. Tanpa perubahan source aplikasi/requirements, staging atau commit; smoke via stdin tidak membuat script permanen.
 
 ## In progress
 
-- M6: preflight resolver selesai; smoke import/komponen sintetis di environment POC terpisah tanpa checkpoint adalah langkah berikutnya. Integrasi generatif belum tersedia; koreksi mask belum dikerjakan. Tidak menyamakan hasil resolver dengan keberhasilan fitur.
+- M6: runtime CPU tanpa checkpoint terbukti pada komponen sintetis kecil. Rencana POC checkpoint asli dan izin download berikutnya; integrasi generatif belum tersedia, koreksi mask belum dikerjakan. Tidak menyamakan smoke kecil dengan kelayakan model penuh.
 
 ## Blockers / risks
 
@@ -140,13 +145,13 @@
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
 - Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Mode original mempertahankan RGBA piksel terpilih; Retro mengubah RGB terlihat ke palet tetap, bukan menjaga warna asli. Alpha/hidden RGB tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
 - Retro 16 membatasi RGB terlihat saja; PNG tetap RGBA8 dan dapat memiliki lebih dari 16 kombinasi RGBA karena alpha parsial/hidden RGB. Palet tidak adaptif/perseptual dan tidak memakai dithering.
-- Readiness M6: 2.20 GiB RAM bebas adalah snapshot, bukan kapasitas terjamin. Peak RAM/latensi/compatibility Diffusers pada Python 3.14 dan kualitas img2img belum diukur. Ryzen 7430U tidak tercantum pada matriks ROCm 10.2.0 yang diperiksa; DirectML belum diuji, tidak menjanjikan akselerasi GPU.
+- Readiness M6: RAM bebas awal sesi D-033 hanya 262,060 KiB (snapshot). Import/forward komponen kecil PASS, tetapi peak RAM/commit, latensi dan kualitas SD15 penuh belum diukur. Ryzen 7430U tidak tercantum pada matriks ROCm 10.2.0 yang diperiksa; DirectML belum diuji, tidak menjanjikan akselerasi GPU.
 - Alpha sumber yang dipasang kembali tidak menjamin hasil generatif sejajar dengan silhouette; risiko halo/detail terpotong. Download/benchmark bobot harus mendapat izin eksplisit; lisensi SD15/LoRA tidak disamakan dengan lisensi kode.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Siapkan environment POC terpisah dan smoke runtime kandidat pin D-032 (import pipeline SD15 + forward komponen kecil sintetis), tanpa checkpoint/model unduhan dan tanpa mengubah `.venv`, `.venv-test` atau requirements aplikasi. Wheel torch harus berasal dari index CPU resmi; daftar hasil resolver inkremental bukan lock environment kosong. Download checkpoint/benchmark model asli tetap memerlukan izin eksplisit.
+Rencanakan POC checkpoint SD15 asli dengan revision/berkas/lisensi dan batas resource, lalu minta izin eksplisit sebelum download/benchmark. Periksa ulang headroom RAM; jangan muat SCHP dan generator bersamaan pada POC pertama. Gunakan environment `.venv-stylization-poc` yang sudah tersedia, bukan mengubah environment/requirements aplikasi.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -331,6 +336,15 @@ Siapkan environment POC terpisah dan smoke runtime kandidat pin D-032 (import pi
 | 2026-11-19 | `.venv-test/Scripts/python.exe -B -m pip --isolated --disable-pip-version-check install --dry-run --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --constraint <temp> --report <temp.json> "diffusers[torch]==0.43.0" transformers accelerate safetensors` | PASS | Exit 0; 28 paket baru; semua URL wheel Windows-compatible; tanpa penggantian torch/torchvision/NumPy/Pillow. Pin langsung/transitif di D-032 |
 | 2026-11-19 | Harness stdin Python: bandingkan inventaris distribusi `.venv`/`.venv-test` sebelum/sesudah; cleanup report/constraint | PASS | Nama/versi paket identik; report TemporaryDirectory dan constraint tugas dihapus, tidak ada script permanen |
 | 2026-11-19 | Install/import generatif, forward model, benchmark RAM/latensi, kualitas/alpha, build/suite aplikasi/browser | NOT RUN | Tugas hanya resolver metadata; source/environment aplikasi tidak diubah |
+| 2026-11-19 | Smoke runtime: Git status/diff/index sebelum perubahan | PASS inspeksi | Working tree/index bersih; source requirements/smoke CPU serta ignore diperiksa |
+| 2026-11-19 | `py -3.14 -m venv ai-service/.venv-stylization-poc`; pip install empat pin CPU dari index PyTorch CPU | FAIL timeout instalasi | Venv terbuat; perintah mencapai 600s saat pemasangan. Log memuat retry koneksi; bukan kegagalan kompatibilitas runtime yang terbukti |
+| 2026-11-19 | `pip list --format=json`; pemeriksaan RECORD torch via stdin; install torchvision CPU `--no-deps` | PASS pemulihan | RECORD torch: tidak ada file hilang/ukuran berbeda; torchvision yang belum terpasang berhasil dipasang tanpa mengulang setup |
+| 2026-11-19 | POC `python -B -m pip --isolated --disable-pip-version-check install --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --report ai-service/.venv-stylization-poc/install-report.json -r ai-service/.venv-stylization-poc/poc-pins.txt` | PASS | 38 wheel; tanpa penggantian torch/vision/NumPy/Pillow. Pin/report lokal ignored; rincian D-033 |
+| 2026-11-19 | `ai-service/.venv-stylization-poc/Scripts/python.exe -B -m pip check` | PASS | No broken requirements found |
+| 2026-11-19 | `ai-service/.venv-stylization-poc/Scripts/python.exe -B -` (smoke stdin, jaringan ditolak) | PASS terbatas | Import pipeline SD15 dan forward CLIP/VAE/UNet/DDIM kecil berbobot acak; 26.633s termasuk import, CPU FP32 finite/bentuk sesuai. Warning BOS/EOS fixture dicatat; tanpa tokenizer/checkpoint/full pipeline |
+| 2026-11-19 | Inventaris distribusi sebelum/sesudah + pyvenv.cfg | PASS | `.venv` 15 dan `.venv-test` 31 distribusi identik; POC include-system-site-packages=false |
+| 2026-11-19 | Baca report instalasi dengan pathlib default encoding | ERROR harness → diperbaiki | cp1252 gagal decode; UTF-8 berhasil, membuktikan 38 URL wheel tanpa penggantian empat paket CPU |
+| 2026-11-19 | Checkpoint/full SD15/LoRA, benchmark model asli, kualitas/alpha, build/suite aplikasi/browser | NOT RUN | Tanpa izin download model dan di luar smoke runtime; source/perilaku aplikasi tidak berubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

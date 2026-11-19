@@ -115,7 +115,7 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280Ã—720 â
 
 ## Kesiapan AI Stylization (M6)
 
-Evaluasi awal memilih SD 1.5 img2img CPU sebagai kandidat POC, dengan LoRA pixel-art opsional setelah baseline terbukti. Belum ada engine/bobot generatif terpasang pada runtime proyek atau inferensi generatif yang diuji. RAM bebas saat inventaris 2.20 GiB; metadata bobot FP32 termasuk safety checker sekitar 5.10 GiB belum menghitung aktivasi, sehingga risiko memori tinggi. Angka tersebut bukan benchmark. Rincian kandidat, lisensi, strategi alpha sumber dan gerbang pembuktian ada di [D-031](docs/DECISIONS.md#d-031--readiness-m6-kandidat-cpu-terisolasi-belum-mengaktifkan-stylization).
+SD 1.5 img2img CPU tetap kandidat POC, dengan LoRA pixel-art opsional setelah baseline terbukti. Environment terpisah `ai-service/.venv-stylization-poc` kini memiliki Diffusers 0.43.0/Transformers 5.23.0 dengan torch 2.15.0+cpu. Import pipeline SD15 dan forward komponen kecil berbobot acak secara offline PASS; **bukan** inferensi checkpoint atau bukti kualitas stylization. Environment aplikasi `.venv`/`.venv-test` dan requirements tidak berubah. RAM bebas sebelum setup hanya sekitar 256 MiB; metadata bobot FP32 termasuk safety checker sekitar 5.10 GiB belum menghitung aktivasi. Risiko memori tinggi; ukuran bobot bukan benchmark. Kandidat/lisensi/alpha ada di [D-031](docs/DECISIONS.md#d-031--readiness-m6-kandidat-cpu-terisolasi-belum-mengaktifkan-stylization), bukti runtime dan batasnya di D-033 pada dokumen yang sama.
 
 Tidak ada download model otomatis atau perubahan environment SCHP. AI Stylization tetap ditandai belum tersedia; Classic Pixelation bukan pengganti generasi AI.
 

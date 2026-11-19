@@ -4,61 +4,66 @@
 
 ## Last agent
 
-OMP — Preflight resolver dependensi Diffusers CPU, 2026-11-19. Dokumentasi saja; tanpa instalasi atau perubahan source/environment.
+OMP — Smoke runtime Diffusers CPU terisolasi tanpa checkpoint, 2026-11-19. Environment POC lokal terpasang; source/environment aplikasi tidak diubah.
 
 ## Current milestone
 
-**M6 — AI Stylization lokal dan koreksi mask — In progress (readiness saja).**
+**M6 — AI Stylization lokal dan koreksi mask — In progress (POC runtime tanpa checkpoint).**
 M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
 
 ## Last completed task
 
-- Memeriksa empat dokumen modified dari readiness (README/DECISIONS/PROGRESS/HANDOFF), index kosong; seluruh perubahan sebelumnya dipertahankan.
-- Memeriksa requirements dan service AI existing: pipeline SCHP tetap terpisah, tidak menambah endpoint generatif.
-- Menjalankan pip 25.3 dry-run binary-only pada CPython 3.14.3/Windows AMD64 dengan constraint torch 2.15.0+cpu, torchvision 0.29.2+cpu, NumPy 2.5.4 dan Pillow 13.0.0.
-- Resolver exit 0: 28 paket wheel baru; kandidat langsung Diffusers 0.43.0, Transformers 5.23.0, Accelerate 1.16.0 dan Safetensors 0.8.0. Tidak ada penggantian empat paket terlindungi; rencana pin transitif dicatat di D-032.
-- Membandingkan inventaris nama/versi distribusi `.venv` dan `.venv-test` sebelum/sesudah: identik. Metadata wheel saja diunduh, tidak memasang paket atau mengunduh checkpoint.
-- Report temporary directory dan constraint sementara dihapus. Tidak membuat script permanen, service atau fixture baru.
+- Git awal bersih termasuk index; catatan empat dokumen pending pada handoff lama sudah kedaluwarsa.
+- Membuat `ai-service/.venv-stylization-poc` pada Python 3.14.3, tanpa system site-packages. Environment dipertahankan untuk POC berikutnya dan diabaikan Git oleh `.venv*/` existing.
+- Memasang torch 2.15.0+cpu/torchvision 0.29.2+cpu dari index CPU resmi, NumPy 2.5.4/Pillow 13.0.0, serta pin generatif D-032: Diffusers 0.43.0, Transformers 5.23.0, Accelerate 1.16.0, Safetensors 0.8.0.
+- Instalasi CPU pertama timeout 600s. RECORD torch tidak memiliki file hilang/ukuran berbeda; hanya torchvision yang belum terpasang dilanjutkan. Instalasi generatif kemudian berhasil: 38 wheel tanpa penggantian empat paket CPU, bukan 28 seperti resolver inkremental.
+- Smoke offline via stdin PASS: import pipeline SD15 dan forward komponen kecil berbobot acak CLIP → VAE encode → UNet → DDIM → VAE decode. Tidak memakai checkpoint, `from_pretrained`, foto atau menulis hasil AI.
+- `pip check` PASS; inventaris distribusi `.venv` (15) dan `.venv-test` (31) identik sebelum/sesudah. `pyvenv.cfg` POC menyatakan `include-system-site-packages = false`.
+- Smoke termasuk import 26.633s; peak working set 414,453,760 byte, private akhir 789,704,704 byte. Angka ini bukan benchmark SD15. RAM bebas awal setup hanya 262,060 KiB; available akhir smoke 985,784,320 byte.
 
 ## Current task
 
-Preflight resolver selesai. Berikutnya smoke runtime kandidat pin D-032 dalam environment POC terpisah tanpa checkpoint; jangan memasang dependensi generatif ke environment SCHP.
+Smoke runtime tanpa checkpoint selesai (D-033). Berikutnya rencana POC checkpoint SD15 asli dan izin download; jangan mengaktifkan stylization atau memasang generator ke runtime SCHP berdasarkan smoke kecil ini.
 
 ## Working components
 
-- Ekstraksi lokal, PNG/ZIP asli dan Classic Pixelation dua palet/empat ukuran memiliki bukti M1–M5 sebelumnya; tidak diuji ulang pada sesi dokumentasi ini.
+- Ekstraksi lokal, PNG/ZIP asli dan Classic Pixelation dua palet/empat ukuran mempertahankan bukti M1–M5 sebelumnya; tidak diuji ulang karena source aplikasi tidak berubah.
 - UI existing tetap menyatakan AI Stylization belum tersedia. Tidak membuat hasil AI palsu.
 
 ## Modified files
 
-- `docs/DECISIONS.md` — D-032: perintah/bukti resolver, rencana pin langsung/transitif, batas bukti dan gerbang berikutnya.
-- `docs/PROGRESS.md` — hasil preflight, verifikasi inventaris environment, NOT RUN dan satu tugas berikutnya.
+- `README.md` — status runtime POC dan batas bukti.
+- `docs/DECISIONS.md` — D-033: setup/pin, pemulihan timeout, bukti offline, resource dan batas berikutnya.
+- `docs/PROGRESS.md` — status M6, tes aktual, error setup/harness dan next task.
 - `docs/HANDOFF.md` — status handoff ini.
-- `README.md` sudah modified dari tugas readiness sebelumnya; tidak diubah lagi pada sesi ini.
+- Lokal ignored: `ai-service/.venv-stylization-poc/`, termasuk `poc-pins.txt` dan `install-report.json`. Interpreter tersedia di `Scripts/python.exe`; pin/report bukan lock aplikasi dan tidak di-commit.
 
 ## Uncommitted changes / Git status
 
-Pada inspeksi awal, README/DECISIONS/PROGRESS/HANDOFF masih modified dan index kosong. Tiga dokumen docs diperbarui pada sesi ini di atas perubahan tersebut; README sebelumnya dipertahankan. Semuanya belum di-commit oleh sesi ini. Tanpa staging/commit, perubahan source/requirements, instalasi atau download model. Constraint sementara tugas sudah dihapus.
+Inspeksi awal working tree/index bersih. Empat dokumen di atas diubah pada sesi ini dan belum di-commit oleh sesi ini; tidak staging/commit. Environment POC baru ignored, source/requirements dan kedua environment aplikasi tidak disentuh. Smoke lewat stdin tidak membuat script sementara di workspace; tidak ada service uji yang ditinggalkan.
 
 ## Current errors / limitations
 
-- Kelayakan inferensi generatif **belum terbukti**: resolver metadata PASS, tetapi import/API Diffusers–Transformers, forward, peak RAM/commit, latensi dan kualitas/alpha **NOT RUN**.
-- Resolusi memakai paket existing `.venv-test`, bukan environment kosong atau lock lengkap. Daftar install report mengecualikan paket yang sudah memenuhi syarat. Untuk environment baru, torch harus diperoleh dari index CPU resmi; constraint versi saja tidak menentukan sumber wheel.
-- RAM bebas 2.20 GiB pada inventaris D-031 adalah snapshot lama, bukan pengukuran sesi ini. Risiko memori dan alpha/halo tetap terbuka; tidak menjanjikan FP16, ROCm/DirectML atau CPU cepat.
-- Tidak ada error resolver pada sesi ini. PEFT/LoRA tidak termasuk preflight baseline; koreksi mask, retensi dan evaluasi foto nyata belum dikerjakan.
-- Model/base/LoRA belum boleh dibundle hanya karena kode berlisensi terbuka; lihat kewajiban distribusi D-031.
+- Kelayakan SD15 penuh **belum terbukti**: import dan forward kecil PASS, tetapi tokenizer/full pipeline/safety checker, checkpoint, LoRA, peak RAM/commit model asli, latensi serta kualitas/alpha **NOT RUN**.
+- Headroom RAM berubah-ubah dan sangat terbatas pada awal sesi. Private memory akhir smoke bukan peak commit; jangan menyamakan footprint kecil dengan kapasitas model penuh. Periksa resource ulang sebelum POC checkpoint.
+- Warning smoke: BOS/EOS default CLIP 49406/49407 di luar vocab sintetis 32; input token 0–9 valid, forward finite PASS. Tidak menggunakan tokenisasi/EOS pipeline penuh. Untuk fixture kecil berikutnya, konfigurasi special-token ID sesuai vocab.
+- Timeout instalasi CPU sudah ditangani dengan melanjutkan torchvision; import/forward dan `pip check` akhir PASS. Error pembacaan report akibat default cp1252 selesai dengan UTF-8; bukan error dependensi.
+- PEFT/LoRA, koreksi mask, retensi dan evaluasi foto nyata belum dikerjakan. Model/base/LoRA belum boleh dibundle hanya karena kode terbuka; kewajiban distribusi ada di D-031.
 
 ## Tests / checks performed
 
-- **PASS inspeksi** Git status/diff/index sebelum perubahan; source requirements/service dan dokumentasi terkait.
-- **PASS inventaris** `.venv-test/Scripts/python.exe -m pip --version` dan `importlib.metadata`: pip 25.3, CPython 3.14.3, versi constraint tersedia.
-- **PASS resolver** `.venv-test/Scripts/python.exe -B -m pip --isolated --disable-pip-version-check install --dry-run --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --constraint <temp> --report <temp.json> "diffusers[torch]==0.43.0" transformers accelerate safetensors`: exit 0, 28 wheel, tanpa penggantian torch/torchvision/NumPy/Pillow.
-- **PASS pemeriksaan report/inventaris** Harness Python stdin memeriksa URL wheel dan paket terlindungi; inventaris distribusi kedua venv sebelum/sesudah identik. Report/constraint sementara dihapus.
-- **NOT RUN** Install/import generatif, forward/benchmark model, kualitas/alpha, build/suite aplikasi/browser. Tidak ada perubahan perilaku aplikasi; bukti M1–M5 sebelumnya tidak diuji ulang.
+- **PASS inspeksi** Git status/diff/index sebelum perubahan; requirements/source smoke CPU dan ignore existing.
+- **FAIL timeout → pemulihan PASS** `py -3.14 -m venv ai-service/.venv-stylization-poc` lalu pip CPU binary-only; instalasi mencapai 600s. `pip list --format=json` dan RECORD torch menunjukkan torchvision belum ada, tanpa file torch hilang/ukuran berbeda. Install torchvision CPU `--no-deps` berhasil.
+- **PASS instalasi** POC `python -B -m pip --isolated --disable-pip-version-check install --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --report ai-service/.venv-stylization-poc/install-report.json -r ai-service/.venv-stylization-poc/poc-pins.txt`. Report UTF-8: 38 wheel, tanpa penggantian torch/vision/NumPy/Pillow; detail versi D-033.
+- **PASS dependensi** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -m pip check`: No broken requirements found.
+- **PASS smoke terbatas** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -` via stdin; HF/Transformers offline, socket connect ditolak. CLIP `[1,8,32]`, VAE latent `[1,4,16,16]`, UNet/noise/DDIM bentuk sama, decode `[1,3,32,32]`; CPU FP32, bentuk/finite/variasi tensor PASS. Bobot acak, bukan hasil generatif pretrained.
+- **PASS isolasi** Inventaris `importlib.metadata` sebelum/sesudah identik pada kedua venv aplikasi; POC tanpa system site-packages atau path `.venv-test`.
+- **ERROR harness → selesai** Report JSON gagal dibaca default cp1252; pembacaan UTF-8 berhasil.
+- **NOT RUN** Checkpoint/full pipeline SD15/LoRA, benchmark model asli, kualitas/alpha, build/suite aplikasi/browser. Tidak ada perubahan perilaku aplikasi; bukti M1–M5 tidak diuji ulang.
 
 ## Next action (only one)
 
-**Smoke runtime tanpa checkpoint di environment POC terpisah:** gunakan kandidat pin D-032, wheel torch dari index CPU resmi dan environment baru yang tidak memakai site-packages `.venv-test`. Buktikan import pipeline SD15 serta forward komponen kecil berkonfigurasi sintetis, tanpa `from_pretrained`/download bobot. Jangan mengubah `.venv`, `.venv-test` atau requirements aplikasi. Resolusi environment kosong perlu diperiksa saat instalasi; hasil dry-run inkremental bukan lock lengkap. Download checkpoint/benchmark model asli tetap memerlukan izin eksplisit dan pemeriksaan resource D-031.
+**Rencanakan POC checkpoint SD15 asli dan dapatkan izin download:** tetapkan revision/berkas/lisensi serta batas resource, periksa headroom RAM terkini, lalu minta izin eksplisit sebelum download/benchmark. Pakai environment `.venv-stylization-poc` existing; jangan ulang setup atau mengubah `.venv`, `.venv-test` dan requirements aplikasi. Jangan muat SCHP dan generator bersamaan pada POC pertama. Smoke kecil D-033 bukan izin download ataupun bukti model penuh layak.
 
 ## Handoff rules
 
