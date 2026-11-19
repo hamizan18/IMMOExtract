@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1–M4 selesai pada jalur Windows lokal yang teruji. M5 berjalan: helper Classic Pixelation satu PNG teruji; endpoint dan UI Studio belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. Classic Pixelation tersedia melalui helper, API snapshot dan UI per objek, termasuk palet Retro 16 opsional. M6 belum dimulai. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -77,7 +77,7 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - `objects` berisi foreground `human` full-frame bila ada, ditambah PNG per label ATR dengan **>50 piksel**. Crop memakai padding 2 piksel yang dipotong pada batas input; RGB asli dan alpha khusus kategori dipertahankan. `bbox` berkoordinat asli `[left, top, right, bottom]`, right/bottom eksklusif; metadata juga memuat `class_id`, dimensi, dan `pixel_count`. Label sama tetap satu mask semantik, bukan instance terpisah.
 - Preview: `GET /api/jobs/<job_id>/objects/<object_id>`. Unduh PNG asli: `GET /api/jobs/<job_id>/objects/<object_id>/download`. Gunakan `objects[].id` dari polling job completed, bukan nama/path file. Kedua endpoint menyajikan byte PNG yang sama tanpa pixelation; disposition `inline` atau `attachment`, nama `<object_id>.png`, cache privat/no-store dan `nosniff`.
 - Job belum completed ditolak HTTP 409; UUID invalid 400; job/objek/file tidak ditemukan 404. Object ID hanya berlaku pada job pemiliknya. Manifest dengan path tidak aman atau symlink/junction pengalihan ditolak dengan error 500 aman; storage tidak dibuka sebagai folder statis.
-- Di browser, tunggu upload berhasil lalu tekan **Ekstrak objek**. UI menampilkan tahap queued/processing, kemudian kartu preview, label, dimensi dan **Unduh PNG asli**. Pola kotak-kotak hanya latar transparansi, tidak disertakan dalam PNG. Layout dua panel di desktop, ditumpuk di mobile; pixel art belum tersedia.
+- Di browser, tunggu upload berhasil lalu tekan **Ekstrak objek**. UI menampilkan tahap queued/processing, kemudian kartu preview, label, dimensi dan **Unduh PNG asli**. Pola kotak-kotak hanya latar transparansi, tidak disertakan dalam PNG. Layout dua panel di desktop, ditumpuk di mobile; Classic Pixelation tersedia per kartu.
 - Polling serial tiap 1 detik setelah respons, timeout request 15 detik. Jika pemeriksaan terputus, **Periksa status** melanjutkan job yang sama tanpa POST baru. Tidak ada retry otomatis; jika POST belum terkonfirmasi, UI memperingatkan bahwa mengirim lagi dapat membuat job baru.
 - Mengganti/menghapus gambar, membuka kamera atau meninggalkan halaman membatalkan request/polling browser dan membersihkan galeri. Job server tidak dibatalkan/dihapus. Hasil kosong/gagal dan kegagalan file preview ditampilkan apa adanya. Setelah job terminal, gunakan **Hapus pilihan** lalu pilih gambar untuk memulai lagi; tidak ada pemulihan job otomatis setelah reload.
 - Manifest dan hasil berada di `storage/jobs/<uuid>/`; jika `UPLOAD_DIR` diubah, direktori jobs default sejajar direktori upload. Jangan jalankan beberapa backend pada storage yang sama. Retensi/batas antrean belum tersedia.
@@ -98,21 +98,22 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Backend memakai Archiver 8.0.0. Setelah mengambil perubahan dependensi, jalankan `npm install --no-audit --no-fund` dari direktori `backend`. Pengujian ZIP `node --test backend/test/jobs.test.js` memakai pembaca stdlib Python (`py -3` di Windows, `python3` di platform lain) untuk memeriksa isi/CRC.
 - Cleanup retensi belum tersedia; setiap POST sukses membuat ekspor baru. Unduhan ditangani browser native; kegagalan transfer tidak memiliki dialog khusus di aplikasi.
 
-## Classic Pixelation — helper dan API M5
+## Classic Pixelation — helper, API dan UI M5
 
-- `backend/src/pixelation.js` menyediakan `await pixelatePng(inputBuffer, size)` → buffer PNG RGBA baru. Bukan AI Stylization dan tidak mengubah PNG asli.
+- `backend/src/pixelation.js` menyediakan `await pixelatePng(inputBuffer, size, palette = 'original')` → buffer PNG RGBA baru. Bukan AI Stylization dan tidak mengubah PNG asli.
 - Input adalah PNG objek **RGBA 8-bit statis yang sudah divalidasi** dari pipeline ekstraksi. Helper memeriksa tipe buffer, metadata, batas sisi 8192/24 megapiksel dan decode; bukan pengganti validator upload atau resolusi manifest/path.
 - `size` berupa angka **16/32/64/128**, berarti sisi output terpanjang tepat sebesar pilihan, termasuk memperbesar input yang lebih kecil. Sisi lain dibulatkan ke bilangan bulat terdekat, minimal 1. Contoh 200×300 pada ukuran 32 → 21×32; tanpa crop, padding atau pengembalian ke resolusi asli.
-- Sampling nearest-neighbour memakai pusat piksel output: `floor((x + 0.5) × inputWidth / outputWidth)` dan rumus setara untuk y. Tepat pada batas dua piksel, pilih indeks lebih besar. RGBA disalin utuh tanpa blending, quantization atau flatten; detail tipis dapat hilang saat diperkecil.
+- Sampling nearest-neighbour memakai pusat piksel output: `floor((x + 0.5) × inputWidth / outputWidth)` dan rumus setara untuk y. Tepat pada batas dua piksel, pilih indeks lebih besar. Mode `original` menyalin RGBA utuh tanpa blending atau flatten; detail tipis dapat hilang saat diperkecil.
 - Sharp dipakai untuk decode/encode. Sampling RGBA langsung menghindari premultiplication alpha saat resize Sharp yang dapat mengubah RGB pada alpha rendah/nol. Bukan janji hasil byte-identical dengan algoritma rounding library lain.
+- Opsi `palette: 'retro16'` memetakan RGB piksel ber-alpha >0 ke warna terdekat dari palet tetap bergaya EGA 16 warna (D-030), sesudah sampling. Jarak kuadrat RGB, tanpa dithering atau pembelajaran palet dari foto. Alpha tetap exact; RGB pada alpha 0 tidak diubah. Batas 16 berlaku pada RGB yang terlihat, bukan seluruh kombinasi RGBA/warna tersembunyi; file tetap PNG RGBA, bukan PNG indexed 16 warna.
 - Endpoint API:
-  - `POST /api/jobs/<job_id>/pixelate`: menerima JSON `{"object_id":"<uuid>","size":16|32|64|128}` hanya untuk job `completed`. Menghasilkan snapshot privat baru di `<job>/pixelations/<pixelation_id>/` dengan manifest terpisah, mengembalikan HTTP **201** + header `Location`. Respons memuat `pixelation_id`, dimensi, `preview_url`, dan `download_url`.
+  - `POST /api/jobs/<job_id>/pixelate`: menerima JSON `{"object_id":"<uuid>","size":32,"palette":"retro16"}` hanya untuk job `completed`. Size 16/32/64/128; palette opsional `original` (default) atau `retro16`, nilai/field lain ditolak. Menghasilkan snapshot privat baru di `<job>/pixelations/<pixelation_id>/`, HTTP **201** + `Location`; respons dan manifest memuat `palette`, ukuran, dimensi serta URL preview/download. Snapshot lama tanpa field palette tetap dapat diunduh, tanpa migrasi atau konversi ulang.
   - `GET /api/jobs/<job_id>/pixelations/<pixelation_id>`: menyajikan inline PNG hasil pixelation dengan header `no-store, private` dan `nosniff`.
   - `GET /api/jobs/<job_id>/pixelations/<pixelation_id>/download`: menyajikan attachment PNG hasil pixelation.
-- Pengujian: `node --test backend/test/pixelation.test.js` (5/5 PASS) dan `node --test backend/test/jobs.test.js` (23/23 subtest PASS).
-- UI Studio di frontend dan palet warna adalah tugas berikutnya; unduhan PNG/ZIP asli tetap independen.
+- Di kartu objek, pilih **Ukuran** dan **Palet**, lalu **Pixelate**. Default **Warna asli**; **Retro 16 warna** mengubah warna, bukan alpha. Preview, keterangan hasil dan link unduhan menyebut palet hasil tersebut. Ganti pilihan tidak mengubah snapshot sebelumnya sampai Pixelate ditekan. Ukuran/palet/tombol terkunci selama request; reset upload meng-abort pengamatan hasil usang.
+- Pengujian 2026-11-19: `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` **64/64 PASS**; build frontend dan browser model asli empat grid Retro, kembali ke Warna asli, unduhan, alpha/RGB transparan, serta original/ZIP tetap identik **PASS**. Unduhan PNG/ZIP asli tetap independen.
 
-## Menjalankan Aplikasi (M1–M5 in-progress)
+## Menjalankan Aplikasi (M1–M5)
 
 Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3** dengan PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`).
 

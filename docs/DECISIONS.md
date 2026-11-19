@@ -356,4 +356,18 @@
   - `npm run build --prefix frontend`: PASS (Vite 7 modul, bundle dihasilkan bersih dalam 129ms).
   - `npm test --prefix backend`: PASS (89/89 tests lulus di seluruh suite backend).
 
-**Format entri baru:** `D-030 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+## D-030 — Palet Retro 16 opsional tanpa mengubah alpha atau RGB transparan
+
+- **Tanggal:** 2026-11-19.
+- **Status:** Accepted; helper/API, build, browser model asli dan pemeriksaan PNG independen PASS. FR-10 tersedia; M5 selesai pada jalur Windows lokal teruji.
+- **Keputusan:** Parameter opsional `palette` pada helper `pixelatePng` dan JSON POST pixelate: `original` (default) atau `retro16`. UI per kartu memakai nama Warna asli / Retro 16 warna dan mencantumkan palet pada status, preview serta label unduhan. Dua pemilih dikunci selama request dan memiliki nama aksesibel per objek.
+- **Algoritma:** Setelah nearest-neighbour D-027, RGB setiap piksel dengan alpha >0 dipetakan ke warna terdekat berdasarkan jumlah kuadrat selisih channel RGB 8-bit. Ikatan jarak memilih warna pertama pada urutan palet. Alpha disalin tepat, termasuk alpha parsial; RGB alpha 0 tidak berubah. Tidak ada dithering, premultiplication, blending, inferensi atau quantization alpha.
+- **Palet tetap berurutan (hex RGB):** `000000 0000AA 00AA00 00AAAA AA0000 AA00AA AA5500 AAAAAA 555555 5555FF 55FF55 55FFFF FF5555 FF55FF FFFF55 FFFFFF` (bergaya EGA).
+- **Arti batas warna:** Maksimal 16 RGB berbeda pada piksel ber-alpha >0, bukan tepat 16 warna yang harus muncul. RGB tersembunyi dan alpha parsial dapat menambah jumlah kombinasi RGBA; hasil tetap PNG RGBA8, bukan indexed PNG 16 warna.
+- **Persistensi:** Snapshot baru menyimpan palette dalam manifest dan respons. Field request tidak dikenal, null atau nilai palet invalid ditolak 400. Manifest dengan field palette invalid ditolak; snapshot historis yang tidak memiliki field tersebut tetap dilayani tanpa ditulis ulang. PNG asli, manifest job dan ZIP tidak dimutasi.
+- **Alasan/alternatif:** Palet tetap memenuhi opsi preset FR-10 dengan kontrak sederhana/deterministik dan tanpa dependensi baru. Palet adaptif/k-means serta dithering tidak diperlukan untuk tugas ini. PNG palette encoding langsung tidak dipilih karena kontrak menuntut alpha parsial dan hidden RGB exact. Jarak RGB sederhana bukan ukuran kesamaan warna perseptual; warna objek dapat berubah nyata.
+- **Bukti:** `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` PASS 64/64; mencakup alpha 0/1/127, fully transparent, tie-break, determinisme, batas warna, validasi, delapan snapshot dua mode/empat ukuran, restart, serta original/ZIP tetap utuh. `npm run build` di frontend PASS (7 modul).
+- **Browser:** Build preview 5178 → Express 3124 → model asli 8024, fixture sintetis: empat ukuran Retro dan kembali ke Warna asli; tujuh unduhan aktual termasuk original/ZIP. Python/Pillow memverifikasi seluruh piksel terhadap oracle terpisah, alpha/hidden RGB, metadata snapshot, preview=download dan CRC ZIP. Desktop/mobile tanpa overflow; accessibility tree memberi nama kedua pemilih. Fault injection HTTP 500, palette respons salah, busy controls dan reset ketika JSON respons nyata ditahan PASS.
+- **Konsekuensi:** M6 tidak dimulai pada tugas ini. Retensi, kualitas foto nyata dan keterbatasan detail sampling tetap terbuka. LSP tidak tersedia; referensi helper ditelusuri lewat pencarian sebelum perubahan.
+
+**Format entri baru:** `D-031 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).

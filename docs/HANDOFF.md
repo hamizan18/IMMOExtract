@@ -4,62 +4,64 @@
 
 ## Last agent
 
-OMP — Verifikasi live browser end-to-end Classic Pixelation, 2026-11-19. Tidak mengubah source aplikasi.
+OMP — Implementasi palet warna opsional FR-10, 2026-11-19.
 
 ## Current milestone
 
-**M5 — Classic Pixelation Studio — In progress.**
-M1–M4 memiliki bukti lokal sebelumnya. Helper, API snapshot dan UI Classic Pixelation empat ukuran kini juga terbukti melalui browser; palet warna terbatas belum tersedia.
+**M5 — Classic Pixelation Studio — Complete pada jalur Windows lokal teruji.**
+Empat grid, helper/API snapshot/UI, unduhan dan palet opsional tersedia; M6 belum dimulai.
 
 ## Last completed task
 
-- Memilih alternatif next action sebelumnya: smoke browser ekstraksi → pixelation 16–128 px → unduh PNG, bukan implementasi palet.
-- Chromium → Vite dev 5177 → Express 3123 dengan storage temp → FastAPI/model asli 8023. Fixture sintetis 200×300, bukan foto pribadi, menghasilkan human, Upper-clothes dan Pants.
-- UI Upper-clothes (104×85) menghasilkan 16×13, 32×26, 64×52 dan 128×105. Preview terdecode dan keempat PNG diunduh melalui link native.
-- Python/Pillow memverifikasi semua 17.808 piksel RGBA terhadap sampling pusat integer D-027, dimensi dan alpha 0/255. Byte preview sama dengan unduhan; header no-store/private dan nosniff terverifikasi.
-- PNG asli dan ZIP tiga objek yang dibuat sebelum pixelation tetap byte-identical sesudahnya; inventaris ZIP, CRC dan byte setiap PNG sesuai manifest.
-- Screenshot desktop 1365×1000/mobile 390×844 tanpa overflow horizontal; tidak ada page error. Dropdown ukuran tidak memiliki nama pada accessibility tree.
-- Tab, ketiga layanan uji, enam unduhan dan seluruh fixture/uploads/jobs temp sudah dibersihkan.
+- `pixelatePng(input, size, palette = 'original')` mendukung `original` dan `retro16`. Retro memakai palet tetap bergaya EGA dan jarak kuadrat RGB sesudah sampling. Alpha tetap exact termasuk parsial; RGB alpha 0 tidak diubah. Tanpa dithering/dependensi baru.
+- POST pixelate menerima palette opsional tervalidasi, menyimpan pilihan pada snapshot dan respons. Manifest invalid ditolak; snapshot historis tanpa palette tetap dapat diunduh tanpa migrasi.
+- UI per kartu menyediakan Warna asli / Retro 16 warna, validasi palette respons, label mode hasil/unduhan, locking kedua pemilih selama request dan lifecycle abort existing.
+- Label ukuran yang sebelumnya tidak terhubung kini terhubung; ukuran dan palet memiliki nama aksesibel per objek, terbukti pada accessibility tree.
+- Tes helper/job 64/64, build frontend, browser model asli dan oracle PNG independen PASS. Original PNG/ZIP tidak berubah. M5 ditutup berdasarkan bukti tersebut (D-030); M6 tidak diimplementasikan.
 
 ## Current task
 
-Smoke browser happy-path selesai. M5 belum selesai; berikutnya palet warna terbatas FR-10.
+FR-10 selesai. Berikutnya satu tugas evaluasi kelayakan M6, tanpa instalasi/download model besar otomatis.
 
 ## Working components
 
-- Helper nearest-neighbour RGBA, API snapshot privat, preview/unduhan pixelation, UI pemilih empat ukuran.
-- Upload/ekstraksi model asli, unduhan PNG asli serta ZIP tetap bekerja pada smoke ini.
-- Bukti build dan 89/89 backend tests dari sesi 2026-11-18 dipertahankan sebagai hasil historis, tidak diklaim dijalankan ulang.
+- Ekstraksi lokal, PNG asli, ZIP serta Classic Pixelation dua mode palet dan empat ukuran teruji.
+- Browser → build preview 5178 → Express 3124 → model asli 8024 menghasilkan tiga objek dari fixture sintetis, empat unduhan Retro dan satu hasil kembali ke original.
+- Semua layanan/tab uji ditutup; tujuh unduhan dan fixture/uploads/jobs temp dihapus. Tanpa foto pribadi atau script permanen.
 
 ## Modified files
 
-- `docs/PROGRESS.md` — bukti smoke aktual, batas verifikasi, temuan aksesibilitas dan next task.
-- `docs/HANDOFF.md` — status sesi ini.
-- Source, dependensi, model dan keputusan teknis tidak berubah; tidak perlu keputusan arsitektur baru.
+- `backend/src/pixelation.js` — kuantisasi deterministik RGB terlihat.
+- `backend/src/job-manager.js` — validasi request/manifest dan persistensi palet.
+- `frontend/index.html`, `frontend/src/extraction-workspace.js` — pemilih palet, label aksesibel, lifecycle dan validasi respons.
+- `backend/test/pixelation.test.js`, `backend/test/jobs.test.js` — alpha/hidden RGB/tie-break/batas warna, kedua mode snapshot, invalid input/manifest dan snapshot lama.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — kontrak, panduan, bukti, batasan dan next task.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal working tree dan index bersih; catatan tujuh file pending dari sesi sebelumnya sudah kedaluwarsa. Dua dokumen di atas diubah pada sesi ini dan tidak di-commit. Tidak melakukan staging/commit otomatis.
+Working tree/index bersih pada inspeksi awal; perubahan dua dokumen dari sesi sebelumnya tidak lagi pending. Sebelas file di atas diubah pada sesi ini, belum di-commit; tidak staging atau commit otomatis. Model/dependensi/stack tidak berubah.
 
 ## Current errors / limitations
 
-- Palet warna / color quantization FR-10 belum tersedia; M5 tetap in progress.
-- Dropdown ukuran memiliki label visual “Ukuran:” tetapi label belum terhubung ke select, sehingga nama aksesibelnya kosong.
-- Lifecycle/error UI pixelation (abort, respons usang, network failure, preview gagal) tidak diuji pada smoke ini.
-- Nearest-neighbour dapat menghilangkan detail tipis; retensi otomatis storage belum tersedia.
-- Fixture sintetis dan viewport mobile bukan bukti kualitas foto nyata atau perangkat mobile fisik.
+- Tidak ada kegagalan pada verifikasi yang dijalankan.
+- Palet Retro tetap, bukan adaptif/perseptual; hanya RGB terlihat dibatasi ≤16. PNG tetap RGBA8, alpha parsial dan hidden RGB dapat menambah kombinasi RGBA.
+- Downsampling dapat menghilangkan detail tipis. Retensi, benchmark batas RAM dan kualitas foto nyata masih terbuka.
+- Kamera/mobile fisik, timeout/pagehide pixelation tidak diuji pada sesi ini. Tidak mengklaim kesiapan produksi/M6.
+- LSP tidak tersedia; referensi helper diperiksa dengan pencarian sebelum perubahan.
 
 ## Tests performed
 
-- **PASS** Browser Chromium melalui layanan lokal nyata: upload → ekstraksi tiga objek → pixelation empat ukuran → preview → empat unduhan PNG.
-- **PASS** `ai-service/.venv-test/Scripts/python.exe -` (stdin Pillow/zipfile/urllib): dimensi, seluruh channel setiap piksel, alpha, kesamaan preview/download, header privat, original/ZIP tidak berubah dan CRC.
-- **PASS terbatas** Screenshot desktop/mobile tanpa overflow dan tanpa page error; temuan nama aksesibel dropdown tetap terbuka.
-- **PASS** Cleanup layanan/tab/storage temp dan enam file unduhan milik smoke.
-- **NOT RUN** Build, suite backend/Python AI, lifecycle/error pixelation, kamera/mobile fisik, kualitas foto nyata, palet warna dan M6. Source tidak diubah; tidak mengulang suite historis.
+- **PASS** `node --test backend/test/pixelation.test.js backend/test/jobs.test.js`: 64/64, termasuk delapan snapshot dua mode/empat ukuran, restart, original/ZIP tetap utuh.
+- **PASS** `npm run build` di frontend: Vite 7 modul, 388 ms.
+- **PASS** Browser model asli: empat grid Retro, kembali ke Warna asli, preview/unduhan, nama aksesibel kedua pemilih, screenshot desktop 1365×1000/mobile 390×844 tanpa overflow/page error.
+- **PASS** `ai-service/.venv-test/Scripts/python.exe -` (stdin Pillow/zipfile/urllib): 18.640 piksel lima hasil sesuai oracle, alpha/hidden RGB utuh, metadata palet dan preview=download, PNG asli/ZIP/CRC tetap benar.
+- **PASS** Fault injection HTTP 500, palette respons salah, busy locking, reset ketika JSON respons nyata ditahan; kontrol pulih dan hasil usang tidak tampil.
+- **PASS** Cleanup layanan/tab/storage uji dan tujuh unduhan.
+- **NOT RUN** Suite upload/ekstraksi sinkron/Python AI, kualitas foto nyata, kamera/mobile fisik, timeout/pagehide pixelation dan M6; verifikasi dibatasi jalur terkait.
 
 ## Next action (only one)
 
-**Rancang dan implementasikan palet warna terbatas opsional pada helper/API/UI Classic Pixelation (FR-10), dengan alpha dan RGB transparan tetap terjaga.** Gunakan kontrak dan pola snapshot yang sudah ada; verifikasi hasil serta original yang tidak berubah.
+**Evaluasi kelayakan AI Stylization lokal M6 pada hardware/runtime existing:** kandidat model, lisensi, kebutuhan RAM/CPU/GPU dan strategi alpha. Jangan download model besar atau mengganti environment sebelum persetujuan pengguna; jangan menyamakan Classic Pixelation dengan AI generatif.
 
 ## Handoff rules
 

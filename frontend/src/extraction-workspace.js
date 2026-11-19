@@ -106,6 +106,9 @@ function renderObjects(objects) {
     download.setAttribute('aria-label', `Unduh PNG asli: ${label}`);
 
     const sizeSelect = card.querySelector('[data-pixel-size]');
+    const paletteSelect = card.querySelector('[data-pixel-palette]');
+    sizeSelect.setAttribute('aria-label', `Ukuran pixelation: ${label}`);
+    paletteSelect.setAttribute('aria-label', `Palet pixelation: ${label}`);
     const pixelateButton = card.querySelector('[data-pixelate-button]');
     const pixelateStatus = card.querySelector('[data-pixelate-status]');
     const pixelateResult = card.querySelector('[data-pixelate-result]');
@@ -117,11 +120,15 @@ function renderObjects(objects) {
     const currentJobId = jobId;
     pixelateButton.addEventListener('click', async () => {
       const selectedSize = Number(sizeSelect.value);
-      if (![16, 32, 64, 128].includes(selectedSize) || !jobId) return;
+      const selectedPalette = paletteSelect.value;
+      const paletteLabel = selectedPalette === 'retro16' ? 'Retro 16 warna' : 'Warna asli';
+      if (![16, 32, 64, 128].includes(selectedSize)
+          || !['original', 'retro16'].includes(selectedPalette) || !jobId) return;
 
       pixelateButton.disabled = true;
       sizeSelect.disabled = true;
-      pixelateStatus.textContent = `Sedang memproses pixelation ${selectedSize} px di server lokal…`;
+      paletteSelect.disabled = true;
+      pixelateStatus.textContent = `Sedang memproses pixelation ${selectedSize} px — ${paletteLabel} di server lokal…`;
 
       pixelationControllers.get(object.id)?.abort();
       const operation = new AbortController();
@@ -131,7 +138,7 @@ function renderObjects(objects) {
         const response = await fetch(`/api/jobs/${currentJobId}/pixelate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ object_id: object.id, size: selectedSize }),
+          body: JSON.stringify({ object_id: object.id, size: selectedSize, palette: selectedPalette }),
           signal: AbortSignal.any([operation.signal, AbortSignal.timeout(15000)]),
         });
         const result = await response.json().catch(() => null);
@@ -143,7 +150,7 @@ function renderObjects(objects) {
         }
         if (!result || !uuid.test(result.pixelation_id) || result.job_id !== currentJobId
             || result.object_id !== object.id || result.status !== 'completed'
-            || result.size !== selectedSize
+            || result.size !== selectedSize || result.palette !== selectedPalette
             || !Number.isInteger(result.width) || result.width < 1
             || !Number.isInteger(result.height) || result.height < 1
             || result.preview_url !== `/api/jobs/${currentJobId}/pixelations/${result.pixelation_id}`
@@ -153,20 +160,20 @@ function renderObjects(objects) {
 
         pixelateImage.hidden = false;
         pixelateError.hidden = true;
-        pixelateImage.alt = `Hasil pixelation ${result.size} px: ${label}`;
+        pixelateImage.alt = `Hasil pixelation ${result.size} px — ${paletteLabel}: ${label}`;
         pixelateImage.addEventListener('error', () => {
           pixelateImage.hidden = true;
           pixelateError.hidden = false;
         }, { once: true });
         pixelateImage.src = result.preview_url;
 
-        pixelateDims.textContent = `${result.width} × ${result.height} piksel (grid ${result.size} px)`;
+        pixelateDims.textContent = `${result.width} × ${result.height} piksel (grid ${result.size} px) — ${paletteLabel}`;
         pixelateDownload.href = result.download_url;
         pixelateDownload.download = `${result.pixelation_id}.png`;
-        pixelateDownload.setAttribute('aria-label', `Unduh PNG pixelated ${result.size} px: ${label}`);
+        pixelateDownload.setAttribute('aria-label', `Unduh PNG pixelated ${result.size} px — ${paletteLabel}: ${label}`);
 
         pixelateResult.hidden = false;
-        pixelateStatus.textContent = `Pixelation ${selectedSize} px selesai.`;
+        pixelateStatus.textContent = `Pixelation ${selectedSize} px — ${paletteLabel} selesai.`;
       } catch (error) {
         if (operation.signal.aborted || jobId !== currentJobId) return;
         pixelateStatus.textContent = `Pixelation gagal: ${error.message}`;
@@ -175,6 +182,7 @@ function renderObjects(objects) {
           pixelationControllers.delete(object.id);
           pixelateButton.disabled = false;
           sizeSelect.disabled = false;
+          paletteSelect.disabled = false;
         }
       }
     });

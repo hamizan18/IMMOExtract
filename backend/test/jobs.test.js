@@ -628,9 +628,10 @@ test('pixelation publishes independent PNG snapshots, preserving originals and Z
   assert.equal(zipResponse.status, 201);
   const zip = await zipResponse.json();
   const zipBytes = Buffer.from(await (await fetch(`${base}${zip.download_url}`)).arrayBuffer());
-  const sizes = [16, 32, 64, 128];
+  const sizes = [16, 32, 64, 128, 16, 32, 64, 128];
   const responses = await Promise.all(sizes.map((size, index) => pixelationRequest(base, job.job_id.toUpperCase(), {
     object_id: job.objects[index % 2].id.toUpperCase(), size,
+    ...(index >= 4 ? { palette: 'retro16' } : {}),
   })));
   const results = [];
   for (let index = 0; index < responses.length; index++) {
@@ -642,6 +643,9 @@ test('pixelation publishes independent PNG snapshots, preserving originals and Z
     assert.equal(result.job_id, job.job_id);
     assert.equal(result.object_id, job.objects[index % 2].id);
     assert.equal(result.size, sizes[index]);
+    assert.equal(result.palette, index >= 4 ? 'retro16' : 'original');
+    const stored = JSON.parse(await readFile(join(directory, 'pixelations', result.pixelation_id, 'manifest.json')));
+    assert.equal(stored.palette, result.palette);
     assert.equal(result.status, 'completed');
     assert.ok(!JSON.stringify(result).includes(root));
     const source = await sharp(originals[index % 2]).raw().toBuffer({ resolveWithObject: true });
@@ -664,13 +668,16 @@ test('pixelation publishes independent PNG snapshots, preserving originals and Z
         const sy = Math.floor((2 * y + 1) * source.info.height / (2 * info.height));
         const from = (sy * source.info.width + sx) * 4;
         const to = (y * info.width + x) * 4;
-        assert.deepEqual(data.subarray(to, to + 4), source.data.subarray(from, from + 4));
+        const expected = index >= 4 && source.data[from + 3] > 0
+          ? Buffer.from([170, 0, 0, source.data[from + 3]])
+          : source.data.subarray(from, from + 4);
+        assert.deepEqual(data.subarray(to, to + 4), expected);
       }
       result.bytes = bytes;
     }
     results.push(result);
   }
-  assert.equal(new Set(results.map(result => result.pixelation_id)).size, 4);
+  assert.equal(new Set(results.map(result => result.pixelation_id)).size, 8);
   assert.deepEqual(await readFile(join(directory, 'manifest.json')), manifestBytes);
   for (let index = 0; index < originals.length; index++) {
     assert.deepEqual(await readFile(join(directory, manifest.objects[index].file)), originals[index]);
@@ -704,7 +711,8 @@ test('pixelation validates request shape, sizes, identifiers and cross-job acces
   const valid = { object_id: job.objects[0].id, size: 16 };
   for (const body of [[], {}, { object_id: valid.object_id }, { size: 16 },
     { ...valid, path: '../private.png' }, { ...valid, size: '16' }, { ...valid, size: 0 },
-    { ...valid, size: 17 }, { ...valid, size: 16.5 }, { ...valid, size: null }]) {
+    { ...valid, size: 17 }, { ...valid, size: 16.5 }, { ...valid, size: null },
+    ...[null, '', 'unknown', 16, {}, ['retro16']].map(palette => ({ ...valid, palette }))]) {
     await assertExportError(await pixelationRequest(base, job.job_id, body), 400, 'INVALID_PIXELATION_INPUT');
   }
   await assertExportError(await pixelationRequest(base, 'invalid', valid), 400, 'INVALID_JOB_ID');
@@ -789,10 +797,17 @@ test('pixelation files require matching published manifests and canonical regula
   const manifestBytes = await readFile(manifestPath);
   const manifest = JSON.parse(manifestBytes);
   for (const changes of [{ job_id: randomUUID() }, { pixelation_id: randomUUID() }, { object_id: randomUUID() },
-    { status: 'processing' }, { size: 17 }, { width: 0 }, { height: 16.5 }, { width: 32 }]) {
+    { status: 'processing' }, { size: 17 }, { width: 0 }, { height: 16.5 }, { width: 32 },
+    { palette: null }, { palette: 'unknown' }, { palette: 16 }]) {
     await writeFile(manifestPath, JSON.stringify({ ...manifest, ...changes }));
     await assertPixelationFileError(base, job.job_id, result.pixelation_id, 500, 'JOB_FAILED');
   }
+  // Published snapshots predating palettes remain downloadable without rewriting them.
+  const { palette, ...previousManifest } = manifest;
+  await writeFile(manifestPath, JSON.stringify(previousManifest));
+  const previousDownload = await fetch(`${base}${result.download_url}`);
+  assert.equal(previousDownload.status, 200);
+  assert.deepEqual(Buffer.from(await previousDownload.arrayBuffer()), await readFile(join(directory, 'image.png')));
   await writeFile(manifestPath, '{');
   await assertPixelationFileError(base, job.job_id, result.pixelation_id, 500, 'JOB_FAILED');
   await rm(manifestPath);

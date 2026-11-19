@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** M1–M4 teruji pada Windows lokal. M5 berjalan: helper Classic Pixelation internal tersedia; API/persistensi turunan, UI Studio dan retensi belum tersedia. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** M1–M5 teruji pada Windows lokal. Classic Pixelation memiliki helper, API snapshot privat, UI per objek serta palet Retro 16 opsional. Retensi dan M6 belum tersedia. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -66,7 +66,9 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 **UI ZIP aktual (D-026):** Checkbox pada kartu galeri, jumlah pilihan dan tombol Unduh Pilihan/Semua memakai API D-025. Satu ekspor browser aktif; tombol/checkbox dikunci selama request. AbortController ekspor terpisah mengikuti reset upload yang sama; identitas operasi diperiksa setelah body JSON selesai agar respons lama tidak memicu unduhan. download_url wajib sesuai endpoint job/export UUID sebelum link native diklik. Link sukses dipertahankan untuk unduh ulang tanpa POST. Error tidak menghapus pilihan; timeout 15 detik, tanpa retry otomatis.
 
-**Pemrosesan Classic Pixelation aktual (D-027):** Helper internal `pixelatePng(Buffer, size)` menerima PNG objek RGBA8 statis yang telah divalidasi. Sharp melakukan decode/encode dengan batas 24 megapiksel; helper membatasi sisi 8192. Sisi output terpanjang 16/32/64/128, sisi lain round/minimum 1; input kecil diperbesar, tanpa padding/crop. Nearest-neighbour mengambil koordinat pusat output (floor, batas tepat memilih indeks lebih besar), menyalin keempat channel sekaligus tanpa premultiplication. Menghasilkan buffer baru, tidak membaca path atau menulis file; belum dipanggil route, belum ada metadata/download turunan atau UI. Caller berikutnya wajib memakai resolusi objek berbasis manifest dan menyimpan hasil terpisah dari PNG asli.
+**Pemrosesan Classic Pixelation aktual (D-027/D-028/D-029/D-030):** `pixelatePng(Buffer, size, palette = 'original')` menerima PNG objek RGBA8 statis tervalidasi. Sharp decode/encode dengan batas 24 megapiksel/8192 per sisi. Sisi terpanjang 16/32/64/128, sisi lain round/minimum 1; tanpa crop/padding. Sampling pusat nearest menyalin RGBA tanpa premultiplication. Mode `retro16` sesudah sampling memetakan RGB terlihat ke palet tetap 16 warna melalui jarak kuadrat RGB; alpha dan RGB transparan tetap exact. Helper hanya buffer-to-buffer.
+
+**Snapshot dan UI Pixelation:** Manager memilih objek completed melalui resolusi manifest privat, menulis PNG dan manifest terpisah di `<job>/pixelations/<uuid>/`, publikasi manifest terakhir tanpa memutasi original/job/ZIP. POST menerima palette opsional original/retro16; respons dan snapshot baru mencatat palette. GET tetap menyajikan snapshot lama tanpa field tersebut, bukan mengkuantisasi ulang. UI per kartu memiliki pemilih ukuran/palet, status, preview tajam dan link native. Kedua pemilih dikunci selama request; AbortController mengikuti lifecycle upload/reset dan respons harus cocok dengan job/objek/ukuran/palet/URL yang diminta.
 
 
 **Alur lengkap yang dituju (retensi belum tersedia):**
@@ -93,7 +95,7 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | GET | `/api/jobs/:id/objects/:objectId/download` | Tersedia: attachment PNG asli dengan nama UUID objek |
 | POST | `/api/jobs/:id/exports` | Tersedia: JSON all:true atau object_ids, HTTP 201 + Location setelah ZIP selesai |
 | GET | `/api/jobs/:id/exports/:exportId/download` | Tersedia: attachment ZIP privat berbasis manifest ekspor/job |
-| POST | `/api/jobs/:id/pixelate` | Tersedia: JSON object_id & size (16/32/64/128), HTTP 201 + Location |
+| POST | `/api/jobs/:id/pixelate` | Tersedia: JSON object_id, size (16/32/64/128), palette opsional original/retro16; HTTP 201 + Location |
 | GET | `/api/jobs/:id/pixelations/:pixelationId` | Tersedia: inline PNG hasil pixelation deterministik |
 | GET | `/api/jobs/:id/pixelations/:pixelationId/download` | Tersedia: attachment PNG hasil pixelation |
 | POST | `/api/jobs/:id/stylize` | Fase lanjut: generative image-to-image |

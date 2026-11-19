@@ -87,6 +87,9 @@ test('invalid size, non-buffer input and invalid object images are rejected', as
   for (const size of [undefined, null, '16', 0, 17, 16.5, NaN, Infinity]) {
     await assert.rejects(pixelatePng(input, size), RangeError);
   }
+  for (const palette of [null, '', 'unknown', 16, {}, ['retro16']]) {
+    await assert.rejects(pixelatePng(input, 16, palette), RangeError);
+  }
   for (const value of ['private/path.png', null, Buffer.alloc(0)]) {
     await assert.rejects(pixelatePng(value, 16), TypeError);
   }
@@ -99,4 +102,49 @@ test('invalid size, non-buffer input and invalid object images are rejected', as
     width: 8193, height: 1, channels: 4, background: 'transparent',
   } }).png().toBuffer();
   await assert.rejects(pixelatePng(oversized, 16), RangeError);
+});
+
+test('retro palette quantizes visible RGB, preserves hidden RGB and partial alpha, and resolves ties', async () => {
+  const samples = [
+    [12, 20, 30, 255], [20, 80, 180, 127], [200, 80, 10, 1],
+    [20, 80, 180, 0], [0, 0, 85, 255], [255, 255, 255, 255],
+  ];
+  const expected = [
+    [0, 0, 0, 255], [0, 0, 170, 127], [170, 85, 0, 1],
+    [20, 80, 180, 0], [0, 0, 0, 255], [255, 255, 255, 255],
+  ];
+  const pixels = Buffer.from(Array.from({ length: 16 }, (_, x) => samples[x % samples.length]).flat());
+  const input = await png(pixels, 16, 1);
+  const original = Buffer.from(input);
+  const result = await pixelatePng(input, 16, 'retro16');
+  const { data, info } = await decode(result);
+  assert.equal(info.width, 16);
+  assert.equal(info.height, 1);
+  for (let x = 0; x < 16; x++) {
+    assert.deepEqual([...data.subarray(x * 4, x * 4 + 4)], expected[x % samples.length]);
+  }
+  assert.deepEqual(await pixelatePng(input, 16, 'retro16'), result);
+  assert.deepEqual((await decode(await pixelatePng(input, 16, 'original'))).data, pixels);
+  assert.deepEqual(input, original);
+});
+
+test('retro palette bounds visible colors while leaving an entirely transparent image unchanged', async () => {
+  const colors = new Set([
+    '0,0,0', '0,0,170', '0,170,0', '0,170,170',
+    '170,0,0', '170,0,170', '170,85,0', '170,170,170',
+    '85,85,85', '85,85,255', '85,255,85', '85,255,255',
+    '255,85,85', '255,85,255', '255,255,85', '255,255,255',
+  ]);
+  const pixels = Buffer.alloc(16 * 16 * 4);
+  for (let i = 0; i < 256; i++) {
+    pixels.set([i, (i * 7) % 256, (i * 13) % 256, i], i * 4);
+  }
+  const result = await decode(await pixelatePng(await png(pixels, 16, 16), 16, 'retro16'));
+  for (let i = 0; i < 256; i++) {
+    assert.equal(result.data[i * 4 + 3], i);
+    if (i > 0) assert.ok(colors.has([...result.data.subarray(i * 4, i * 4 + 3)].join(',')));
+    pixels[i * 4 + 3] = 0;
+  }
+  const hidden = await decode(await pixelatePng(await png(pixels, 16, 16), 16, 'retro16'));
+  assert.deepEqual(hidden.data, pixels);
 });

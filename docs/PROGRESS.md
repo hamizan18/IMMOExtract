@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M4 memiliki bukti verifikasi Windows lokal. M5 berjalan: helper Classic Pixelation satu PNG, API snapshot persistensi per objek, dan UI Classic Pixelation Studio pada frontend telah tersedia dan teruji (D-027, D-028, D-029); palet warna belum tersedia. Retensi serta evaluasi kualitas foto nyata tetap terbuka.
+> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. Classic Pixelation helper/API/UI mendukung empat grid serta palet Retro 16 opsional tanpa mengubah alpha/RGB transparan (D-030). M6 belum dimulai; retensi serta evaluasi kualitas foto nyata tetap terbuka.
 
 ## Ringkasan
 
-- **Current milestone:** M5 — Classic Pixelation Studio — In progress.
-- **Current task:** Live browser end-to-end Classic Pixelation selesai; berikutnya opsi palet warna terbatas (FR-10).
-- **Overall status:** Helper, API Express, dan UI frontend Classic Pixelation menghasilkan dan menampilkan PNG RGBA grid 16/32/64/128 secara deterministik tanpa mengubah original atau ZIP. Palet warna terbatas belum diimplementasikan.
-- **Last verification:** 2026-11-19 — Chromium → Vite 5177 → Express 3123 → FastAPI/model asli 8023 PASS: upload/ekstraksi, empat ukuran pixelation, unduhan PNG, verifikasi RGBA melalui Python/Pillow, PNG asli/ZIP tetap identik, screenshot desktop/mobile tanpa overflow. Build/suite backend tidak diulang pada tugas verifikasi ini.
+- **Current milestone:** M5 — Classic Pixelation Studio — Complete pada jalur lokal teruji; M6 belum dimulai.
+- **Current task:** Palet opsional FR-10 selesai end-to-end; berikutnya evaluasi kelayakan M6.
+- **Overall status:** Empat ukuran, mode Warna asli/Retro 16, snapshot privat dan unduhan teruji. Original PNG/ZIP tetap independen. Palet tetap bukan AI generatif atau palet adaptif dari foto.
+- **Last verification:** 2026-11-19 — `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` PASS 64/64; `npm run build` di frontend PASS; browser build preview → model asli, unduhan dan oracle Python/Pillow PASS. Detail pada verification log.
 
 ## Milestone
 
@@ -17,7 +17,7 @@
 | M2 | Upload, kamera, validasi, preview input | Complete | Validasi backend sebelumnya 24/24 PASS, integrasi frontend teruji, kamera fisik PC Camera → preview → upload → track ended PASS pada Windows/Chrome 158 |
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
-| M5 | Classic Pixelation Studio | In progress | Helper PNG RGBA, API snapshot, dan UI Studio per objek (16–128 px) teruji (D-027, D-028, D-029); palet warna belum tersedia |
+| M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | ⬜ Not started | Model dan kemampuan hardware diuji; hasil tidak dipalsukan |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
@@ -106,10 +106,14 @@
 - Verifikasi browser M5 (2026-11-19): fixture sintetis 200×300 menghasilkan human, Upper-clothes dan Pants melalui model asli. Kartu Upper-clothes 104×85 diproses melalui UI ke 16×13, 32×26, 64×52 dan 128×105; keempat preview terdecode dan link native mengunduh PNG nyata. Python/Pillow memeriksa semua channel setiap piksel memakai oracle koordinat pusat integer D-027; alpha min/max 0/255, preview byte-identical dengan unduhan. PNG asli dan ZIP tiga objek yang dibuat sebelum pixelation tetap identik sesudahnya.
 - Screenshot desktop 1365×1000 dan viewport mobile 390×844 memperlihatkan original/hasil serta transparansi tanpa overflow horizontal; browser tidak mencatat page error. Accessibility tree menunjukkan dropdown ukuran belum memiliki nama aksesibel; temuan dicatat, source tidak diubah.
 - Git awal sesi verifikasi bersih termasuk index; catatan tujuh perubahan pending pada handoff sebelumnya sudah kedaluwarsa. Sesi ini hanya memperbarui `docs/PROGRESS.md` dan `docs/HANDOFF.md`, tanpa staging/commit atau perubahan source/dependensi.
+- FR-10 (2026-11-19, D-030): opsi `palette: original/retro16` dari helper hingga API/manifest dan pemilih UI. Palet tetap bergaya EGA, nearest squared RGB sesudah sampling, tanpa dithering; alpha setiap piksel dan RGB alpha 0 tetap utuh. Default original tetap exact. Snapshot historis tanpa palette tetap dapat diunduh.
+- Pemilih ukuran/palet memiliki label serta nama aksesibel per objek; keduanya dikunci selama request. UI memvalidasi palette respons dan mencantumkan mode pada hasil/unduhan. Temuan combobox tanpa nama dari smoke sebelumnya sudah diperbaiki.
+- Tes helper/job 64/64 PASS; build PASS. Browser model asli memproses empat grid Retro dan kembali ke original; Python/Pillow memeriksa semua piksel lima hasil, hidden RGB dan alpha, byte preview/download, original/ZIP serta CRC. Fault injection HTTP error/palette mismatch dan respons tertunda saat reset PASS; screenshot desktop/mobile tanpa overflow. M5 selesai; tidak menjalankan implementasi M6.
+- Git awal tugas FR-10 bersih termasuk index. Perubahan: dua source backend, dua source frontend, dua file tes serta README/ARCHITECTURE/DECISIONS/PROGRESS/HANDOFF. Tanpa dependensi/model baru, staging atau commit.
 
 ## In progress
 
-- M5: Helper, API snapshot, dan alur browser Studio empat ukuran telah memiliki bukti verifikasi. Opsi palet warna terbatas / color quantization (FR-10) belum tersedia; pengujian lifecycle/error UI pixelation belum dilakukan pada smoke ini.
+- Tidak ada implementasi setengah jadi pada tugas palet M5. Tugas berikutnya adalah evaluasi kelayakan M6, bukan langsung memasang model generatif.
 
 ## Blockers / risks
 
@@ -127,13 +131,13 @@
 - `test_api.py` memunculkan StarletteDeprecationWarning mengenai integrasi httpx TestClient; 7 tes tetap PASS. Tidak mengganti dependensi pada tugas ini.
 - State job UI tidak dipulihkan setelah reload. Ganti/hapus pilihan hanya menghentikan pengamatan browser, bukan job server. Unduhan memakai browser native; tidak ada dialog error unduhan khusus aplikasi.
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
-- Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Alpha/RGB piksel yang dipilih tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
-- Dropdown ukuran pixelation muncul sebagai combobox tanpa nama pada accessibility tree Chromium; label “Ukuran:” belum terhubung ke select. Perlu perbaikan aksesibilitas; bukan kegagalan konversi PNG.
+- Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Mode original mempertahankan RGBA piksel terpilih; Retro mengubah RGB terlihat ke palet tetap, bukan menjaga warna asli. Alpha/hidden RGB tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
+- Retro 16 membatasi RGB terlihat saja; PNG tetap RGBA8 dan dapat memiliki lebih dari 16 kombinasi RGBA karena alpha parsial/hidden RGB. Palet tidak adaptif/perseptual dan tidak memakai dithering.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Rancang dan implementasikan palet warna terbatas (color quantization) opsional pada helper/API/UI Classic Pixelation (FR-10), dengan alpha dan RGB transparan tetap terjaga.
+Evaluasi kelayakan AI Stylization lokal M6 pada hardware/runtime existing, termasuk kandidat model, lisensi, kebutuhan RAM/CPU/GPU dan strategi alpha; tanpa mengunduh model besar atau mengganti environment sebelum izin pengguna.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -299,6 +303,14 @@ Rancang dan implementasikan palet warna terbatas (color quantization) opsional p
 | 2026-11-19 | Screenshot desktop 1365×1000/mobile 390×844 dan browser errors | PASS terbatas | Preview original/hasil dan transparansi terlihat, tanpa overflow atau page error; combobox ukuran tanpa nama aksesibel masih terbuka |
 | 2026-11-19 | Cleanup smoke browser | PASS | Tab dan layanan 5177/3123/8023 ditutup; enam unduhan serta fixture/uploads/jobs temp dihapus; tanpa foto pribadi atau script permanen |
 | 2026-11-19 | Build/suite backend/Python AI, lifecycle/error pixelation, kamera/mobile fisik, kualitas foto nyata, palet dan M6 | NOT RUN | Tugas hanya smoke browser happy-path dan pemeriksaan berkas aktual; source tidak diubah |
+| 2026-11-19 | FR-10: inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached` | PASS | Working tree/index bersih. LSP references tidak tersedia; referensi helper diperiksa lewat pencarian |
+| 2026-11-19 | `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` | PASS | 64/64: tujuh tes helper dan 57 tes job/subtest; alpha 0/1/127, hidden RGB/fully transparent, tie-break, batas warna, determinisme, validasi, kedua mode empat grid, restart serta original/ZIP tidak berubah |
+| 2026-11-19 | `npm run build` (cwd frontend) | PASS | Vite 7 modul, 388 ms; tanpa dependensi baru |
+| 2026-11-19 | Chromium build preview 5178 → Express 3124 → FastAPI/model asli 8024 | PASS | Fixture sintetis → tiga objek; empat grid Retro → unduhan PNG; kembali ke Warna asli 32 pada viewport mobile. Dua dropdown memiliki nama aksesibel |
+| 2026-11-19 | `ai-service/.venv-test/Scripts/python.exe -` (stdin Pillow/zipfile/urllib) | PASS | Lima hasil 18.640 piksel exact terhadap oracle terpisah; empat Retro berukuran 16×13/32×26/64×52/128×105, satu original 32×26. Alpha/hidden RGB utuh, preview=download, metadata palet sesuai; PNG asli/ZIP tiga objek tetap identik, CRC benar |
+| 2026-11-19 | Browser fault injection dan screenshot desktop/mobile | PASS | HTTP 500 membuka kembali kontrol; palette respons tidak cocok ditolak; kedua pemilih/tombol terkunci saat busy; reset meng-abort JSON nyata tertunda dan galeri tetap kosong. Desktop 1365×1000/mobile 390×844 tanpa overflow/page error |
+| 2026-11-19 | Cleanup FR-10 | PASS | Tab/layanan 5178/3124/8024 ditutup; tujuh unduhan dan fixture/uploads/jobs temp dihapus; tidak membuat script permanen atau menyentuh foto pengguna |
+| 2026-11-19 | Suite upload/ekstraksi sinkron/Python AI, kamera/mobile fisik, kualitas foto nyata, timeout/pagehide pixelation dan M6 | NOT RUN | Verifikasi terarah helper/job serta browser; jalur lain tidak diubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

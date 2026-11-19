@@ -283,13 +283,15 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     async createPixelation(jobId, input) {
       const id = validateId(jobId, 'JOB');
       if (!input || typeof input !== 'object' || Array.isArray(input)
-          || Object.keys(input).length !== 2 || !Object.hasOwn(input, 'object_id')
-          || ![16, 32, 64, 128].includes(input.size)) {
-        throw new JobError(400, 'INVALID_PIXELATION_INPUT', 'Kirim hanya object_id dan size angka 16, 32, 64, atau 128.');
+          || Object.keys(input).some(key => !['object_id', 'size', 'palette'].includes(key))
+          || !Object.hasOwn(input, 'object_id') || ![16, 32, 64, 128].includes(input.size)
+          || (Object.hasOwn(input, 'palette') && !['original', 'retro16'].includes(input.palette))) {
+        throw new JobError(400, 'INVALID_PIXELATION_INPUT', 'Kirim object_id, size angka 16/32/64/128, dan opsional palette original/retro16.');
       }
+      const palette = input.palette ?? 'original';
       const objectId = validateId(input.object_id, 'OBJECT');
       const { filePath } = await this.getObject(id, objectId);
-      const png = await pixelatePng(await readFile(filePath), input.size);
+      const png = await pixelatePng(await readFile(filePath), input.size, palette);
       const { width, height } = await sharp(png).metadata();
       const jobDirectory = join(await realpath(root), id);
       if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
@@ -304,7 +306,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         await rename(join(directory, 'image.tmp'), join(directory, 'image.png'));
         const manifest = {
           pixelation_id: pixelationId, job_id: id, object_id: objectId, status: 'completed',
-          size: input.size, width, height, created_at: new Date().toISOString(),
+          size: input.size, palette, width, height, created_at: new Date().toISOString(),
         };
         await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
           flag: 'wx', mode: 0o600,
@@ -333,6 +335,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         if (manifest.pixelation_id !== key || manifest.job_id !== id || manifest.status !== 'completed'
             || !job.objects.some(object => object.id === manifest.object_id)
             || ![16, 32, 64, 128].includes(manifest.size)
+            || (Object.hasOwn(manifest, 'palette') && !['original', 'retro16'].includes(manifest.palette))
             || !Number.isInteger(manifest.width) || manifest.width < 1
             || !Number.isInteger(manifest.height) || manifest.height < 1
             || Math.max(manifest.width, manifest.height) !== manifest.size) {
