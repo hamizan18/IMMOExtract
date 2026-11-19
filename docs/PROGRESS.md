@@ -5,9 +5,9 @@
 ## Ringkasan
 
 - **Current milestone:** M5 — Classic Pixelation Studio — In progress.
-- **Current task:** UI Classic Pixelation Studio selesai; berikutnya opsi palet warna terbatas (FR-10).
+- **Current task:** Live browser end-to-end Classic Pixelation selesai; berikutnya opsi palet warna terbatas (FR-10).
 - **Overall status:** Helper, API Express, dan UI frontend Classic Pixelation menghasilkan dan menampilkan PNG RGBA grid 16/32/64/128 secara deterministik tanpa mengubah original atau ZIP. Palet warna terbatas belum diimplementasikan.
-- **Last verification:** 2026-11-18 — `npm run build --prefix frontend` (PASS, 129ms); `npm test --prefix backend` (89/89 PASS); `node --test backend/test/jobs.test.js` (23/23 subtest suite / 57 subtests PASS); `node --test backend/test/pixelation.test.js` (5/5 PASS).
+- **Last verification:** 2026-11-19 — Chromium → Vite 5177 → Express 3123 → FastAPI/model asli 8023 PASS: upload/ekstraksi, empat ukuran pixelation, unduhan PNG, verifikasi RGBA melalui Python/Pillow, PNG asli/ZIP tetap identik, screenshot desktop/mobile tanpa overflow. Build/suite backend tidak diulang pada tugas verifikasi ini.
 
 ## Milestone
 
@@ -103,10 +103,13 @@
 - API Pixelation M5 (2026-11-18, D-028): `POST /api/jobs/:id/pixelate` menerima JSON `{object_id, size}` (16, 32, 64, 128) untuk job completed. Snapshot PNG dan manifest privat disimpan atomik di `<job>/pixelations/<pixelationId>/`. `GET /api/jobs/:id/pixelations/:pixelationId` (inline) dan `/download` (attachment) menyajikan PNG hasil pixelation dengan header aman (`no-store, private`, `nosniff`). Manifest utama job dan file original PNG/ZIP tidak dimutasi.
 - Lima skenario pengujian baru di `backend/test/jobs.test.js` membuktikan: snapshot independen bertahan setelah restart backend, sampling piksel exact, validasi input ketat, penolakan job non-completed/objek kosong, perlindungan kerusakan sumber/symlink/junction, dan validasi manifest canonical regular file.
 - UI Classic Pixelation Studio M5 (2026-11-18, D-029): `frontend/index.html` dan `frontend/src/extraction-workspace.js` menyediakan kontrol ukuran (16/32/64/128 px), tombol Pixelate, status proses, preview transparansi tajam (`pixelated-render`), dimensi/grid info, dan tombol `Unduh PNG pixelated`. `AbortController` per kartu membatalkan request usang saat reset/ganti gambar/re-pixelate.
+- Verifikasi browser M5 (2026-11-19): fixture sintetis 200×300 menghasilkan human, Upper-clothes dan Pants melalui model asli. Kartu Upper-clothes 104×85 diproses melalui UI ke 16×13, 32×26, 64×52 dan 128×105; keempat preview terdecode dan link native mengunduh PNG nyata. Python/Pillow memeriksa semua channel setiap piksel memakai oracle koordinat pusat integer D-027; alpha min/max 0/255, preview byte-identical dengan unduhan. PNG asli dan ZIP tiga objek yang dibuat sebelum pixelation tetap identik sesudahnya.
+- Screenshot desktop 1365×1000 dan viewport mobile 390×844 memperlihatkan original/hasil serta transparansi tanpa overflow horizontal; browser tidak mencatat page error. Accessibility tree menunjukkan dropdown ukuran belum memiliki nama aksesibel; temuan dicatat, source tidak diubah.
+- Git awal sesi verifikasi bersih termasuk index; catatan tujuh perubahan pending pada handoff sebelumnya sudah kedaluwarsa. Sesi ini hanya memperbarui `docs/PROGRESS.md` dan `docs/HANDOFF.md`, tanpa staging/commit atau perubahan source/dependensi.
 
 ## In progress
 
-- M5: Helper pemrosesan, API persistensi snapshot, dan UI Studio di frontend selesai dan terverifikasi penuh. Opsi palet warna terbatas / color quantization (FR-10) adalah tugas berikutnya sebelum M5 dinyatakan selesai.
+- M5: Helper, API snapshot, dan alur browser Studio empat ukuran telah memiliki bukti verifikasi. Opsi palet warna terbatas / color quantization (FR-10) belum tersedia; pengujian lifecycle/error UI pixelation belum dilakukan pada smoke ini.
 
 ## Blockers / risks
 
@@ -125,11 +128,12 @@
 - State job UI tidak dipulihkan setelah reload. Ganti/hapus pilihan hanya menghentikan pengamatan browser, bukan job server. Unduhan memakai browser native; tidak ada dialog error unduhan khusus aplikasi.
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
 - Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Alpha/RGB piksel yang dipilih tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
+- Dropdown ukuran pixelation muncul sebagai combobox tanpa nama pada accessibility tree Chromium; label “Ukuran:” belum terhubung ke select. Perlu perbaikan aksesibilitas; bukan kegagalan konversi PNG.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Rancang dan implementasikan palet warna terbatas (color quantization) opsional pada helper/API/UI Classic Pixelation (FR-10), atau verifikasi live end-to-end browser untuk alur ekstraksi objek → pixelation 16–128 px → unduh PNG pixelated.
+Rancang dan implementasikan palet warna terbatas (color quantization) opsional pada helper/API/UI Classic Pixelation (FR-10), dengan alpha dan RGB transparan tetap terjaga.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -289,6 +293,12 @@ Rancang dan implementasikan palet warna terbatas (color quantization) opsional p
 | 2026-11-18 | `npm test --prefix backend` | PASS | 89/89 tests PASS: seluruh suite backend (extractions, jobs, pixelation, uploads) lulus 100% |
 | 2026-11-18 | `npm run build --prefix frontend` (verifikasi UI Classic Pixelation Studio) | PASS | Vite 7 modul berhasil di-bundle (129ms), CSS `pixelated-render` dan event handler pixelate terintegrasi |
 | 2026-11-18 | Palet warna terbatas (color quantization), AI stylization (M6), live browser | NOT RUN | Palet dan AI stylization belum dibuat |
+| 2026-11-19 | Inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached` | PASS | Working tree/index bersih; tidak ada perubahan sebelumnya yang ditimpa |
+| 2026-11-19 | Chromium → Vite dev 5177 → Express 3123 (storage temp) → FastAPI/model asli 8023 | PASS | Upload fixture sintetis 200×300, ekstraksi tiga objek; UI Upper-clothes menghasilkan grid 16/32/64/128, preview terdecode dan empat unduhan PNG native |
+| 2026-11-19 | `ai-service/.venv-test/Scripts/python.exe -` (verifikasi stdin Pillow/zipfile/urllib) | PASS | Output 16×13, 32×26, 64×52, 128×105; seluruh 17.808 piksel RGBA tepat sesuai oracle integer pusat; alpha 0/255; preview=download; header privat/nosniff; PNG asli dan ZIP sebelumnya tetap byte-identical, CRC/inventaris tiga PNG tepat |
+| 2026-11-19 | Screenshot desktop 1365×1000/mobile 390×844 dan browser errors | PASS terbatas | Preview original/hasil dan transparansi terlihat, tanpa overflow atau page error; combobox ukuran tanpa nama aksesibel masih terbuka |
+| 2026-11-19 | Cleanup smoke browser | PASS | Tab dan layanan 5177/3123/8023 ditutup; enam unduhan serta fixture/uploads/jobs temp dihapus; tanpa foto pribadi atau script permanen |
+| 2026-11-19 | Build/suite backend/Python AI, lifecycle/error pixelation, kamera/mobile fisik, kualitas foto nyata, palet dan M6 | NOT RUN | Tugas hanya smoke browser happy-path dan pemeriksaan berkas aktual; source tidak diubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

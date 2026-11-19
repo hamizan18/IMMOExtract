@@ -4,71 +4,62 @@
 
 ## Last agent
 
-Antigravity CLI — Implementasi & verifikasi UI Classic Pixelation Studio pada frontend (`frontend/index.html`, `frontend/src/extraction-workspace.js`, `frontend/src/style.css`), 2026-11-18.
+OMP — Verifikasi live browser end-to-end Classic Pixelation, 2026-11-19. Tidak mengubah source aplikasi.
 
 ## Current milestone
 
 **M5 — Classic Pixelation Studio — In progress.**
-M4 selesai pada jalur Windows lokal teruji. Helper internal satu PNG, API snapshot persistensi per objek, dan UI Classic Pixelation Studio di frontend selesai dan teruji; palet warna terbatas belum tersedia.
+M1–M4 memiliki bukti lokal sebelumnya. Helper, API snapshot dan UI Classic Pixelation empat ukuran kini juga terbukti melalui browser; palet warna terbatas belum tersedia.
 
 ## Last completed task
 
-- `frontend/index.html`: template kartu objek (`#object-card`) dilengkapi kontrol Classic Pixelation:
-  - Dropdown `<select data-pixel-size>` (16, 32, 64, 128 px; default 32 px).
-  - Tombol aksi `<button data-pixelate-button>Pixelate</button>`.
-  - Status pesan proses `<p data-pixelate-status>`.
-  - Preview kontainer hasil pixelated dengan grid transparansi dan styling tajam `pixelated-render`.
-  - Label dimensi & grid serta tombol unduh native `<a data-pixelate-download>`.
-- `frontend/src/extraction-workspace.js`:
-  - Event listener `pixelateButton` mengirim `POST /api/jobs/:id/pixelate` dengan JSON `{ object_id, size }`.
-  - Validasi ketat respons (UUID format, status completed, dimensi integer, preview/download URLs).
-  - Manajemen `AbortController` per kartu (`pixelationControllers`) yang dibatalkan saat ganti gambar / reset / re-pixelate.
-  - Proteksi `jobSnapshotId` agar respons usang diabaikan saat user memilih gambar baru.
-- `frontend/src/style.css`: menambahkan utility class `.pixelated-render` (`image-rendering: pixelated; crisp-edges;`) agar piksel grid integer ditampilkan tajam tanpa efek blur bilinear browser.
-- `backend/test/jobs.test.js`: penyelarasan assertion urutan entries ZIP (sort) agar kebal terhadap variasi urutan penulisan stream archiver.
-- Dokumen diperbarui: `docs/DECISIONS.md` (D-029), `docs/PROGRESS.md`, `docs/HANDOFF.md`.
+- Memilih alternatif next action sebelumnya: smoke browser ekstraksi → pixelation 16–128 px → unduh PNG, bukan implementasi palet.
+- Chromium → Vite dev 5177 → Express 3123 dengan storage temp → FastAPI/model asli 8023. Fixture sintetis 200×300, bukan foto pribadi, menghasilkan human, Upper-clothes dan Pants.
+- UI Upper-clothes (104×85) menghasilkan 16×13, 32×26, 64×52 dan 128×105. Preview terdecode dan keempat PNG diunduh melalui link native.
+- Python/Pillow memverifikasi semua 17.808 piksel RGBA terhadap sampling pusat integer D-027, dimensi dan alpha 0/255. Byte preview sama dengan unduhan; header no-store/private dan nosniff terverifikasi.
+- PNG asli dan ZIP tiga objek yang dibuat sebelum pixelation tetap byte-identical sesudahnya; inventaris ZIP, CRC dan byte setiap PNG sesuai manifest.
+- Screenshot desktop 1365×1000/mobile 390×844 tanpa overflow horizontal; tidak ada page error. Dropdown ukuran tidak memiliki nama pada accessibility tree.
+- Tab, ketiga layanan uji, enam unduhan dan seluruh fixture/uploads/jobs temp sudah dibersihkan.
 
 ## Current task
 
-UI Classic Pixelation Studio di frontend selesai dan teruji secara build dan integrasi API (89/89 backend tests PASS, Vite build PASS). Berikutnya perancangan opsi palet warna terbatas (FR-10) atau pengujian live browser end-to-end.
+Smoke browser happy-path selesai. M5 belum selesai; berikutnya palet warna terbatas FR-10.
 
 ## Working components
 
-- Helper `pixelatePng` menghasilkan PNG 16/32/64/128 dengan dimensi rasio aspek terbulatkan, sampling nearest pusat, tanpa blending/flatten/quantization (D-027).
-- API `POST /api/jobs/:id/pixelate`, `GET /api/jobs/:id/pixelations/:pixelationId`, `GET /api/jobs/:id/pixelations/:pixelationId/download` (D-028).
-- UI Classic Pixelation Studio interaktif per objek dengan preview tajam dan unduh file hasil (D-029).
-- Semua test suite backend (89/89) lulus tanpa regresi.
-- Frontend build (Vite) bersih tanpa error.
+- Helper nearest-neighbour RGBA, API snapshot privat, preview/unduhan pixelation, UI pemilih empat ukuran.
+- Upload/ekstraksi model asli, unduhan PNG asli serta ZIP tetap bekerja pada smoke ini.
+- Bukti build dan 89/89 backend tests dari sesi 2026-11-18 dipertahankan sebagai hasil historis, tidak diklaim dijalankan ulang.
 
 ## Modified files
 
-- `frontend/index.html` — kontrol & template UI Classic Pixelation.
-- `frontend/src/extraction-workspace.js` — event handler pixelate, abort controller, dan render preview.
-- `frontend/src/style.css` — `.pixelated-render` untuk rendering piksel tajam.
-- `backend/test/jobs.test.js` — perbaikan perbandingan ZIP entries order.
-- `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — dokumentasi D-029, verifikasi dan next task.
+- `docs/PROGRESS.md` — bukti smoke aktual, batas verifikasi, temuan aksesibilitas dan next task.
+- `docs/HANDOFF.md` — status sesi ini.
+- Source, dependensi, model dan keputusan teknis tidak berubah; tidak perlu keputusan arsitektur baru.
 
 ## Uncommitted changes / Git status
 
-Perubahan di 7 file di atas berada di working tree (uncommitted). Sesuai instruksi pengguna, tidak ada `git commit` otomatis yang dijalankan.
+Inspeksi awal working tree dan index bersih; catatan tujuh file pending dari sesi sebelumnya sudah kedaluwarsa. Dua dokumen di atas diubah pada sesi ini dan tidak di-commit. Tidak melakukan staging/commit otomatis.
 
 ## Current errors / limitations
 
-- Palet warna / color quantization belum diimplementasikan (FR-10).
-- Nearest-neighbour dapat menghilangkan detail tipis pada resolusi rendah (16/32).
-- Retensi otomatis storage pixelations mengikuti direktori job utama (belum ada retensi otomatis terpisah).
+- Palet warna / color quantization FR-10 belum tersedia; M5 tetap in progress.
+- Dropdown ukuran memiliki label visual “Ukuran:” tetapi label belum terhubung ke select, sehingga nama aksesibelnya kosong.
+- Lifecycle/error UI pixelation (abort, respons usang, network failure, preview gagal) tidak diuji pada smoke ini.
+- Nearest-neighbour dapat menghilangkan detail tipis; retensi otomatis storage belum tersedia.
+- Fixture sintetis dan viewport mobile bukan bukti kualitas foto nyata atau perangkat mobile fisik.
 
 ## Tests performed
 
-- **PASS** `npm run build --prefix frontend`: Vite 7 modul berhasil di-bundle bersih dalam 129ms.
-- **PASS** `node --test backend/test/pixelation.test.js`: 5/5 subtest lulus.
-- **PASS** `node --test backend/test/jobs.test.js`: 23/23 subtest suite (57 subtests) lulus.
-- **PASS** `npm test --prefix backend`: 89/89 tests lulus (extractions, jobs, pixelation, uploads).
-- **NOT RUN**: AI Stylization M6.
+- **PASS** Browser Chromium melalui layanan lokal nyata: upload → ekstraksi tiga objek → pixelation empat ukuran → preview → empat unduhan PNG.
+- **PASS** `ai-service/.venv-test/Scripts/python.exe -` (stdin Pillow/zipfile/urllib): dimensi, seluruh channel setiap piksel, alpha, kesamaan preview/download, header privat, original/ZIP tidak berubah dan CRC.
+- **PASS terbatas** Screenshot desktop/mobile tanpa overflow dan tanpa page error; temuan nama aksesibel dropdown tetap terbuka.
+- **PASS** Cleanup layanan/tab/storage temp dan enam file unduhan milik smoke.
+- **NOT RUN** Build, suite backend/Python AI, lifecycle/error pixelation, kamera/mobile fisik, kualitas foto nyata, palet warna dan M6. Source tidak diubah; tidak mengulang suite historis.
 
 ## Next action (only one)
 
-**Rancang dan implementasikan palet warna terbatas (color quantization) pada Classic Pixelation (FR-10):** Evaluasi dan implementasikan opsi palet warna (misal: preset retro 8-bit/16-bit atau fixed k-colors) pada helper `pixelatePng` tanpa merusak channel alpha/RGB transparent, atau lakukan live E2E smoke test browser untuk alur ekstraksi objek → pixelation 16–128 px → unduh PNG pixelated.
+**Rancang dan implementasikan palet warna terbatas opsional pada helper/API/UI Classic Pixelation (FR-10), dengan alpha dan RGB transparan tetap terjaga.** Gunakan kontrak dan pola snapshot yang sudah ada; verifikasi hasil serta original yang tidak berubah.
 
 ## Handoff rules
 
