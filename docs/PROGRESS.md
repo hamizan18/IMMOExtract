@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6 memiliki runtime CPU kecil teruji (D-033) dan checkpoint SD15 lokal terverifikasi sesuai izin download saja (D-034). Model generatif belum dimuat; inferensi pretrained/koreksi mask belum tersedia. Classic Pixelation tetap independen.
+> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6 memiliki runtime CPU kecil teruji (D-033) dan checkpoint SD15 lokal terverifikasi (D-034). Pemeriksaan resource terbaru belum lolos; pengguna memilih menunda benchmark. Model generatif belum dimuat; inferensi pretrained/koreksi mask belum tersedia.
 
 ## Ringkasan
 
-- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress (checkpoint POC terverifikasi).
-- **Current task:** Download allowlist SD15/lisensi dan verifikasi lokal selesai; berikutnya pemeriksaan headroom serta izin benchmark terisolasi.
-- **Overall status:** Keutuhan checkpoint PASS, kelayakan SD15 penuh belum terbukti. Benchmark belum diizinkan; gerbang RAM/commit belum diperiksa ulang pada tugas download. M5 tetap complete pada jalur lokal teruji.
-- **Last verification:** 2026-11-20 — 17 artefak lokal cocok ukuran/hash, inventaris tepat allowlist, JSON terparse; provenance privat tersimpan. Timeout transfer awal dipulihkan via HTTP Range. Tanpa pemuatan model atau perubahan source/environment.
+- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress; benchmark POC ditunda pengguna.
+- **Current task:** Pemeriksaan headroom dan keputusan izin selesai; pengguna memilih `defer`, akan menyiapkan kondisi memori terlebih dahulu. Tidak ada izin pemuatan model/benchmark.
+- **Overall status:** Available RAM 1.00 GiB/sisa commit 3.34 GiB belum memenuhi gerbang D-034 minimal 6/8 GiB. Keutuhan checkpoint sebelumnya PASS; kelayakan model penuh tetap belum terbukti. M5 tidak berubah.
+- **Last verification:** 2026-11-20 — CIM Windows/resource, inventaris ukuran 17 artefak/provenance dan enam versi paket POC diperiksa. Kedua gerbang memori false; model tidak diimport/dimuat. Hash checkpoint tidak dihitung ulang.
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress (checkpoint terverifikasi) | Runtime kecil D-033 dan download/integritas SD15 D-034 selesai; benchmark belum diizinkan, inferensi pretrained/kualitas/alpha/koreksi mask belum terbukti |
+| M6 | AI stylization lokal dan koreksi mask | In progress; benchmark ditunda | Runtime kecil D-033 dan integritas SD15 D-034 selesai; gerbang memori belum lolos, pengguna memilih defer; inferensi/kualitas/alpha/koreksi mask belum terbukti |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -130,10 +130,14 @@
 - Transfer serial pertama mencapai deadline 3,600 detik setelah 15 berkas selesai; safety checker parsial 548,405,248 byte. Kelanjutan manual HTTP Range menerima 206/rentang tepat, menyelesaikan sisa 667,576,582 byte serta lisensi dalam 605.23s. Tidak mengulang berkas sukses atau mengganti revision.
 - Verifikasi stdin terpisah membaca ulang 17 artefak dari disk: empat SHA-256 bobot, 13 ukuran/Git blob OID berkas kecil/lisensi, exact allowlist dan parsing JSON PASS (10.88s). Tidak ada `.part` tersisa; torch/Diffusers tidak diimport. Disk akhir 21,276,774,400 byte (~19.82 GiB) bebas; tidak ada benchmark RAM.
 - Git awal tugas download bersih termasuk index; tiga dokumen pending handoff sebelumnya sudah kedaluwarsa. Perubahan sesi hanya DECISIONS/PROGRESS/HANDOFF dan checkpoint/provenance lokal ignored. Tanpa source, setup ulang, script permanen, staging atau commit.
+- Gerbang benchmark M6 (2026-11-20): RAM available 1,071,165,440 byte (~1.00 GiB), commit 12,311,908,352 dari limit 15,896,805,376 byte; sisa 3,584,897,024 byte (~3.34 GiB). Gerbang D-034 minimal 6 GiB available/8 GiB sisa commit sama-sama false. Disk bebas 21,276,688,384 byte; query proses Python/Uvicorn tidak mengembalikan entri.
+- Inventaris checkpoint berdasarkan provenance cocok: 17 artefak ada/ukuran tepat, tidak ada berkas tambahan selain provenance. Enam versi paket POC sesuai pin; pemeriksaan hanya importlib.metadata/stdlib, tidak import torch/Diffusers/Transformers. Tidak mengulang hash 5.11 GiB atau mengklaim pengujian inferensi.
+- Pengguna diberi temuan/risiko serta pilihan izin bersyarat atau kajian alternatif; memilih **`defer`**: menunda benchmark dan akan menyiapkan kondisi memori dahulu. Belum memberi izin pemuatan model. Tidak menutup aplikasi, mengubah pagefile/batas D-034 atau beralih rencana secara otomatis.
+- Git awal tugas gerbang bersih termasuk index; tiga dokumen pending handoff sebelumnya sudah kedaluwarsa. Sesi ini hanya memperbarui PROGRESS/HANDOFF; tanpa perubahan source/model/environment, file sementara, service, staging atau commit.
 
 ## In progress
 
-- M6: checkpoint SD15 sudah tersedia dan integritasnya terverifikasi. Berikutnya pemeriksaan headroom dan izin eksplisit benchmark; jangan memuat model berdasarkan izin download saja. Integrasi generatif/koreksi mask belum tersedia.
+- M6: checkpoint sudah terverifikasi; benchmark ditunda sesuai pilihan pengguna `defer`. Menunggu pengguna menyatakan kondisi memori siap sebelum pemeriksaan gerbang/permintaan izin berikutnya. Tidak melakukan polling resource atau memuat model selama penundaan; koreksi mask/integrasi generatif belum tersedia.
 
 ## Blockers / risks
 
@@ -153,13 +157,13 @@
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
 - Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Mode original mempertahankan RGBA piksel terpilih; Retro mengubah RGB terlihat ke palet tetap, bukan menjaga warna asli. Alpha/hidden RGB tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
 - Retro 16 membatasi RGB terlihat saja; PNG tetap RGBA8 dan dapat memiliki lebih dari 16 kombinasi RGBA karena alpha parsial/hidden RGB. Palet tidak adaptif/perseptual dan tidak memakai dithering.
-- Readiness M6: snapshot D-034 available 1.89 GiB dan sisa commit 5.70 GiB belum memenuhi gerbang benchmark usulan 6/8 GiB. Peak RAM/commit, latensi dan kualitas SD15 penuh belum diukur. Ryzen 7430U tidak tercantum pada matriks ROCm 10.2.0 yang diperiksa; DirectML belum diuji.
+- Readiness M6 terbaru: available 1,071,165,440 byte (~1.00 GiB), sisa commit 3,584,897,024 byte (~3.34 GiB), belum memenuhi gerbang usulan 6/8 GiB. Ini snapshot, bukan kebutuhan RAM SD15 terukur. Pengguna memilih menyiapkan memori dahulu. Peak RAM/commit, latensi/kualitas model penuh dan DirectML belum diuji.
 - Alpha sumber yang dipasang kembali tidak menjamin alignment; risiko halo/detail terpotong. Izin download D-034 sudah dilaksanakan; benchmark/bundling tetap belum diizinkan. Hash checkpoint cocok bukan bukti full pipeline bekerja atau kebutuhan RAM memadai.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Periksa headroom RAM/commit terkini dan dapatkan izin eksplisit benchmark CPU terisolasi sesuai batas D-034. Gunakan checkpoint lokal terverifikasi serta `.venv-stylization-poc` existing, tanpa download/setup ulang. Jangan memuat model sebelum izin dan gerbang resource terpenuhi; jangan menjalankan SCHP bersamaan.
+Setelah pengguna menyatakan kondisi memori siap, periksa ulang gerbang RAM/commit D-034 dan minta izin eksplisit benchmark terisolasi. Pilihan terakhir `defer`, bukan izin bersyarat: jangan memuat model hanya karena resource kelak tersedia atau protokol continue diulang tanpa perubahan kondisi. Tidak perlu download/setup ulang, polling berkala, atau perubahan batas/arsitektur.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -363,6 +367,11 @@ Periksa headroom RAM/commit terkini dan dapatkan izin eksplisit benchmark CPU te
 | 2026-11-20 | Interpreter POC stdin: lanjut safety checker dengan HTTP Range dari 548,405,248; download lisensi | PASS pemulihan | HTTP 206/rentang tepat, checksum keseluruhan safety checker cocok, lisensi cocok ukuran/Git blob; 605.23s, tanpa mengunduh ulang berkas selesai |
 | 2026-11-20 | Interpreter POC stdin terpisah: reread hash/ukuran/inventaris/JSON lalu tulis provenance | PASS 17/17 artefak | Empat SHA-256 bobot + 13 Git blob OID cocok; total 5,482,681,046 byte. Exact allowlist tanpa partial; 10.88s, tanpa import torch/Diffusers |
 | 2026-11-20 | Full pipeline/load SD15/LoRA, benchmark, kualitas/alpha, build/suite aplikasi/browser | NOT RUN | Izin hanya download/verifikasi; source/perilaku aplikasi tidak diubah. Disk akhir 21,276,774,400 byte bebas, RAM/commit tidak diukur ulang |
+| 2026-11-20 | Gerbang benchmark: `git status --short`, `git diff --stat`, `git diff`, `git diff --cached` sebelum perubahan | PASS inspeksi | Working tree/index bersih; tidak ada perubahan sebelumnya ditimpa |
+| 2026-11-20 | PowerShell `Get-CimInstance` OS/memory/proses + `Get-Volume -DriveLetter D` | PASS inventaris; gerbang TIDAK LOLOS | RAM available 1,071,165,440 byte; commit 12,311,908,352/15,896,805,376 byte; kedua gate false. Disk bebas 21,276,688,384 byte; query Python/Uvicorn tanpa entri |
+| 2026-11-20 | `.venv-stylization-poc/Scripts/python.exe -B -` via stdin: provenance/stat/inventaris/importlib.metadata | PASS pemeriksaan | 17 artefak sesuai ukuran/allowlist; enam pin sesuai; model libraries tidak diimport. Hash tidak dihitung ulang; bukan validasi inferensi |
+| 2026-11-20 | Formulir izin benchmark dengan temuan resource/risiko dan batas D-034 | Keputusan pengguna: defer | Pengguna akan menyiapkan memori terlebih dahulu; tidak mengizinkan pemuatan model/benchmark |
+| 2026-11-20 | Pemuatan model/benchmark/inferensi/kualitas/alpha, hash ulang, build/suite aplikasi/browser | NOT RUN | Gerbang memori belum lolos dan pengguna menunda benchmark. Tidak ada perubahan source/perilaku aplikasi |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
