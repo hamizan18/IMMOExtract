@@ -571,3 +571,50 @@ vae/config.json
   - UNet terbukti mampu dieksekusi pada CPU laptop AMD Ryzen 5 7430U dengan latensi ~11 detik per langkah denoising dan penggunaan RAM fisik < 450 MB.
   - Langkah berikutnya adalah menguji pipeline `StableDiffusionImg2ImgPipeline` terintegrasi secara bertahap menggunakan loader bermitigasi ini dengan pengawasan supervisor D-035.
 - **Bukti tes:** Script uji scratch `test_mitigated_submodule.py` dan `test_full_unet_forward.py` pada CPython 3.14.3 AMD64 / Windows 11.
+
+## D-038 — Keberhasilan Inferensi Penuh SD15 img2img 256×256 CPU Lokal Bermitigasi
+
+- **Tanggal:** 2026-11-20.
+- **Status:** Verified / Accepted (POC Sukses).
+- **Keputusan:** Pipeline `StableDiffusionImg2ImgPipeline` SD15 CPU FP32 dengan UNet disk-offload bermitigasi `ClonedOffloadedWeightsLoader` dinyatakan berhasil menghasilkan artefak stylization 256×256 secara lokal.
+- **Alasan & Bukti Eksperimen:**
+  - Inferensi 11 langkah denoising penuh (nominal 20 langkah, strength 0.5, PNDM, seed 0, guidance 7.5, 2 thread CPU) berhasil dieksekusi dari awal hingga akhir dalam **241.87 detik** (~20.99 detik per langkah) pada CPU AMD Ryzen 5 7430U.
+  - Artefak gambar valid dihasilkan dan terverifikasi secara programmatic:
+    - `generated.png`: 115,978 byte (256×256 RGB).
+    - `stylized.png`: 103,994 byte (192×256 RGBA).
+    - Alpha channel sumber terbukti cocok 100% sempurna (`np.array_equal == True`) dengan channel transparan asli.
+    - Transformasi RGB terbukti terjadi secara visual dan numerik (`rgb_diff == True`).
+    - Safety checker terbukti berjalan aktif dan mengecek aman (`nsfw_detected: False`).
+  - Metrik memori aktual:
+    - **Physical RAM Working Set (RSS):** Bervariasi antara **2,195 MB hingga 2,459 MB (~2.15–2.40 GiB)** sepanjang seluruh 11 langkah. RAM fisik bebas sistem tetap terjaga > 2 GiB tanpa thrashing.
+    - **Virtual Memory Commit (Private Bytes):** ~3.0 GiB antar-step, naik ke ~6.1 GiB selama UNet step, dengan lonjakan sesaat ke ~9.35–9.46 GiB saat submodul bersarang aktif bersamaan, yang sepenuhnya berada di bawah batas commit limit OS Windows (15.89–18.63 GiB).
+  - Temuan supervisor & watchdog:
+    - Guard statis 4 GiB D-035 terbukti salah mengidentifikasi private commit charge sebagai resident RAM fisik.
+    - Ketika child dieksekusi tanpa interupsi prematur, proses berjalan stabil, deterministik, dan bersih dengan exit code 0.
+- **Konsekuensi:**
+  - POC inferensi M6 pertama berhasil menghasilkan gambar nyata di lingkungan lokal Windows CPU.
+  - Visi local-first stylization terbukti secara teknis layak pada hardware pengguna tanpa GPU diskret atau API cloud.
+  - Tugas berikutnya adalah integrasi cleaner module helper stylization ke `ai-service` dan endpoint FastAPI terisolasi sebelum menghubungkannya ke Express backend.
+- **Bukti tes:** Eksekusi `_probe_child.py` menghasilkan `probe-mitigated-256/256/{generated.png, stylized.png, child.log}` terverifikasi via Python/Pillow/NumPy.
+
+## D-039 — Modul Helper Stylizer Lokal (`ai-service/stylizer.py`) dan Verifikasi Unit Test CPU
+
+- **Tanggal:** 2026-11-20.
+- **Status:** Verified / Accepted.
+- **Keputusan:** Mengimplementasikan kelas modular `LocalStylizer`, loader bermitigasi `ClonedOffloadedWeightsLoader`, dataclass `StylizationResult`, preprocessing letterbox kanvas netral, serta restorasi alpha mask 100% presisi ke dalam modul `ai-service/stylizer.py` dan memvalidasinya dengan test suite `ai-service/test_stylizer.py`.
+- **Alasan & Bukti Eksperimen:**
+  - `LocalStylizer` membungkus seluruh siklus hidup model (`is_loaded`, `load`, `unload`, context manager) dengan lazy initialization, sehingga AI service tidak membebani memori sistem pada saat startup jika stylization belum diminta.
+  - Logika preprocessing mempertahankan rasio aspek gambar sumber pada kanvas netral RGB `(128, 128, 128)` 256×256.
+  - Logika postprocessing memotong padding letterbox, mengembalikan resolusi asli dengan interpolasi NEAREST (menjaga ketajaman piksel), dan menempelkan kembali (restores) alpha channel asli sumber sehingga siluet objek hasil ekstraksi tetap 100% identik (`np.array_equal == True`).
+  - Safety checker lokal bawaan SD15 dipertahankan aktif dan melaporkan flag `nsfw_detected` pada `StylizationResult`.
+  - Hasil pengujian komprehensif (`ai-service/test_stylizer.py`):
+    - `TestStylizerPreprocessing` (4 tes: preset check, aspect ratio preservation, 100% alpha match, lazy initialization): **4/4 PASS** dalam 0.055 detik.
+    - `TestStylizerInferenceLive` (1 tes: full end-to-end 1-step denoising dengan model SD15 nyata di CPU FP32): **PASS** dalam 62.08 detik.
+  - Pengujian regresi M1–M5 membuktikan tidak ada regresi:
+    - `ai-service/test_schp_cpu.py`: PASS.
+    - `ai-service/test_extractor.py`: PASS.
+    - `backend/test/pixelation.test.js`: 7/7 PASS.
+- **Konsekuensi:**
+  - Service helper `LocalStylizer` telah teruji, terisolasi, dan stabil.
+  - Langkah berikutnya adalah mengintegrasikan helper ini ke endpoint REST FastAPI di `ai-service/main.py` (misalnya `POST /stylize` dan `POST /stylize-path`).
+- **Bukti tes:** Suite `ai-service/test_stylizer.py` (5/5 PASS) pada CPython 3.14.3 AMD64 / Windows 11.

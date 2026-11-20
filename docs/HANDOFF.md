@@ -4,59 +4,76 @@
 
 ## Last agent
 
-Antigravity — Pembuktian loader offload bermitigasi Cloned Tensor pada UNet CPU D-037, 2026-11-20. Forward pass 686 parameter UNet SD15 selesai dalam 11.24s di CPU murni; private memory puncak hanya 797.06 MB (<800 MB), membuktikan masalah commit charge D-035 telah teratasi.
+Antigravity — Implementasi helper modular `LocalStylizer` (`ai-service/stylizer.py`) dan validasi unit test `test_stylizer.py` (D-039), 2026-11-20. Seluruh 5 pengujian (4 preprocessing/lifecycle + 1 live SD15 1-step CPU inference) PASS dalam 62.08s dengan 100% exact alpha silhouette preservation dan zero regression pada modul ekstraksi atau pixelation.
 
 ## Current milestone
 
-**M6 — AI Stylization lokal dan koreksi mask — In progress; forward pass UNet bermitigasi PASS (D-037).**
-M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
+**M6 — AI Stylization lokal dan koreksi mask — In progress; LocalStylizer helper PASS (D-039).**
+M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization endpoint FastAPI dan integrasi Express backend sedang disiapkan.
 
 ## Last completed task
 
-- Implementasi dan pengujian loader bermitigasi `ClonedOffloadedWeightsLoader` (subclass `OffloadedWeightsLoader` dengan pemutusan view `.clone()` saat ekstraksi safetensors).
-- Uji forward pass submodul A (`conv_in` — 2 parameter): output `[1, 320, 32, 32]`, finite `True`, parameter kembali ke `meta`, private memory 719.97 MB (RSS 385.87 MB).
-- Uji forward pass submodul B (`down_blocks[0]` — 74 parameter): output `[1, 320, 16, 16]`, finite `True`, parameter kembali ke `meta`, private memory 748.38 MB (RSS 411.32 MB).
-- Uji 3 iterasi berulang: membuktikan zero leak antar-forward pass (private bytes 752.20 MB -> 755.02 MB -> 755.39 MB).
-- Uji model UNet penuh (686 parameter): forward pass selesai dalam **11.24 detik** di CPU FP32 Ryzen 5 7430U; output `[1, 4, 32, 32]`, finite `True`. Private bytes puncak **797.06 MB** (jauh di bawah batas guard 4 GiB), RSS **444.63 MB**. Parameter terverifikasi kembali ke `meta`.
-- Dokumen proyek (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`) diperbarui sesuai temuan empiris.
+- **D-038 (POC Inferensi Penuh SD15 img2img 256×256 CPU):** Eksekusi 11 langkah denoising selesai dalam 241.87 detik (~20.99 detik/langkah) di CPU FP32 Ryzen 5 7430U. Artefak `generated.png` (256×256) dan `stylized.png` (192×256 RGBA) terverifikasi valid, alpha channel 100% cocok, safety checker aktif.
+- **D-039 (Implementasi Modul Helper `LocalStylizer` di `ai-service/stylizer.py`):**
+  - Mengisolasi pipeline SD15 CPU FP32 dengan loader bermitigasi `ClonedOffloadedWeightsLoader`.
+  - Manajemen siklus hidup memori terisolasi (`is_loaded`, `load`, `unload`, context manager).
+  - Preprocessing letterbox kanvas netral `(128, 128, 128)` 256×256 menjaga rasio aspek input.
+  - Post-processing un-letterbox NEAREST dan restorasi alpha mask sumber 1:1 (`np.array_equal == True`).
+  - Presets prompt bawaan (`pixel-art`, `retro-rpg`, `game-boy`).
+  - Dataclass `StylizationResult` dan method `save_result`.
+  - Integrasi safety checker bawaan SD15 aktif.
+- **Validasi Unit Test (`ai-service/test_stylizer.py`):**
+  - `TestStylizerPreprocessing`: 4/4 PASS (0.055s).
+  - `TestStylizerInferenceLive`: 1-step live CPU SD15 denoising PASS (62.08s).
+- **Verifikasi Anti-Regresi:**
+  - `ai-service/test_schp_cpu.py`: PASS.
+  - `ai-service/test_extractor.py`: PASS.
+  - `backend/test/pixelation.test.js`: 7/7 PASS.
+- Dokumen proyek (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`) disinkronkan.
 
 ## Current task
 
-Loader bermitigasi `ClonedOffloadedWeightsLoader` terbukti sukses dan hemat memori pada model UNet penuh. Tugas berikutnya adalah mengintegrasikannya ke probe inferensi pipeline `StableDiffusionImg2ImgPipeline` terawasi (supervisor/child D-035 adaptif) untuk mengeksekusi langkah denoising 256×256.
+Modul helper `LocalStylizer` telah teruji mandiri dan stabil. Tugas berikutnya adalah mengintegrasikannya ke FastAPI server di `ai-service/main.py` (menyediakan endpoint `POST /stylize` dan `POST /stylize-path`).
 
 ## Working components
 
-- Ekstraksi lokal, PNG/ZIP asli dan Classic Pixelation dua palet/empat ukuran mempertahankan bukti M1–M5 sebelumnya; tidak diuji ulang karena source aplikasi tidak berubah.
-- UI existing tetap menyatakan AI Stylization belum tersedia. Tidak membuat hasil AI palsu.
+- Ekstraksi lokal SCHP ATR-18 (M3), PNG/ZIP asli dan download individual/ZIP (M4), serta Classic Pixelation 4 ukuran + 2 palet (M5) mempertahankan bukti verifikasi sebelumnya tanpa regresi.
+- Helper `LocalStylizer` (`ai-service/stylizer.py`) dan test suite (`ai-service/test_stylizer.py`) teruji PASS.
+- UI existing tetap menyatakan AI Stylization belum tersedia sampai endpoint terintegrasi end-to-end. Tidak membuat hasil AI palsu.
 
 ## Modified files
 
-- `docs/DECISIONS.md` — entri D-037 (pembuktian loader offload bermitigasi `.clone()` pada UNet).
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — pembaruan status M6, log verifikasi D-037, dan next single task.
-- Source aplikasi, requirements, paket, dan checkpoint tidak dimutasi.
+- `ai-service/stylizer.py` — modul baru `LocalStylizer`, loader `ClonedOffloadedWeightsLoader`, dataclass `StylizationResult`, preprocessing & alpha restoration.
+- `ai-service/test_stylizer.py` — test suite baru (preprocessing, aspect ratio, 100% alpha match, lazy load, live 1-step CPU inference).
+- `docs/DECISIONS.md` — penambahan entri D-038 (POC inferensi penuh 256) dan D-039 (modul helper `LocalStylizer`).
+- `docs/PROGRESS.md` — pembaruan status aktual M6, tabel milestone, entri D-038 & D-039, dan tugas aktif.
+- `docs/HANDOFF.md` — pembaruan status agen, log verifikasi, dan satu tindakan berikutnya.
 
 ## Uncommitted changes / Git status
 
-Git working tree dan index saat ini memuat modifikasi pada 3 berkas dokumentasi (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`). Tanpa staging/commit otomatis sesuai aturan.
+- `modified: docs/DECISIONS.md`
+- `modified: docs/PROGRESS.md`
+- `modified: docs/HANDOFF.md`
+- `untracked: ai-service/stylizer.py`
+- `untracked: ai-service/test_stylizer.py`
+Tanpa staging/commit otomatis sesuai aturan proyek.
 
 ## Current errors / limitations
 
-- Integrasi loader bermitigasi ke pipeline img2img penuh (VAE encode + Text encoder + Denoising scheduler loop + VAE decode + Safety checker) belum dieksekusi secara end-to-end.
-- Inferensi penuh 256/512 belum menghasilkan artefak gambar generatif akhir.
-- Keputusan tetap mempertahankan checkpoint/revision lokal, CPU FP32, scheduler PNDM, dan safety checker aktif.
+- Endpoint FastAPI `POST /stylize` dan integrasi client Express backend (`backend/src/ai-client.js`) belum dibuat.
+- Inferensi SD15 CPU pada resolusi 256×256 membutuhkan ~21 detik per langkah denoising (total ~3.5–4 menit untuk 10–11 langkah aktual), sehingga perlu penanganan timeout atau worker asinkron yang tepat saat integrasi backend.
 
 ## Tests / checks performed
 
-- **PASS inspeksi awal:** `git status` (clean), `GlobalMemoryStatusEx` (RAM total 7.40 GB, avail 2.30 GB; commit limit 14.81 GB, commit avail 7.43 GB).
-- **PASS forward submodul `conv_in` (2 parameter):** output valid `[1, 320, 32, 32]`, private bytes 719.97 MB, RSS 385.87 MB.
-- **PASS forward submodul `down_blocks[0]` (74 parameter):** output valid `[1, 320, 16, 16]`, private bytes 748.38 MB, RSS 411.32 MB.
-- **PASS zero-leak test (3 iterasi berulang):** private bytes stabil di 752.20 -> 755.02 -> 755.39 MB.
-- **PASS full UNet forward pass (686 parameter):** selesai dalam 11.24s di CPU FP32; output `[1, 4, 32, 32]`, private bytes 797.06 MB, RSS 444.63 MB, parameter kembali ke `meta`.
-- **NOT RUN:** Full img2img pipeline multi-step inference, probe 512, kualitas visual, LoRA, build/suite aplikasi/browser.
+- **PASS:** `ai-service/test_stylizer.py` suite (5/5 PASS dalam 62.08s) pada CPython 3.14.3 AMD64 / Windows 11 (`.venv-stylization-poc`).
+- **PASS:** `ai-service/test_extractor.py` SCHP extraction pipeline (1.94s) pada `.venv-test`.
+- **PASS:** `ai-service/test_schp_cpu.py` forward & upsampling pipeline pada `.venv-test`.
+- **PASS:** `backend/test/pixelation.test.js` Classic Pixelation unit tests (7/7 PASS dalam 1.80s).
+- **NOT RUN:** Integrasi HTTP API FastAPI stylization live, integrasi backend Express job manager untuk stylization, UI Pixel Art Studio generative mode.
 
 ## Next action (only one)
 
-**Integrasikan `ClonedOffloadedWeightsLoader` ke script supervisor/child probe inferensi img2img 256×256 terawasi (D-035 adaptif) dan uji eksekusi langkah denoising pertama.** Pertahankan guard private memory 4 GiB dan parameter D-035.
+**Integrasikan `LocalStylizer` ke `ai-service/main.py` dengan menambahkan endpoint REST `POST /stylize` (multipart image upload) dan `POST /stylize-path` (JSON local path), lalu validasi dengan unit test API `ai-service/test_api.py`.**
 
 ## Handoff rules
 
