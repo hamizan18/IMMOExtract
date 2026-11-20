@@ -4,26 +4,26 @@
 
 ## Last agent
 
-OMP — Rencana checkpoint SD15 terpaku dan izin download saja, 2026-11-20. Tidak mengunduh binary atau mengubah source/environment aplikasi.
+OMP — Download checkpoint SD15 terpaku dan verifikasi integritas lokal, 2026-11-20. Model belum dimuat; source/environment aplikasi tidak diubah.
 
 ## Current milestone
 
-**M6 — AI Stylization lokal dan koreksi mask — In progress (rencana POC checkpoint).**
+**M6 — AI Stylization lokal dan koreksi mask — In progress (checkpoint POC terverifikasi).**
 M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
 
 ## Last completed task
 
-- Git awal bersih termasuk index; catatan empat dokumen pending pada handoff lama sudah kedaluwarsa.
-- Memeriksa source lifecycle `ai-service/main.py`: startup memuat SCHP bila checkpoint ada. POC generatif kelak harus proses terpisah, bukan startup FastAPI existing.
-- Environment `.venv-stylization-poc` existing tanpa system site-packages; inventaris sembilan pin sesuai D-033. Tidak mengulang setup/import model. `ai-service/models/` hanya berisi SCHP 267,445,237 byte.
-- Menetapkan mirror SD15 revision `451f4fe16113bff5a5d2269ed5ad43b0592e9a14`, 16 berkas FP32/config/tokenizer/card 5,482,666,661 byte (5.1061 GiB), ditambah teks lisensi OpenRAIL-M revision `14d42d09bffd871b1666a084fc954a50cff72ac0`. Allowlist/hash/URL dan prosedur ada di D-034.
-- Snapshot Windows: available RAM 1.89 GiB, sisa commit 5.70 GiB, disk D: bebas 24.92 GiB; query Python/Uvicorn kosong. Gerbang benchmark usulan minimal 6 GiB available dan 8 GiB sisa commit gagal; bukan bukti inferensi pasti gagal.
-- Formulir izin dijawab pengguna **`download_only`**: download/verifikasi diizinkan untuk tugas berikutnya, **benchmark/pemuatan model belum diizinkan**. Tidak perlu meminta ulang izin download untuk allowlist yang sama; perubahan cakupan perlu izin baru.
-- Tidak ada binary yang diunduh pada sesi rencana ini, hasil generatif, foto pribadi, instalasi, atau perubahan runtime.
+- Git awal bersih termasuk index; catatan tiga dokumen pending pada handoff sebelumnya sudah kedaluwarsa.
+- Melaksanakan izin **`download_only`** D-034: 16 berkas SD15 revision `451f4fe16113bff5a5d2269ed5ad43b0592e9a14` + `license.txt` revision `14d42d09bffd871b1666a084fc954a50cff72ac0`.
+- Tujuan privat: `ai-service/models/sd15-poc/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/`. Total artefak 5,482,681,046 byte; provenance JSON tambahan berisi URL/revision/hash/ukuran dan hasil verifikasi. Checkpoint SCHP existing tidak disentuh.
+- Transfer awal timeout tool 3,600s setelah 15 berkas selesai. Safety checker `.part` 548,405,248 byte dilanjutkan manual dengan HTTP Range; HTTP 206/rentang tepat, hash keseluruhan cocok. Download sisa dan lisensi selesai 605.23s, tanpa mengulang berkas sukses atau mengganti revision.
+- Verifikasi lokal independen membaca ulang 17 artefak: empat SHA-256 bobot, 13 ukuran/Git blob OID berkas kecil/lisensi, exact allowlist dan parsing JSON PASS dalam 10.88s. Tidak ada partial tersisa; provenance dipublikasikan terakhir.
+- Disk bebas awal/akhir 26,759,499,776 / 21,276,774,400 byte (~24.92/~19.82 GiB). Gerbang disk lolos; RAM/commit tidak diukur ulang pada tugas ini.
+- Memakai interpreter `.venv-stylization-poc` existing via stdin dan stdlib; tidak import torch/Diffusers, memuat model, memasang paket, menjalankan AI atau mengambil foto pribadi.
 
 ## Current task
 
-Rencana dan izin terbatas selesai (D-034). Berikutnya download/verifikasi allowlist tanpa memuat model. Jangan mengaktifkan stylization berdasarkan smoke kecil D-033 atau metadata checkpoint.
+Download dan integritas lokal selesai (bukti tambahan D-034). Berikutnya pemeriksaan resource dan izin eksplisit benchmark. Izin download **bukan** izin memuat model atau menjalankan benchmark.
 
 ## Working components
 
@@ -32,35 +32,35 @@ Rencana dan izin terbatas selesai (D-034). Berikutnya download/verifikasi allowl
 
 ## Modified files
 
-- `docs/DECISIONS.md` — D-034: revision, allowlist/ukuran/hash, lisensi, resource, batas operasional dan izin download saja.
-- `docs/PROGRESS.md` — status M6, pemeriksaan aktual dan tugas berikutnya.
+- `docs/DECISIONS.md` — bukti pelaksanaan D-034, pemulihan timeout, verifikasi dan batas izin; tidak mengubah model/arsitektur yang dipilih.
+- `docs/PROGRESS.md` — status checkpoint M6, pemeriksaan aktual dan tugas berikutnya.
 - `docs/HANDOFF.md` — status handoff ini.
-- `README.md`, source, requirements dan environment tidak diubah. Environment lokal ignored `.venv-stylization-poc/` beserta pin/report D-033 tetap tersedia; tidak dibuat ulang.
+- Lokal ignored: `ai-service/models/sd15-poc/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/` berisi 16 berkas model, lisensi dan `provenance.json`. Detail setiap berkas/hash di D-034/provenance.
+- Source, README, requirements dan environment tidak diubah. Script download/verifier lewat stdin, tidak ada script permanen baru.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal working tree/index bersih. Tiga dokumen di atas diubah pada sesi ini dan belum di-commit oleh sesi ini; tanpa staging/commit. Tidak ada file sementara, direktori model baru atau service uji yang dibuat. Tidak menjalankan pemeriksaan Git ulang setelah edit.
+Inspeksi awal working tree/index bersih. Tiga dokumen di atas diubah pada sesi ini dan belum di-commit oleh sesi ini; tanpa staging/commit. Checkpoint/provenance berada pada direktori model privat yang diabaikan `.gitignore` existing. Tidak ada service uji atau proses download tersisa; kedua job download sudah terminal. Tidak menjalankan Git ulang setelah perubahan.
 
 ## Current errors / limitations
 
-- Full SD15/tokenizer/safety checker, checkpoint lokal, LoRA, peak RAM/commit model asli, latensi serta kualitas/alpha **NOT RUN**. SHA-256 D-034 masih metadata yang diharapkan, bukan hash binary lokal terverifikasi.
-- Benchmark belum diizinkan dan headroom saat inventaris tidak lolos batas usulan. Jangan menutup aplikasi pengguna, mengubah pagefile, menonaktifkan safety checker atau mengganti precision/engine diam-diam.
-- Disk cukup pada snapshot, tetapi wajib diperiksa lagi sebelum download: minimal 12 GiB bebas awal, pertahankan 6 GiB; hanya satu transfer aktif dan tujuan privat D-034. Ini batas operasional, bukan kebutuhan RAM terukur.
-- Tidak ada error baru pada pemeriksaan sesi ini. Timeout instalasi/cp1252 D-033 sudah selesai pada sesi sebelumnya; warning special-token fixture kecil bukan bukti tokenizer pretrained bekerja.
-- Koreksi mask, retensi, evaluasi foto nyata dan lisensi distribusi tetap terbuka. Izin evaluasi/download bukan izin bundling model.
+- Tidak ada kegagalan integritas yang tersisa; timeout tool transfer awal sudah dipulihkan. Hash/ukuran/inventaris PASS bukan bukti kompatibilitas full pipeline, kualitas atau kelayakan memori.
+- **Benchmark/pemuatan model belum diizinkan.** Full SD15/tokenizer/safety checker runtime, LoRA, peak RAM/commit, latensi serta kualitas/alpha tetap **NOT RUN**.
+- Snapshot RAM/commit terakhir berasal dari tugas rencana D-034: available 1.89 GiB/sisa commit 5.70 GiB, di bawah gerbang usulan 6/8 GiB. Ini bukan snapshot terkini; periksa ulang sebelum meminta/menjalankan benchmark.
+- Jangan menutup aplikasi pengguna, mengubah pagefile, menonaktifkan safety checker atau mengganti precision/engine diam-diam. POC kelak proses terpisah; startup `main.py` existing memuat SCHP otomatis bila checkpoint ada.
+- Koreksi mask, retensi, evaluasi foto nyata dan lisensi distribusi tetap terbuka. Izin download bukan izin bundling model. Tidak perlu mengunduh ulang artefak terverifikasi.
 
 ## Tests / checks performed
 
-- **PASS inspeksi** `git status --short; git diff --stat; git diff` dan `git diff --cached` sebelum perubahan: kosong.
-- **PASS inventaris** PowerShell `Get-CimInstance Win32_OperatingSystem`, `Win32_PerfFormattedData_PerfOS_Memory`, `Win32_Process` (Python/Uvicorn), `Get-Volume -DriveLetter D`. Available 2,032,168,960 byte; commit 9,779,187,712/15,896,805,376 byte; disk bebas 26,759,573,504 byte. Tidak ada proses Python/Uvicorn dari query.
-- **PASS pemeriksaan** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -` via stdin: `importlib.metadata`, daftar model dan kalkulasi ukuran. Sembilan pin sesuai; model hanya SCHP. Total 16 berkas SD15 5,482,666,661 byte; gerbang benchmark RAM/commit usulan sama-sama false.
-- **PASS pemeriksaan sumber** API model/tree pada revision terpaku, README/model_index dan teks lisensi terpaku dibaca; bobot FP32/safety checker terdaftar. Tidak mengambil binary atau mengeksekusi source remote.
-- **Izin aktual** Formulir menginformasikan 5.11 GiB, lisensi/restriksi dan keterbatasan RAM; pengguna memilih `download_only` untuk tugas berikutnya.
-- **NOT RUN** Download/hash binary lokal, full pipeline/LoRA/benchmark/kualitas/alpha, build/suite aplikasi/browser. Tidak ada perubahan perilaku aplikasi; hasil M1–M5 dan smoke runtime D-033 tidak diuji ulang.
+- **PASS inspeksi** `git status --short; git diff --stat; git diff; git diff --cached` sebelum perubahan: kosong. `Get-Volume -DriveLetter D`: bebas 26,759,499,776 byte.
+- **FAIL deadline → pemulihan PASS** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u -` via stdin, urllib serial/hashlib. Tool timeout 3,600s; 15 berkas sudah cocok ukuran/hash, safety checker parsial.
+- **PASS kelanjutan** Interpreter POC stdin meminta Range dari 548,405,248 byte; HTTP 206 dengan `Content-Range: bytes 548405248-1215981829/1215981830`, checksum safety checker keseluruhan cocok. Lisensi 14,385 byte cocok Git blob OID; selesai 605.23s.
+- **PASS verifikasi lokal 17/17** Interpreter POC stdin terpisah membaca ulang seluruh byte dari disk, memeriksa empat SHA-256 bobot dan 13 Git blob OID, exact allowlist serta JSON, lalu menulis provenance. Total 5,482,681,046 byte; 10.88s, tanpa partial dan import torch/Diffusers. Disk bebas akhir 21,276,774,400 byte.
+- **NOT RUN** Pemuatan model/inferensi/benchmark/kualitas/alpha, LoRA, build/suite aplikasi/browser. Izin terbatas download; source/perilaku aplikasi tidak berubah. Tidak mengklaim M6 selesai.
 
 ## Next action (only one)
 
-**Download dan verifikasi checkpoint SD15 sesuai D-034, tanpa benchmark:** izin eksplisit `download_only` sudah diperoleh. Periksa disk terlebih dahulu, ambil hanya 16 berkas allowlist + teks lisensi ke `ai-service/models/sd15-poc/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/` (belum dibuat), verifikasi ukuran/SHA-256 bobot serta integritas berkas kecil, simpan provenance/card/lisensi privat. Jangan memakai `from_pretrained`, memuat model, memasang ulang environment, mengambil LoRA/varian tambahan atau mengubah requirements aplikasi. Sesudah download terverifikasi, benchmark masih perlu izin terpisah dan pemeriksaan resource; jangan menganggap izin download sebagai izin menjalankannya.
+**Periksa headroom RAM/commit dan dapatkan izin benchmark terisolasi D-034:** checkpoint lokal sudah tersedia/verifikasi PASS, sehingga jangan mengunduh ulang atau memasang environment lagi. Benchmark masih memerlukan izin eksplisit baru, minimal 6 GiB available RAM dan 8 GiB sisa commit sesuai gerbang usulan; tidak memuat SCHP bersamaan. Jika belum memenuhi izin/resource, jangan memuat model. Gunakan provenance lokal dan bukti D-034 sebagai input, bukan menganggap keberhasilan download sebagai kelayakan inferensi.
 
 ## Handoff rules
 
