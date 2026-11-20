@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6 memiliki runtime CPU kecil teruji (D-033) dan checkpoint SD15 lokal terverifikasi (D-034). Pemeriksaan resource terbaru belum lolos; pengguna memilih menunda benchmark. Model generatif belum dimuat; inferensi pretrained/koreksi mask belum tersedia.
+> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6: runtime/checkpoint tersedia; POC UNet disk-offload D-035 berhasil memuat pipeline tetapi inferensi 256 dihentikan guard private memory. Belum ada hasil stylization; 512 tidak dijalankan.
 
 ## Ringkasan
 
-- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress; benchmark POC ditunda pengguna.
-- **Current task:** Pemeriksaan headroom dan keputusan izin selesai; pengguna memilih `defer`, akan menyiapkan kondisi memori terlebih dahulu. Tidak ada izin pemuatan model/benchmark.
-- **Overall status:** Available RAM 1.00 GiB/sisa commit 3.34 GiB belum memenuhi gerbang D-034 minimal 6/8 GiB. Keutuhan checkpoint sebelumnya PASS; kelayakan model penuh tetap belum terbukti. M5 tidak berubah.
-- **Last verification:** 2026-11-20 — sesi continue memeriksa dokumentasi, Git awal (bersih), direktori AI dan startup `main.py` yang memuat SCHP. Resource/model/test aplikasi tidak dijalankan ulang karena keputusan `defer` belum berubah. Angka RAM dan bukti inventaris di atas berasal dari sesi sebelumnya.
+- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
+- **Current task:** POC adaptif D-035 selesai dicoba; diagnosis lonjakan alokasi private memory menjadi tugas berikutnya.
+- **Overall status:** Load pipeline CPU FP32 PASS (82.1594s); inferensi 256 FAIL karena private memory melewati guard 4 GiB. Peak counter pohon child ~12.32 GiB menunjukkan pengawasan sampling bukan hard cap. Tidak ada hasil gambar generatif.
+- **Last verification:** 2026-11-20 — gate adaptif PASS, load PASS, inferensi dihentikan sebelum callback denoising pertama; CIM mengonfirmasi 0 proses probe tersisa. Source aplikasi tidak berubah.
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress; benchmark ditunda | Runtime kecil D-033 dan integritas SD15 D-034 selesai; gerbang memori belum lolos, pengguna memilih defer; inferensi/kualitas/alpha/koreksi mask belum terbukti |
+| M6 | AI stylization lokal dan koreksi mask | In progress; POC inferensi gagal guard | Pipeline D-035 termuat, inferensi 256 dihentikan karena private memory; hasil/kualitas/alpha/koreksi mask belum tersedia |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -136,9 +136,15 @@
 - Git awal tugas gerbang bersih termasuk index; tiga dokumen pending handoff sebelumnya sudah kedaluwarsa. Sesi ini hanya memperbarui PROGRESS/HANDOFF; tanpa perubahan source/model/environment, file sementara, service, staging atau commit.
 - Pemeriksaan continue (2026-11-20): Git awal working tree/index bersih; dua dokumen pending pada handoff sebelumnya sudah tidak pending. Direktori POC/model tersedia dan source `main.py:30–53` mengonfirmasi startup memuat SCHP bila checkpoint ada. Tidak menjalankan service, import model, polling resource atau meminta ulang izin; pesan continue tidak menyatakan perubahan kondisi memori. Hanya PROGRESS/HANDOFF diperbarui, tanpa staging/commit.
 
+- POC adaptif M6 (2026-11-20, D-035): setelah diberi snapshot available 3.63 GiB/sisa commit 9.00 GiB, pengguna meminta tetap lanjut dengan penyesuaian RAM minimal. Model/revision/CPU FP32/safety checker dipertahankan; UNet meta + Accelerate disk-offload membaca safetensors existing tanpa salinan bobot atau instalasi.
+- Gate harness awal false-positive akibat launcher Python venv Windows; tidak memuat model. Diagnostik ancestry membuktikan parent Python dengan command line identik. Supervisor kemudian mengecualikan launcher miliknya dan mengawasi/menutup pohon child, bukan hanya proses launcher.
+- Percobaan aktual: gate awal available 3,779,076,096 byte/sisa commit 9,411,248,128 byte lolos; 686 key/shape/dtype UNet cocok. Pipeline CPU FP32 + tokenizer/PNDM/safety checker selesai dimuat dalam 82.1594s termasuk import.
+- Inferensi 256 dihentikan sebelum callback denoising pertama karena private memory melampaui 4 GiB; exit child 15. Jumlah peak counters private pohon child 13,227,094,016 byte (~12.32 GiB), working set 2,370,056,192 byte (~2.21 GiB); minimum available 1,419,010,048 byte. Penyebab internal lonjakan belum terbukti. Tidak ada hasil stylization atau retry/512.
+- Log, supervisor report dan input sintetis tersimpan privat di `ai-service/.venv-stylization-poc/probe-194a6529b2/`; report false-positive awal di `probe-3996e6c553/`. Script uji sementara dihapus; CIM memastikan 0 proses probe tersisa. Git awal bersih; perubahan permanen hanya README/DECISIONS/PROGRESS/HANDOFF, tanpa staging/commit atau perubahan source/dependensi/checkpoint.
+
 ## In progress
 
-- M6: checkpoint sudah terverifikasi; benchmark ditunda sesuai pilihan pengguna `defer`. Menunggu pengguna menyatakan kondisi memori siap sebelum pemeriksaan gerbang/permintaan izin berikutnya. Tidak melakukan polling resource atau memuat model selama penundaan; koreksi mask/integrasi generatif belum tersedia.
+- M6: POC adaptif D-035 telah dicoba dan gagal guard pada inferensi; lanjutkan diagnosis alokasi kecil terawasi sebelum percobaan model penuh berikutnya. Tidak ada integrasi generatif/koreksi mask.
 
 ## Blockers / risks
 
@@ -158,13 +164,13 @@
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
 - Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Mode original mempertahankan RGBA piksel terpilih; Retro mengubah RGB terlihat ke palet tetap, bukan menjaga warna asli. Alpha/hidden RGB tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
 - Retro 16 membatasi RGB terlihat saja; PNG tetap RGBA8 dan dapat memiliki lebih dari 16 kombinasi RGBA karena alpha parsial/hidden RGB. Palet tidak adaptif/perseptual dan tidak memakai dithering.
-- Readiness M6 terbaru: available 1,071,165,440 byte (~1.00 GiB), sisa commit 3,584,897,024 byte (~3.34 GiB), belum memenuhi gerbang usulan 6/8 GiB. Ini snapshot, bukan kebutuhan RAM SD15 terukur. Pengguna memilih menyiapkan memori dahulu. Peak RAM/commit, latensi/kualitas model penuh dan DirectML belum diuji.
-- Alpha sumber yang dipasang kembali tidak menjamin alignment; risiko halo/detail terpotong. Izin download D-034 sudah dilaksanakan; benchmark/bundling tetap belum diizinkan. Hash checkpoint cocok bukan bukti full pipeline bekerja atau kebutuhan RAM memadai.
+- Load pipeline SD15 CPU FP32 dengan UNet disk-offload PASS, tetapi inferensi 256 gagal guard private memory >4 GiB. Peak private counters pohon child ~12.32 GiB meski working set ~2.21 GiB; offload belum terbukti sesuai laptop ini. Sampling target 100 ms tidak mencegah lonjakan; jangan menaikkan guard atau retry model penuh otomatis. DirectML belum diuji.
+- Alpha sumber yang dipasang kembali tidak menjamin alignment; risiko halo/detail terpotong. Pengguna mengizinkan POC adaptif D-035, bukan bundling. Hasil generatif/alpha/latensi inferensi selesai/LoRA belum diuji karena guard menghentikan proses.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Setelah pengguna menyatakan kondisi memori siap, periksa ulang gerbang RAM/commit D-034 dan minta izin eksplisit benchmark terisolasi. Pilihan terakhir `defer`, bukan izin bersyarat: jangan memuat model hanya karena resource kelak tersedia atau protokol continue diulang tanpa perubahan kondisi. Tidak perlu download/setup ulang, polling berkala, atau perubahan batas/arsitektur.
+Diagnosis alokasi private memory jalur offload/safetensors Windows dengan reproduksi kecil terawasi; gunakan log D-035. Jangan mengulang inferensi SD15 penuh atau menaikkan guard sebelum penyebab dan penyesuaian berikutnya terbukti.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -375,6 +381,11 @@ Setelah pengguna menyatakan kondisi memori siap, periksa ulang gerbang RAM/commi
 | 2026-11-20 | Pemuatan model/benchmark/inferensi/kualitas/alpha, hash ulang, build/suite aplikasi/browser | NOT RUN | Gerbang memori belum lolos dan pengguna menunda benchmark. Tidak ada perubahan source/perilaku aplikasi |
 | 2026-11-20 | Continue: `git status --short; git diff --stat; git diff; git diff --cached --stat`, inspeksi dokumen/direktori AI/`main.py:30–53` | PASS inspeksi | Git awal bersih; startup SCHP cocok dengan peringatan handoff. Penundaan tetap berlaku; bukan verifikasi runtime |
 | 2026-11-20 | Continue: pemeriksaan RAM/commit, pemuatan model/benchmark, build/suite aplikasi/browser | NOT RUN | Belum ada pernyataan kondisi memori siap atau izin baru; source/perilaku aplikasi tidak berubah |
+| 2026-11-20 | CIM RAM/commit/proses/disk dan Git awal | PASS inspeksi | Available 3.63 GiB/sisa commit 9.00 GiB; gerbang resident gagal RAM. Git bersih. Pengguna meminta lanjut dengan penyesuaian RAM minimal |
+| 2026-11-20 | Supervisor stdin awal; diagnostik ancestry psutil | ERROR harness, diperbaiki | Launcher Python milik supervisor salah dianggap model lain; tidak ada pemuatan model pada percobaan awal |
+| 2026-11-20 | `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u ai-service/.venv-stylization-poc/_probe_supervisor.py` | Load PASS; inferensi FAIL guard | Gate 3/8 GiB lolos; load 82.1594s, 686 key UNet cocok; private memory >4 GiB menghentikan child sebelum callback denoising pertama, exit 15. Bukan inferensi sukses |
+| 2026-11-20 | CIM proses `_probe_child.py`/`_probe_supervisor.py` sesudah selesai | PASS cleanup | 0 proses probe tersisa; dua script sementara dihapus, log/input sintetis retained lokal ignored |
+| 2026-11-20 | Probe 512, hasil PNG generatif/alpha/original, kualitas visual, LoRA, build/suite aplikasi/browser | NOT RUN | Guard menghentikan 256 tanpa hasil; tidak retry otomatis. Source aplikasi tidak berubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
