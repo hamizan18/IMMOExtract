@@ -528,4 +528,27 @@ vae/config.json
 - **NOT RUN:** Probe 512, safety-check forward/output generasi selesai, validitas alpha/original hasil, kualitas/inspeksi visual, LoRA dan UI/API generatif. Safety checker terpasang tidak sama dengan hasil lolos pemeriksaan.
 - **Next single task:** Diagnosis alokasi private memory pada jalur offload/safetensors Windows memakai reproduksi kecil terawasi, bukan mengulang inferensi penuh atau menaikkan guard. Pertahankan model/precision sampai ada bukti untuk penyesuaian berikutnya.
 
-**Format entri baru:** `D-036 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+## D-036 — Diagnosis Lonjakan Private Memory (Commit Charge) Offload Safetensors Windows
+
+- **Tanggal:** 2026-11-20.
+- **Status:** Verified / Accepted.
+- **Keputusan:** Penyebab pasti lonjakan private bytes pada D-035 telah dibuktikan melalui reproduksi terkontrol terisolasi; mitigasi menggunakan pemutusan view memory mapping (`.clone()`) atau pemakaian ulang handle `safe_open` tunggal menjadi dasar penyesuaian loader berikutnya.
+- **Alasan & Bukti Eksperimen:**
+  - Pada Windows, implementasi `OffloadedWeightsLoader.__getitem__` di Accelerate 1.16.0 (`utils/offload.py:170–191`) membuka `with safe_open(file, framework="pt", device=device) as f: tensor = f.get_tensor(...)`.
+  - Pada OS Windows, setiap kali `safe_open` dipanggil untuk membuka berkas UNet safetensors (3.44 GB), Windows mengalokasikan virtual address mapping baru yang langsung mencatat ~3,285 MB commit charge (private bytes).
+  - Karena `f.get_tensor(...)` mengembalikan tensor yang merupakan view langsung ke buffer memori hasil mapping, mapping tersebut tidak dapat dilepas selama objek tensor PyTorch masih hidup di memori.
+  - Saat modul UNet mengeksekusi hook `_onload_weights`, setiap parameter (seperti `weight` dan `bias`) dimuat lewat panggilan `__getitem__` terpisah. Akibatnya, setiap parameter aktif membuka instance mapping safetensors 3.28 GB independen.
+  - Reproduksi terkontrol membuktikan:
+    - 1 tensor aktif dari `safe_open`: private bytes naik dari 548 MB ke 3,834 MB (+3.28 GB).
+    - 2 tensor aktif: private bytes 7,119 MB (+6.57 GB).
+    - 3 tensor aktif: private bytes 10,404 MB (+9.86 GB).
+    - 4 tensor aktif: private bytes 13,689 MB (+13.14 GB), persis setara dengan peak child tree counter pada D-035 (~13.22 GB) dan melampaui limit pagefile Windows saat iterasi ke-5.
+    - Sebaliknya, Resident Set Size (RSS / fisik RAM) tetap stabil di ~214 MB karena hanya segmen data kecil yang disentuh CPU.
+  - Dua opsi solusi diuji pada reproduksi terisolasi:
+    1. **`.clone()` pada tensor yang dikembalikan:** Dengan memanggil `.clone()`, data disalin ke memori heap standar PyTorch dan referensi view ke file mapping safetensors terputus. Saat blok `with safe_open` selesai, mapping 3.28 GB langsung dilepas oleh OS. Hasil uji 10 iterasi berulang dengan `.clone()` mempertahankan private bytes konstan di 580.20 MB (sama sekali tidak melonjak ke 3.8 GB maupun 13.2 GB).
+    2. **Single instance / handle caching:** Menggunakan satu instance `safe_open` yang dibuka sekali dan digunakan bersama, sehingga hanya ada 1 pemetaan aktif (~3.8 GB) dan tidak bertambah secara multiplikatif.
+- **Konsekuensi:**
+  - Tidak perlu menaikkan guard memory supervisor atau berspekulasi mengenai kebocoran memori misterius.
+  - Guard 4 GiB D-035 terpicu semata-mata karena multiplikasi view memory-mapped file safetensors pada implementasi default Accelerate di Windows.
+  - Modifikasi terarah pada mekanisme loader offload (misalnya CustomOffloadedWeightsLoader yang mengimplementasikan `.clone()` atau single cached safe_open) memungkinkan eksekusi forward UNet tanpa lonjakan commit charge.
+- **Bukti tes:** Script uji scratch `test_loop.py`, `test_exception.py`, dan `test_solutions.py` pada CPython 3.14.3 AMD64 / Windows 11.

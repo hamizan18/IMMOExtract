@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6: runtime/checkpoint tersedia; POC UNet disk-offload D-035 berhasil memuat pipeline tetapi inferensi 256 dihentikan guard private memory. Belum ada hasil stylization; 512 tidak dijalankan.
+> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6: runtime/checkpoint tersedia; POC UNet disk-offload D-035 gagal guard private memory, namun penyebab pasti lonjakan commit charge telah dibuktikan secara empiris (D-036). Mitigasi view memory-mapping terverifikasi.
 
 ## Ringkasan
 
 - **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
-- **Current task:** POC adaptif D-035 selesai dicoba; diagnosis lonjakan alokasi private memory menjadi tugas berikutnya.
-- **Overall status:** Load pipeline CPU FP32 PASS (82.1594s); inferensi 256 FAIL karena private memory melewati guard 4 GiB. Peak counter pohon child ~12.32 GiB menunjukkan pengawasan sampling bukan hard cap. Tidak ada hasil gambar generatif.
-- **Last verification:** 2026-11-20 — gate adaptif PASS, load PASS, inferensi dihentikan sebelum callback denoising pertama; CIM mengonfirmasi 0 proses probe tersisa. Source aplikasi tidak berubah.
+- **Current task:** Diagnosis lonjakan alokasi private memory D-035 selesai (D-036); tugas berikutnya adalah menguji loader offload dengan mitigasi pemutusan view (`.clone()` / cached handle) pada submodul UNet sebelum percobaan pipeline penuh.
+- **Overall status:** Akar masalah lonjakan commit charge D-035 terbukti: setiap pembacaan parameter via `safe_open` tanpa copy menciptakan file mapping 3.28 GiB baru di Windows. Solusi `.clone()` terbukti menjaga private memory stabil di 580.20 MB pada 10 iterasi berulang.
+- **Last verification:** 2026-11-20 — verifikasi terkontrol `safe_open` lifecycle dan reproduksi multiplikasi mapping commit charge pada Windows AMD64 PASS (D-036). Source aplikasi tidak berubah.
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress; POC inferensi gagal guard | Pipeline D-035 termuat, inferensi 256 dihentikan karena private memory; hasil/kualitas/alpha/koreksi mask belum tersedia |
+| M6 | AI stylization lokal dan koreksi mask | In progress; akar penyebab lonjakan memory terbukti (D-036) | Pipeline D-035 termuat, inferensi dihentikan guard memory; diagnosis akar masalah selesai dan solusi mitigasi terbukti pada pengujian terisolasi |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -141,10 +141,12 @@
 - Percobaan aktual: gate awal available 3,779,076,096 byte/sisa commit 9,411,248,128 byte lolos; 686 key/shape/dtype UNet cocok. Pipeline CPU FP32 + tokenizer/PNDM/safety checker selesai dimuat dalam 82.1594s termasuk import.
 - Inferensi 256 dihentikan sebelum callback denoising pertama karena private memory melampaui 4 GiB; exit child 15. Jumlah peak counters private pohon child 13,227,094,016 byte (~12.32 GiB), working set 2,370,056,192 byte (~2.21 GiB); minimum available 1,419,010,048 byte. Penyebab internal lonjakan belum terbukti. Tidak ada hasil stylization atau retry/512.
 - Log, supervisor report dan input sintetis tersimpan privat di `ai-service/.venv-stylization-poc/probe-194a6529b2/`; report false-positive awal di `probe-3996e6c553/`. Script uji sementara dihapus; CIM memastikan 0 proses probe tersisa. Git awal bersih; perubahan permanen hanya README/DECISIONS/PROGRESS/HANDOFF, tanpa staging/commit atau perubahan source/dependensi/checkpoint.
+- Diagnosis lonjakan private memory Windows offload/safetensors (2026-11-20, D-036): investigasi reproduksi terisolasi pada model SD15 safetensors lokal membuktikan bahwa pemanggilan `safe_open` tanpa copy di Windows mengalokasikan memory-mapping 3.28 GiB per panggilan. Karena tensor kembalian bertindak sebagai view langsung pada buffer mmap, setiap parameter UNet aktif (`weight`, `bias`) mempertahankan pemetaan 3.28 GiB terpisah di commit charge Windows. 4 tensor aktif terbukti mengakumulasi 13.69 GiB commit charge (~13.22 GiB di D-035).
+- Pengujian solusi mitigasi D-036 membuktikan bahwa memanggil `.clone()` pada tensor hasil `safe_open` memutus referensi memory mapping sehingga handle mapping langsung di-unmap saat context manager ditutup. 10 iterasi berulang dengan `.clone()` mempertahankan private memory stabil di 580.20 MB (RSS 214.86 MB) tanpa lonjakan commit charge.
 
 ## In progress
 
-- M6: POC adaptif D-035 telah dicoba dan gagal guard pada inferensi; lanjutkan diagnosis alokasi kecil terawasi sebelum percobaan model penuh berikutnya. Tidak ada integrasi generatif/koreksi mask.
+- M6: Evaluasi loader offload yang dimitigasi (`.clone()` / single cached `safe_open` handle) pada submodul UNet sebelum percobaan inferensi pipeline terintegrasi. Tidak ada integrasi generatif/koreksi mask.
 
 ## Blockers / risks
 
@@ -170,7 +172,7 @@
 
 ## Next task — satu tugas saja
 
-Diagnosis alokasi private memory jalur offload/safetensors Windows dengan reproduksi kecil terawasi; gunakan log D-035. Jangan mengulang inferensi SD15 penuh atau menaikkan guard sebelum penyebab dan penyesuaian berikutnya terbukti.
+Rancang dan uji loader offload adaptif bermitigasi (`.clone()` / cached `safe_open` handle) pada submodul UNet terisolasi untuk membuktikan forward pass submodul tanpa multiplikasi commit charge. Jangan menjalankan inferensi SD15 penuh sebelum submodul terbukti hemat memori.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -385,6 +387,7 @@ Diagnosis alokasi private memory jalur offload/safetensors Windows dengan reprod
 | 2026-11-20 | Supervisor stdin awal; diagnostik ancestry psutil | ERROR harness, diperbaiki | Launcher Python milik supervisor salah dianggap model lain; tidak ada pemuatan model pada percobaan awal |
 | 2026-11-20 | `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u ai-service/.venv-stylization-poc/_probe_supervisor.py` | Load PASS; inferensi FAIL guard | Gate 3/8 GiB lolos; load 82.1594s, 686 key UNet cocok; private memory >4 GiB menghentikan child sebelum callback denoising pertama, exit 15. Bukan inferensi sukses |
 | 2026-11-20 | CIM proses `_probe_child.py`/`_probe_supervisor.py` sesudah selesai | PASS cleanup | 0 proses probe tersisa; dua script sementara dihapus, log/input sintetis retained lokal ignored |
+| 2026-11-20 | Diagnosis reproduksi alokasi `safe_open` safetensors Windows (scratch `test_loop.py`, `test_exception.py`, `test_solutions.py`) | PASS verifikasi D-036 | Terbukti 4 tensor aktif dari `safe_open` tanpa copy mengakumulasi 13.69 GiB private bytes (view mmap). Mitigasi `.clone()` terbukti konstan di 580.20 MB (RSS 214.86 MB) sepanjang 10 iterasi |
 | 2026-11-20 | Probe 512, hasil PNG generatif/alpha/original, kualitas visual, LoRA, build/suite aplikasi/browser | NOT RUN | Guard menghentikan 256 tanpa hasil; tidak retry otomatis. Source aplikasi tidak berubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
