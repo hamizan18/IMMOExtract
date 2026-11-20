@@ -4,26 +4,26 @@
 
 ## Last agent
 
-OMP — Smoke runtime Diffusers CPU terisolasi tanpa checkpoint, 2026-11-19. Environment POC lokal terpasang; source/environment aplikasi tidak diubah.
+OMP — Rencana checkpoint SD15 terpaku dan izin download saja, 2026-11-20. Tidak mengunduh binary atau mengubah source/environment aplikasi.
 
 ## Current milestone
 
-**M6 — AI Stylization lokal dan koreksi mask — In progress (POC runtime tanpa checkpoint).**
+**M6 — AI Stylization lokal dan koreksi mask — In progress (rencana POC checkpoint).**
 M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
 
 ## Last completed task
 
 - Git awal bersih termasuk index; catatan empat dokumen pending pada handoff lama sudah kedaluwarsa.
-- Membuat `ai-service/.venv-stylization-poc` pada Python 3.14.3, tanpa system site-packages. Environment dipertahankan untuk POC berikutnya dan diabaikan Git oleh `.venv*/` existing.
-- Memasang torch 2.15.0+cpu/torchvision 0.29.2+cpu dari index CPU resmi, NumPy 2.5.4/Pillow 13.0.0, serta pin generatif D-032: Diffusers 0.43.0, Transformers 5.23.0, Accelerate 1.16.0, Safetensors 0.8.0.
-- Instalasi CPU pertama timeout 600s. RECORD torch tidak memiliki file hilang/ukuran berbeda; hanya torchvision yang belum terpasang dilanjutkan. Instalasi generatif kemudian berhasil: 38 wheel tanpa penggantian empat paket CPU, bukan 28 seperti resolver inkremental.
-- Smoke offline via stdin PASS: import pipeline SD15 dan forward komponen kecil berbobot acak CLIP → VAE encode → UNet → DDIM → VAE decode. Tidak memakai checkpoint, `from_pretrained`, foto atau menulis hasil AI.
-- `pip check` PASS; inventaris distribusi `.venv` (15) dan `.venv-test` (31) identik sebelum/sesudah. `pyvenv.cfg` POC menyatakan `include-system-site-packages = false`.
-- Smoke termasuk import 26.633s; peak working set 414,453,760 byte, private akhir 789,704,704 byte. Angka ini bukan benchmark SD15. RAM bebas awal setup hanya 262,060 KiB; available akhir smoke 985,784,320 byte.
+- Memeriksa source lifecycle `ai-service/main.py`: startup memuat SCHP bila checkpoint ada. POC generatif kelak harus proses terpisah, bukan startup FastAPI existing.
+- Environment `.venv-stylization-poc` existing tanpa system site-packages; inventaris sembilan pin sesuai D-033. Tidak mengulang setup/import model. `ai-service/models/` hanya berisi SCHP 267,445,237 byte.
+- Menetapkan mirror SD15 revision `451f4fe16113bff5a5d2269ed5ad43b0592e9a14`, 16 berkas FP32/config/tokenizer/card 5,482,666,661 byte (5.1061 GiB), ditambah teks lisensi OpenRAIL-M revision `14d42d09bffd871b1666a084fc954a50cff72ac0`. Allowlist/hash/URL dan prosedur ada di D-034.
+- Snapshot Windows: available RAM 1.89 GiB, sisa commit 5.70 GiB, disk D: bebas 24.92 GiB; query Python/Uvicorn kosong. Gerbang benchmark usulan minimal 6 GiB available dan 8 GiB sisa commit gagal; bukan bukti inferensi pasti gagal.
+- Formulir izin dijawab pengguna **`download_only`**: download/verifikasi diizinkan untuk tugas berikutnya, **benchmark/pemuatan model belum diizinkan**. Tidak perlu meminta ulang izin download untuk allowlist yang sama; perubahan cakupan perlu izin baru.
+- Tidak ada binary yang diunduh pada sesi rencana ini, hasil generatif, foto pribadi, instalasi, atau perubahan runtime.
 
 ## Current task
 
-Smoke runtime tanpa checkpoint selesai (D-033). Berikutnya rencana POC checkpoint SD15 asli dan izin download; jangan mengaktifkan stylization atau memasang generator ke runtime SCHP berdasarkan smoke kecil ini.
+Rencana dan izin terbatas selesai (D-034). Berikutnya download/verifikasi allowlist tanpa memuat model. Jangan mengaktifkan stylization berdasarkan smoke kecil D-033 atau metadata checkpoint.
 
 ## Working components
 
@@ -32,38 +32,35 @@ Smoke runtime tanpa checkpoint selesai (D-033). Berikutnya rencana POC checkpoin
 
 ## Modified files
 
-- `README.md` — status runtime POC dan batas bukti.
-- `docs/DECISIONS.md` — D-033: setup/pin, pemulihan timeout, bukti offline, resource dan batas berikutnya.
-- `docs/PROGRESS.md` — status M6, tes aktual, error setup/harness dan next task.
+- `docs/DECISIONS.md` — D-034: revision, allowlist/ukuran/hash, lisensi, resource, batas operasional dan izin download saja.
+- `docs/PROGRESS.md` — status M6, pemeriksaan aktual dan tugas berikutnya.
 - `docs/HANDOFF.md` — status handoff ini.
-- Lokal ignored: `ai-service/.venv-stylization-poc/`, termasuk `poc-pins.txt` dan `install-report.json`. Interpreter tersedia di `Scripts/python.exe`; pin/report bukan lock aplikasi dan tidak di-commit.
+- `README.md`, source, requirements dan environment tidak diubah. Environment lokal ignored `.venv-stylization-poc/` beserta pin/report D-033 tetap tersedia; tidak dibuat ulang.
 
 ## Uncommitted changes / Git status
 
-Inspeksi awal working tree/index bersih. Empat dokumen di atas diubah pada sesi ini dan belum di-commit oleh sesi ini; tidak staging/commit. Environment POC baru ignored, source/requirements dan kedua environment aplikasi tidak disentuh. Smoke lewat stdin tidak membuat script sementara di workspace; tidak ada service uji yang ditinggalkan.
+Inspeksi awal working tree/index bersih. Tiga dokumen di atas diubah pada sesi ini dan belum di-commit oleh sesi ini; tanpa staging/commit. Tidak ada file sementara, direktori model baru atau service uji yang dibuat. Tidak menjalankan pemeriksaan Git ulang setelah edit.
 
 ## Current errors / limitations
 
-- Kelayakan SD15 penuh **belum terbukti**: import dan forward kecil PASS, tetapi tokenizer/full pipeline/safety checker, checkpoint, LoRA, peak RAM/commit model asli, latensi serta kualitas/alpha **NOT RUN**.
-- Headroom RAM berubah-ubah dan sangat terbatas pada awal sesi. Private memory akhir smoke bukan peak commit; jangan menyamakan footprint kecil dengan kapasitas model penuh. Periksa resource ulang sebelum POC checkpoint.
-- Warning smoke: BOS/EOS default CLIP 49406/49407 di luar vocab sintetis 32; input token 0–9 valid, forward finite PASS. Tidak menggunakan tokenisasi/EOS pipeline penuh. Untuk fixture kecil berikutnya, konfigurasi special-token ID sesuai vocab.
-- Timeout instalasi CPU sudah ditangani dengan melanjutkan torchvision; import/forward dan `pip check` akhir PASS. Error pembacaan report akibat default cp1252 selesai dengan UTF-8; bukan error dependensi.
-- PEFT/LoRA, koreksi mask, retensi dan evaluasi foto nyata belum dikerjakan. Model/base/LoRA belum boleh dibundle hanya karena kode terbuka; kewajiban distribusi ada di D-031.
+- Full SD15/tokenizer/safety checker, checkpoint lokal, LoRA, peak RAM/commit model asli, latensi serta kualitas/alpha **NOT RUN**. SHA-256 D-034 masih metadata yang diharapkan, bukan hash binary lokal terverifikasi.
+- Benchmark belum diizinkan dan headroom saat inventaris tidak lolos batas usulan. Jangan menutup aplikasi pengguna, mengubah pagefile, menonaktifkan safety checker atau mengganti precision/engine diam-diam.
+- Disk cukup pada snapshot, tetapi wajib diperiksa lagi sebelum download: minimal 12 GiB bebas awal, pertahankan 6 GiB; hanya satu transfer aktif dan tujuan privat D-034. Ini batas operasional, bukan kebutuhan RAM terukur.
+- Tidak ada error baru pada pemeriksaan sesi ini. Timeout instalasi/cp1252 D-033 sudah selesai pada sesi sebelumnya; warning special-token fixture kecil bukan bukti tokenizer pretrained bekerja.
+- Koreksi mask, retensi, evaluasi foto nyata dan lisensi distribusi tetap terbuka. Izin evaluasi/download bukan izin bundling model.
 
 ## Tests / checks performed
 
-- **PASS inspeksi** Git status/diff/index sebelum perubahan; requirements/source smoke CPU dan ignore existing.
-- **FAIL timeout → pemulihan PASS** `py -3.14 -m venv ai-service/.venv-stylization-poc` lalu pip CPU binary-only; instalasi mencapai 600s. `pip list --format=json` dan RECORD torch menunjukkan torchvision belum ada, tanpa file torch hilang/ukuran berbeda. Install torchvision CPU `--no-deps` berhasil.
-- **PASS instalasi** POC `python -B -m pip --isolated --disable-pip-version-check install --only-binary=:all: --no-cache-dir --index-url https://pypi.org/simple --report ai-service/.venv-stylization-poc/install-report.json -r ai-service/.venv-stylization-poc/poc-pins.txt`. Report UTF-8: 38 wheel, tanpa penggantian torch/vision/NumPy/Pillow; detail versi D-033.
-- **PASS dependensi** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -m pip check`: No broken requirements found.
-- **PASS smoke terbatas** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -` via stdin; HF/Transformers offline, socket connect ditolak. CLIP `[1,8,32]`, VAE latent `[1,4,16,16]`, UNet/noise/DDIM bentuk sama, decode `[1,3,32,32]`; CPU FP32, bentuk/finite/variasi tensor PASS. Bobot acak, bukan hasil generatif pretrained.
-- **PASS isolasi** Inventaris `importlib.metadata` sebelum/sesudah identik pada kedua venv aplikasi; POC tanpa system site-packages atau path `.venv-test`.
-- **ERROR harness → selesai** Report JSON gagal dibaca default cp1252; pembacaan UTF-8 berhasil.
-- **NOT RUN** Checkpoint/full pipeline SD15/LoRA, benchmark model asli, kualitas/alpha, build/suite aplikasi/browser. Tidak ada perubahan perilaku aplikasi; bukti M1–M5 tidak diuji ulang.
+- **PASS inspeksi** `git status --short; git diff --stat; git diff` dan `git diff --cached` sebelum perubahan: kosong.
+- **PASS inventaris** PowerShell `Get-CimInstance Win32_OperatingSystem`, `Win32_PerfFormattedData_PerfOS_Memory`, `Win32_Process` (Python/Uvicorn), `Get-Volume -DriveLetter D`. Available 2,032,168,960 byte; commit 9,779,187,712/15,896,805,376 byte; disk bebas 26,759,573,504 byte. Tidak ada proses Python/Uvicorn dari query.
+- **PASS pemeriksaan** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -` via stdin: `importlib.metadata`, daftar model dan kalkulasi ukuran. Sembilan pin sesuai; model hanya SCHP. Total 16 berkas SD15 5,482,666,661 byte; gerbang benchmark RAM/commit usulan sama-sama false.
+- **PASS pemeriksaan sumber** API model/tree pada revision terpaku, README/model_index dan teks lisensi terpaku dibaca; bobot FP32/safety checker terdaftar. Tidak mengambil binary atau mengeksekusi source remote.
+- **Izin aktual** Formulir menginformasikan 5.11 GiB, lisensi/restriksi dan keterbatasan RAM; pengguna memilih `download_only` untuk tugas berikutnya.
+- **NOT RUN** Download/hash binary lokal, full pipeline/LoRA/benchmark/kualitas/alpha, build/suite aplikasi/browser. Tidak ada perubahan perilaku aplikasi; hasil M1–M5 dan smoke runtime D-033 tidak diuji ulang.
 
 ## Next action (only one)
 
-**Rencanakan POC checkpoint SD15 asli dan dapatkan izin download:** tetapkan revision/berkas/lisensi serta batas resource, periksa headroom RAM terkini, lalu minta izin eksplisit sebelum download/benchmark. Pakai environment `.venv-stylization-poc` existing; jangan ulang setup atau mengubah `.venv`, `.venv-test` dan requirements aplikasi. Jangan muat SCHP dan generator bersamaan pada POC pertama. Smoke kecil D-033 bukan izin download ataupun bukti model penuh layak.
+**Download dan verifikasi checkpoint SD15 sesuai D-034, tanpa benchmark:** izin eksplisit `download_only` sudah diperoleh. Periksa disk terlebih dahulu, ambil hanya 16 berkas allowlist + teks lisensi ke `ai-service/models/sd15-poc/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/` (belum dibuat), verifikasi ukuran/SHA-256 bobot serta integritas berkas kecil, simpan provenance/card/lisensi privat. Jangan memakai `from_pretrained`, memuat model, memasang ulang environment, mengambil LoRA/varian tambahan atau mengubah requirements aplikasi. Sesudah download terverifikasi, benchmark masih perlu izin terpisah dan pemeriksaan resource; jangan menganggap izin download sebagai izin menjalankannya.
 
 ## Handoff rules
 

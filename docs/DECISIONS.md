@@ -441,4 +441,59 @@ Ukuran berikut berasal dari metadata [tree SD 1.5](https://huggingface.co/api/mo
 - **Konsekuensi:** M6 tetap in progress. Full pipeline/tokenizer/safety checker, checkpoint, LoRA, kualitas/alpha, peak RAM/commit dan latensi SD15 **NOT RUN**. Tidak ada script smoke permanen atau service baru; aplikasi M1–M5 tidak diuji ulang karena tidak diubah.
 - **Next single task:** Rencanakan POC checkpoint SD15 asli dengan revision/berkas/lisensi dan batas resource, lalu minta izin eksplisit sebelum download/benchmark. Headroom RAM wajib diperiksa ulang; jangan menjalankan SCHP dan generator bersamaan pada POC awal.
 
-**Format entri baru:** `D-034 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
+## D-034 — Rencana checkpoint SD15 terpaku dan izin download saja
+
+- **Tanggal:** 2026-11-20.
+- **Status:** Rencana evaluasi lokal; pengguna memilih **`download_only`** pada formulir izin. Download/verifikasi diizinkan untuk tugas berikutnya; **benchmark/pemuatan model belum diizinkan**. Sesi ini hanya membaca metadata/teks publik, tidak mengunduh binary.
+- **Sumber:** [API model](https://huggingface.co/api/models/stable-diffusion-v1-5/stable-diffusion-v1-5) menunjuk revision **`451f4fe16113bff5a5d2269ed5ad43b0592e9a14`**. [Card pada revision tersebut](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/raw/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/README.md) menyatakan repositori ini mirror, tidak berafiliasi dengan RunwayML; jangan menyebutnya distribusi resmi Runway. Gunakan revision ini, bukan `main`, untuk semua berkas.
+- **Pilihan:** Baseline Diffusers SD15 CPU FP32 sesuai D-031, dengan safety checker. Tidak mengambil FP16/non-EMA, `.bin`, `.ckpt`, checkpoint monolitik, LoRA atau remote custom code. FP16 di disk bukan solusi otomatis RAM FP32; perubahan precision/engine bukan bagian izin ini.
+
+### Allowlist download dan pemeriksaan integritas
+
+Ukuran dan SHA-256 berikut berasal dari `lfs.oid` pada [tree revision tetap](https://huggingface.co/api/models/stable-diffusion-v1-5/stable-diffusion-v1-5/tree/451f4fe16113bff5a5d2269ed5ad43b0592e9a14?recursive=true). **Belum dibandingkan dengan binary lokal**; hash penyedia membuktikan kesesuaian artefak, bukan audit keamanan/asal pelatihan.
+
+| Berkas bobot | Byte | SHA-256 yang diharapkan |
+| --- | ---: | --- |
+| `unet/diffusion_pytorch_model.safetensors` | 3,438,167,540 | `19da7aaa4b880e59d56843f1fcb4dd9b599c28a1d9d9af7c1143057c8ffae9f1` |
+| `text_encoder/model.safetensors` | 492,265,874 | `d008943c017f0092921106440254dbbe00b6a285f7883ec8ba160c3faad88334` |
+| `vae/diffusion_pytorch_model.safetensors` | 334,643,276 | `a2b5134f4dbc140d9c11f11cba3233099e00af40f262f136c691fb7d38d2194c` |
+| `safety_checker/model.safetensors` | 1,215,981,830 | `9d6a233ff6fd5ccb9f76fd99618d73369c52dd3d8222376384d0e601911089e8` |
+
+Tambahkan tepat 12 berkas kecil berikut dari revision yang sama:
+
+```text
+README.md
+model_index.json
+feature_extractor/preprocessor_config.json
+safety_checker/config.json
+scheduler/scheduler_config.json
+text_encoder/config.json
+tokenizer/merges.txt
+tokenizer/special_tokens_map.json
+tokenizer/tokenizer_config.json
+tokenizer/vocab.json
+unet/config.json
+vae/config.json
+```
+
+- **Total:** 16 berkas model, 5,482,666,661 byte (**5.1061 GiB**): bobot 5,481,058,520 byte + berkas kecil 1,608,141 byte. Tambahkan teks lisensi terpisah; metadata/cache kecil tidak termasuk angka tersebut. Jangan snapshot seluruh repo.
+- **Tujuan rencana:** `ai-service/models/sd15-poc/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/`, diabaikan Git oleh aturan existing. Direktori ini belum dibuat. Cache/partial download harus tetap di lokasi privat tersebut, bukan cache global atau static folder; jangan menggandakan seluruh model antara cache dan tujuan.
+- **Verifikasi tugas download:** Satu transfer aktif, streaming ke partial file; publikasi berkas selesai setelah ukuran dan hash cocok. Cocokkan berkas kecil dengan ukuran serta Git blob OID dari tree terpaku, simpan SHA-256 lokal dan manifest provenance/revision. Simpan teks lisensi/card tanpa modifikasi. Jika berbeda atau transfer gagal, laporkan FAIL dan jangan memuat model atau mengganti revision otomatis. Tidak memakai `from_pretrained`, import torch, inferensi, atau download varian alternatif untuk verifikasi ini.
+
+### Lisensi
+
+- [CreativeML OpenRAIL-M](https://huggingface.co/spaces/CompVis/stable-diffusion-license/raw/14d42d09bffd871b1666a084fc954a50cff72ac0/license.txt), revision sumber lisensi **`14d42d09bffd871b1666a084fc954a50cff72ac0`**, dibaca lengkap. Mirror model tidak memiliki LICENSE sendiri pada tree yang diperiksa; card merujuk sumber ini.
+- Izin pengguna hanya evaluasi lokal: bukan izin bundling, publikasi bobot, atau layanan publik. Lisensi mempunyai pembatasan penggunaan Attachment A; distribusi/layanan ke pihak ketiga membawa kewajiban salinan lisensi, notices, penandaan modifikasi dan penerusan restriksi. Data pelatihan tidak dilisensikan oleh lisensi model. Pengguna bertanggung jawab atas output. Card menyebut tujuan riset dan keterbatasan model/safety checker.
+
+### Resource dan gerbang benchmark yang belum diizinkan
+
+- **Snapshot aktual:** CIM Windows menunjukkan RAM total 7,762,112 KiB, free physical 2,056,532 KiB; counter available 2,032,168,960 byte (**1.89 GiB**). Commit 9,779,187,712 dari limit 15,896,805,376 byte, sisa **5.70 GiB**. Disk D: bebas 26,759,573,504 byte (**24.92 GiB**). Counter diambil berurutan, bukan snapshot atomik. Query proses Python/Uvicorn tidak mengembalikan proses saat pemeriksaan.
+- **Gerbang download:** Periksa ulang disk; minimal 12 GiB bebas sebelum transfer dan pertahankan minimal 6 GiB bebas. Ini cadangan operasional usulan untuk bobot/partial/OS, bukan ukuran download tambahan. Tanpa mengubah pagefile, menutup aplikasi pengguna, atau menghapus model/data lama.
+- **Gerbang benchmark terpisah:** Wajib izin baru, minimal 6 GiB RAM available dan 8 GiB sisa commit sebelum proses; tanpa SCHP/generator lain aktif. **Kedua gerbang memori gagal pada snapshot sesi ini.** Batas konservatif ini bukan kebutuhan terukur, jaminan aman, atau bukti SD15 mustahil pada hardware ini.
+- **Rencana pengawasan:** Parent process memantau child POC dan resource setiap 100 ms; hentikan hanya child milik POC bila available <512 MiB, sisa commit <1 GiB, private bytes child >7 GiB, atau waktu load >300 detik / tiap inferensi >900 detik. Catat alasan penghentian; tidak retry otomatis. Sampling dapat melewatkan lonjakan cepat, jadi bukan hard guarantee terhadap tekanan memori.
+- **Rencana eksekusi setelah izin dan gerbang lolos:** Gunakan `.venv-stylization-poc` existing, offline/local-files-only, safetensors, CPU FP32, batch satu, dua thread, seed 0 dan safety checker aktif. Tidak import/start `main.py`: lifespan existing otomatis memuat SCHP bila checkpoint ada. Pipeline img2img standar, scheduler PNDM dari config, 20 langkah nominal, strength 0.5, guidance 7.5; catat langkah aktual. Probe 256 dahulu, 512 hanya sesudah probe pertama lolos dan resource diperiksa ulang. Ini parameter awal, bukan kualitas/latensi terjamin.
+- **Input/output rencana:** Fixture RGBA sintetis objek pakaian, bukan foto pribadi. Simpan hash original; komposit RGB netral/letterbox dan pasang kembali alpha sumber setelah undo padding/resize sesuai D-031. Ukur waktu load/inferensi, peak working set/private bytes, peak commit sistem dan minimum available; verifikasi PNG/ukuran/alpha exact, original tidak berubah, serta inspeksi visual tepi/halo. Alpha yang benar tidak membuktikan alignment atau kualitas pixel art. Tidak aktifkan UI/API generatif dari keberhasilan probe saja.
+- **Bukti sesi ini:** Inventaris `importlib.metadata` POC sesuai sembilan pin yang diperiksa (torch/vision/NumPy/Pillow/Diffusers/Transformers/Accelerate/Safetensors/psutil); model lokal hanya SCHP 267,445,237 byte. Config pipeline upstream menyertakan tokenizer, CLIP, VAE, UNet, PNDM, feature extractor dan safety checker. Kalkulasi stdin mengonfirmasi total allowlist dan gerbang RAM/commit gagal. Tidak ada perubahan source/environment, pengujian aplikasi, benchmark atau download binary.
+- **Next single task:** Download hanya allowlist dan lisensi di atas setelah gerbang disk diperiksa; verifikasi ukuran/hash/provenance tanpa memuat model. Izin `download_only` tidak mencakup benchmark.
+
+**Format entri baru:** `D-035 — [judul]`, `Tanggal`, `Status`, `Keputusan`, `Alasan`, `Alternatif`, `Konsekuensi`, `Bukti tes` (jika ada).
