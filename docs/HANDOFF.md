@@ -4,7 +4,7 @@
 
 ## Last agent
 
-OMP — Pemeriksaan gerbang resource dan keputusan izin benchmark, 2026-11-20. Pengguna memilih `defer`; tidak ada pemuatan model atau perubahan source/environment.
+OMP — Pemeriksaan continue, 2026-11-20. Keputusan `defer` tetap berlaku; pesan continue belum menyatakan kondisi memori siap. Tidak menjalankan pemeriksaan resource ulang, pemuatan model atau perubahan source/environment.
 
 ## Current milestone
 
@@ -12,6 +12,15 @@ OMP — Pemeriksaan gerbang resource dan keputusan izin benchmark, 2026-11-20. P
 M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
 
 ## Last completed task
+
+### Sesi continue terbaru
+
+- Git awal working tree/index bersih; dua dokumen pending pada handoff sebelumnya sudah tidak pending.
+- Dokumentasi, direktori AI dan `main.py:30–53` diperiksa. Environment POC/direktori model tersedia; startup layanan memang membuat `HumanExtractor` bila checkpoint ada. Tidak menjalankan service atau import model.
+- Next action tetap bersyarat. Tidak ada pernyataan kesiapan memori/izin benchmark baru; tidak melakukan polling RAM, meminta ulang izin, atau beralih tugas/arsitektur.
+- Hanya PROGRESS/HANDOFF diperbarui; pemeriksaan ini bukan kemajuan implementasi atau bukti runtime M6.
+
+### Sesi gerbang sebelumnya (bukti historis, tidak diulang)
 
 - Git awal bersih termasuk index; tiga dokumen pending dari handoff download sudah tidak pending.
 - Memeriksa CIM OS/memory/proses dan disk: RAM available 1,071,165,440 byte (~1.00 GiB), commit 12,311,908,352 dari limit 15,896,805,376 byte, sisa 3,584,897,024 byte (~3.34 GiB). Kedua gerbang D-034 (6 GiB RAM/8 GiB sisa commit) false.
@@ -32,8 +41,8 @@ Pemeriksaan resource dan keputusan izin selesai. Benchmark ditunda sesuai piliha
 
 ## Modified files
 
-- `docs/PROGRESS.md` — snapshot resource, hasil pemeriksaan/keputusan pengguna dan next task bersyarat.
-- `docs/HANDOFF.md` — status penundaan, izin dan bukti sesi ini.
+- `docs/PROGRESS.md` — mencatat inspeksi continue dan tes NOT RUN; membedakan snapshot resource sebelumnya dari pemeriksaan sesi ini.
+- `docs/HANDOFF.md` — mencatat Git awal bersih dan mempertahankan next action bersyarat tanpa menganggap continue sebagai izin.
 - DECISIONS/source/README/requirements/model/provenance/environment tidak diubah; tidak ada keputusan arsitektur baru atau script permanen.
 
 ## Uncommitted changes / Git status
@@ -50,7 +59,10 @@ Inspeksi awal working tree/index bersih. Dua dokumen di atas diubah pada sesi in
 
 ## Tests / checks performed
 
-- **PASS inspeksi** `git status --short; git diff --stat; git diff; git diff --cached`: kosong sebelum perubahan.
+- **PASS inspeksi sesi continue** `git status --short; git diff --stat; git diff; git diff --cached --stat`: kosong sebelum perubahan. Pembacaan direktori AI dan `main.py:30–53` mengonfirmasi lokasi POC serta startup SCHP, bukan pengujian runtime.
+- **NOT RUN sesi continue** Resource RAM/commit, inventaris/hash checkpoint, import/pemuatan model, benchmark, build/suite aplikasi/browser. Penundaan belum dicabut; tidak ada perubahan perilaku aplikasi.
+
+Hasil sesi gerbang sebelumnya berikut **tidak dijalankan ulang**:
 - **PASS inventaris; gerbang TIDAK LOLOS** PowerShell `Get-CimInstance Win32_OperatingSystem`, `Win32_PerfFormattedData_PerfOS_Memory`, `Win32_Process`, `Get-Volume -DriveLetter D`: available 1,071,165,440 byte; sisa commit 3,584,897,024 byte; `RamGate6GiB=false`, `CommitGate8GiB=false`; query Python/Uvicorn tanpa entri.
 - **PASS prasyarat lokal** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -` via stdin: 17 artefak sesuai ukuran/allowlist provenance, enam pin sesuai, torch/Diffusers/Transformers tidak diimport. Tidak menghitung ulang hash.
 - **Keputusan aktual** Formulir `benchmark_permission` → `defer`. Pengguna menyiapkan kondisi memori dahulu; tidak memberi izin pemuatan model.
