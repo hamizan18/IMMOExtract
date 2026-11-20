@@ -4,23 +4,25 @@
 
 ## Last agent
 
-Antigravity — Diagnosis lonjakan private memory safetensors offload Windows D-036, 2026-11-20. Akar penyebab lonjakan private bytes terbukti secara empiris: view mmap safetensors tanpa copy menduplikasi file mapping 3.28 GiB per parameter aktif di Windows. Mitigasi pemutusan view (`.clone()`) terbukti mempertahankan memori konstan di 580 MB.
+Antigravity — Pembuktian loader offload bermitigasi Cloned Tensor pada UNet CPU D-037, 2026-11-20. Forward pass 686 parameter UNet SD15 selesai dalam 11.24s di CPU murni; private memory puncak hanya 797.06 MB (<800 MB), membuktikan masalah commit charge D-035 telah teratasi.
 
 ## Current milestone
 
-**M6 — AI Stylization lokal dan koreksi mask — In progress; akar penyebab lonjakan memory terbukti (D-036).**
+**M6 — AI Stylization lokal dan koreksi mask — In progress; forward pass UNet bermitigasi PASS (D-037).**
 M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization dan koreksi mask belum tersedia.
 
 ## Last completed task
 
-- Diagnosis reproduksi terisolasi D-036: pengujian alokasi memori `safetensors.safe_open` pada Windows mengonfirmasi bahwa setiap pembacaan parameter tanpa copy menghasilkan file mapping 3.28 GiB terpisah di virtual memory / commit charge.
-- 4 tensor aktif dari `safe_open` tanpa copy mengakumulasi 13.69 GiB private bytes, membuktikan secara eksak penyebab lonjakan ~13.22 GiB pada pohon child D-035 yang memicu guard (>4 GiB).
-- Verifikasi mitigasi terisolasi: penambahan `.clone()` pada tensor hasil `safe_open` memutus referensi buffer mmap, memungkinkan OS segera meng-unmap berkas saat context manager keluar. 10 iterasi berulang mempertahankan private memory stabil di 580.20 MB (RSS 214.86 MB).
+- Implementasi dan pengujian loader bermitigasi `ClonedOffloadedWeightsLoader` (subclass `OffloadedWeightsLoader` dengan pemutusan view `.clone()` saat ekstraksi safetensors).
+- Uji forward pass submodul A (`conv_in` — 2 parameter): output `[1, 320, 32, 32]`, finite `True`, parameter kembali ke `meta`, private memory 719.97 MB (RSS 385.87 MB).
+- Uji forward pass submodul B (`down_blocks[0]` — 74 parameter): output `[1, 320, 16, 16]`, finite `True`, parameter kembali ke `meta`, private memory 748.38 MB (RSS 411.32 MB).
+- Uji 3 iterasi berulang: membuktikan zero leak antar-forward pass (private bytes 752.20 MB -> 755.02 MB -> 755.39 MB).
+- Uji model UNet penuh (686 parameter): forward pass selesai dalam **11.24 detik** di CPU FP32 Ryzen 5 7430U; output `[1, 4, 32, 32]`, finite `True`. Private bytes puncak **797.06 MB** (jauh di bawah batas guard 4 GiB), RSS **444.63 MB**. Parameter terverifikasi kembali ke `meta`.
 - Dokumen proyek (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`) diperbarui sesuai temuan empiris.
 
 ## Current task
 
-Penyebab lonjakan commit charge D-035 selesai didiagnosis dan dibuktikan. Tugas berikutnya adalah merancang dan menguji loader offload adaptif bermitigasi (`.clone()` / cached handle) pada submodul UNet terisolasi.
+Loader bermitigasi `ClonedOffloadedWeightsLoader` terbukti sukses dan hemat memori pada model UNet penuh. Tugas berikutnya adalah mengintegrasikannya ke probe inferensi pipeline `StableDiffusionImg2ImgPipeline` terawasi (supervisor/child D-035 adaptif) untuk mengeksekusi langkah denoising 256×256.
 
 ## Working components
 
@@ -29,8 +31,8 @@ Penyebab lonjakan commit charge D-035 selesai didiagnosis dan dibuktikan. Tugas 
 
 ## Modified files
 
-- `docs/DECISIONS.md` — entri D-036 (diagnosis akar masalah mmap safetensors di Windows dan mitigasi `.clone()`).
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — pembaruan status M6, log verifikasi D-036, dan next single task.
+- `docs/DECISIONS.md` — entri D-037 (pembuktian loader offload bermitigasi `.clone()` pada UNet).
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — pembaruan status M6, log verifikasi D-037, dan next single task.
 - Source aplikasi, requirements, paket, dan checkpoint tidak dimutasi.
 
 ## Uncommitted changes / Git status
@@ -39,20 +41,22 @@ Git working tree dan index saat ini memuat modifikasi pada 3 berkas dokumentasi 
 
 ## Current errors / limitations
 
-- POC D-035 sebelumnya gagal inferensi karena guard private memory; mitigasi D-036 belum diintegrasikan ke loader pipeline UNet penuh.
-- Inferensi penuh 256/512 belum berhasil dieksekusi. Belum ada hasil generatif atau integrasi UI/API M6.
-- Keputusan tetap mempertahankan checkpoint/revision lokal, CPU FP32, dan safety checker aktif.
+- Integrasi loader bermitigasi ke pipeline img2img penuh (VAE encode + Text encoder + Denoising scheduler loop + VAE decode + Safety checker) belum dieksekusi secara end-to-end.
+- Inferensi penuh 256/512 belum menghasilkan artefak gambar generatif akhir.
+- Keputusan tetap mempertahankan checkpoint/revision lokal, CPU FP32, scheduler PNDM, dan safety checker aktif.
 
 ## Tests / checks performed
 
-- **PASS inspeksi awal:** `git status` (clean), `GlobalMemoryStatusEx` (RAM total 7.40 GB, avail 3.24 GB; commit limit 14.81 GB, commit avail 8.84 GB).
-- **PASS reproduksi memory leak mmap:** script uji membuktikan peningkatan 3.28 GiB per parameter aktif (1 tensor: 3.83 GB, 2 tensor: 7.12 GB, 3 tensor: 10.40 GB, 4 tensor: 13.69 GB).
-- **PASS verifikasi mitigasi `.clone()`:** 10 iterasi berulang dengan pemutusan view mempertahankan private bytes konstan di 580.20 MB dan RSS di 214.86 MB.
-- **NOT RUN:** Full pipeline forward pass, probe 512, kualitas visual, LoRA, build/suite aplikasi/browser.
+- **PASS inspeksi awal:** `git status` (clean), `GlobalMemoryStatusEx` (RAM total 7.40 GB, avail 2.30 GB; commit limit 14.81 GB, commit avail 7.43 GB).
+- **PASS forward submodul `conv_in` (2 parameter):** output valid `[1, 320, 32, 32]`, private bytes 719.97 MB, RSS 385.87 MB.
+- **PASS forward submodul `down_blocks[0]` (74 parameter):** output valid `[1, 320, 16, 16]`, private bytes 748.38 MB, RSS 411.32 MB.
+- **PASS zero-leak test (3 iterasi berulang):** private bytes stabil di 752.20 -> 755.02 -> 755.39 MB.
+- **PASS full UNet forward pass (686 parameter):** selesai dalam 11.24s di CPU FP32; output `[1, 4, 32, 32]`, private bytes 797.06 MB, RSS 444.63 MB, parameter kembali ke `meta`.
+- **NOT RUN:** Full img2img pipeline multi-step inference, probe 512, kualitas visual, LoRA, build/suite aplikasi/browser.
 
 ## Next action (only one)
 
-**Rancang dan uji loader offload adaptif bermitigasi (`.clone()` / cached `safe_open` handle) pada submodul UNet terisolasi untuk membuktikan forward pass submodul tanpa multiplikasi commit charge.** Jangan mengulang inferensi SD15 penuh sebelum submodul terbukti hemat memori.
+**Integrasikan `ClonedOffloadedWeightsLoader` ke script supervisor/child probe inferensi img2img 256×256 terawasi (D-035 adaptif) dan uji eksekusi langkah denoising pertama.** Pertahankan guard private memory 4 GiB dan parameter D-035.
 
 ## Handoff rules
 

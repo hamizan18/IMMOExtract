@@ -552,3 +552,22 @@ vae/config.json
   - Guard 4 GiB D-035 terpicu semata-mata karena multiplikasi view memory-mapped file safetensors pada implementasi default Accelerate di Windows.
   - Modifikasi terarah pada mekanisme loader offload (misalnya CustomOffloadedWeightsLoader yang mengimplementasikan `.clone()` atau single cached safe_open) memungkinkan eksekusi forward UNet tanpa lonjakan commit charge.
 - **Bukti tes:** Script uji scratch `test_loop.py`, `test_exception.py`, dan `test_solutions.py` pada CPython 3.14.3 AMD64 / Windows 11.
+
+## D-037 — Pembuktian Loader Offload Bermitigasi Cloned Tensor pada Forward Pass UNet
+
+- **Tanggal:** 2026-11-20.
+- **Status:** Verified / Accepted.
+- **Keputusan:** Terapkan `ClonedOffloadedWeightsLoader` (subclass `OffloadedWeightsLoader` yang memanggil `.clone()` saat ekstraksi tensor dari safetensors) sebagai loader offload resmi untuk model UNet CPU pada Windows.
+- **Alasan & Bukti Eksperimen:**
+  - `ClonedOffloadedWeightsLoader` diintegrasikan via patching `accelerate.big_modeling.OffloadedWeightsLoader` dan `accelerate.utils.offload.OffloadedWeightsLoader`.
+  - UNet SD15 diinisialisasi pada `meta` device, dibangun `offload_index` untuk 686 parameter, dan didispatch dengan `device_map={"": "disk"}` serta `main_device="cpu"`.
+  - Uji submodul A (`conv_in` — 2 parameter): forward pass menghasilkan shape `[1, 320, 32, 32]`, nilai finite, parameter kembali ke `meta`, private bytes 719.97 MB (RSS 385.87 MB).
+  - Uji submodul B (`down_blocks[0]` — 74 parameter): forward pass selesai sukses menghasilkan shape `[1, 320, 16, 16]`, semua parameter kembali ke `meta`, private bytes 748.38 MB (RSS 411.32 MB).
+  - Uji C (3 iterasi berurutan): private bytes stabil di 752.20 MB -> 755.02 MB -> 755.39 MB; membuktikan tidak ada kebocoran memory antar-forward pass.
+  - Uji Full UNet (686 parameter penuh): forward pass komplit satu langkah inferensi latents `[1, 4, 32, 32]` dieksekusi dalam **11.24 detik** di CPU murni. Output valid `[1, 4, 32, 32]`, finite `True`.
+  - Metrik puncak memori full UNet: private bytes naik dari 747.05 MB ke **797.06 MB** (hanya +50.01 MB), RSS dari 381.85 MB ke **444.63 MB** (hanya +62.78 MB). Jauh di bawah batas guard private memory 4 GiB!
+- **Konsekuensi:**
+  - Masalah lonjakan commit charge / private memory D-035 telah terselesaikan secara tuntas untuk forward pass UNet.
+  - UNet terbukti mampu dieksekusi pada CPU laptop AMD Ryzen 5 7430U dengan latensi ~11 detik per langkah denoising dan penggunaan RAM fisik < 450 MB.
+  - Langkah berikutnya adalah menguji pipeline `StableDiffusionImg2ImgPipeline` terintegrasi secara bertahap menggunakan loader bermitigasi ini dengan pengawasan supervisor D-035.
+- **Bukti tes:** Script uji scratch `test_mitigated_submodule.py` dan `test_full_unet_forward.py` pada CPython 3.14.3 AMD64 / Windows 11.
