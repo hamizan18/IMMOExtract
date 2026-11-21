@@ -301,8 +301,8 @@
 - [x] Integrasi UI pemilihan objek/ZIP (M4), endpoint D-025 dan UI D-026 terverifikasi.
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
 - [ ] Batas performa input dan retensi file sementara setelah benchmark.
-- [ ] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6).
-- [ ] Strategi koreksi mask (brush/click/box) dan hasil pengujian (M6).
+- [x] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6, D-031–D-043).
+- [x] Strategi koreksi mask (brush/eraser manual Canvas 2D) dan hasil pengujian (M6, D-044).
 
 ## D-028 — API dan persistensi snapshot Classic Pixelation per objek
 
@@ -707,4 +707,41 @@ vae/config.json
   - Komponen antarmuka frontend untuk M6 Pixel Art Studio / Stylization terbukti 100% stabil, fungsional, dan aksesibel di lingkungan browser nyata.
   - Tahap M6 berikutnya dapat dilanjutkan ke perancangan fitur **Mask Correction Tool** (FR-12).
 - **Next single task:** Rancang dan implementasikan fitur interaktif koreksi mask manual (FR-12) pada kanvas ekstraksi sebelum masuk ke tahap pixelation/stylization.
+
+## D-044 — Implementasi Interaktif Mask Correction Tool (FR-12): Canvas 2D Brush/Eraser dan Endpoint Revisi Objek
+
+- **Tanggal:** 2026-11-21.
+- **Status:** Verified / Accepted; backend test suite (24 subtest, 58 tests), frontend build (Vite 7 modules), dan automated browser smoke test (13 stages) PASS 100%.
+- **Keputusan Teknis:**
+  1. **Interaksi Frontend (Canvas 2D):**
+     - Setiap kartu objek di `#object-gallery` dilengkapi tombol `Koreksi Mask` (`[data-edit-mask-button]`).
+     - Menggunakan elemen HTML5 modal dialog `<dialog id="mask-editor-dialog">` dengan accessibility attributes (`aria-labelledby="mask-editor-title"`, status `aria-live="polite"`).
+     - Toolbar interaktif menyediakan:
+       - Pilihan alat (radio): **Penghapus (Transparan)** (`globalCompositeOperation = 'destination-out'`) dan **Kuas Pulihkan** (mengembalikan piksel foto asli).
+       - Slider ukuran kuas (2–60 px) dengan preview angka piksel dinamis.
+       - Tombol **Undo** (riwayat kanvas berbasis stack `ImageData` hingga 20 langkah).
+       - Tombol **Reset** (mengembalikan kanvas ke siluet awal saat dialog dibuka).
+       - Tombol **Batal** dan **Simpan Koreksi**.
+     - **Mekanisme Kuas Pulihkan (Restore Brush):** Memanfaatkan `#preview-image` (foto asli) yang di-crop sesuai bounding box objek `object.bbox` ke kanvas offscreen. Saat kuas digerakkan, path kuas di-`clip()` pada canvas 2D dan foto crop di-render via `drawImage()`, menghasilkan restorasi piksel asli 100% instan tanpa beban model AI tambahan.
+  2. **Endpoint Backend & Validasi Defensif (`PUT /api/jobs/:id/objects/:objectId`):**
+     - Menerima raw binary PNG (`application/octet-stream`, `image/png`, limit 10 MB) via `manager.updateObject(jobId, objectId, buffer)`.
+     - Job harus berstatus `completed` (HTTP 409 jika belum).
+     - Verifikasi format & saluran warna via Sharp: harus format PNG dan memiliki 4 saluran warna RGBA (`channels === 4`, `hasAlpha === true`). Format non-RGBA/RGB-only ditolak HTTP 400 (`INVALID_PNG_FORMAT`).
+     - Verifikasi dimensi exact: dimensi PNG yang dikirim harus persis sama dengan `width` dan `height` objek terdaftar di manifest (`INVALID_PNG_DIMENSIONS`).
+     - Dekompresi dan validasi piksel lengkap untuk mencegah bit stream korup.
+     - Penulisan atomik: buffer ditulis ke temporary file `<objectId>.png.tmp` lalu di-`rename` ke path kanonikal objek.
+     - Penghitungan ulang `pixel_count` opaque pixels (`alpha > 0`) dan pembaruan timestamp `object.updated_at` serta `job.updated_at` pada `manifest.json`.
+  3. **Integrasi Ekosistem M5 & M6:**
+     - Setelah koreksi disimpan, frontend memperbarui `src` gambar kartu dan tautan unduh PNG asli secara live dengan query cache-busting `?t=${Date.now()}`.
+     - Karena file objek di direktori kanonikal diperbarui di backend, operasi turunan berikutnya (Classic Pixelation M5, AI Stylization M6, dan ekspor ZIP) secara otomatis mengonsumsi siluet objek yang sudah dikoreksi tanpa mutasi tambahan.
+- **Bukti Pengujian Nyata:**
+  - `npm run build --prefix frontend`: **PASS** (7 modules transformed, bundle dist clean dalam 197ms).
+  - `node --test backend/test/jobs.test.js`: **PASS** (24 subtest, 58/58 tests PASS dalam 7.7s), mencakup penolakan dimensi salah, saluran non-RGBA, data rusak, keberhasilan penulisan atomik, dan update serving.
+  - `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js`: **PASS** (111/111 tests PASS dalam 7.8s).
+  - `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v`: **PASS** (14/14 tests PASS dalam 9.2s).
+  - `smoke_browser_m6.mjs` (Headless Chrome CDP): **PASS 100%** (13 stages), termasuk interaksi modal editor mask, sapuan kuas penghapus, tombol undo, penyimpanan ke backend via PUT, pembaruan DOM live, dan stylize AI pada objek terkoreksi.
+- **Konsekuensi:**
+  - Milestone M6 (AI Stylization dan Mask Correction FR-12) kini **SELESAI (COMPLETE)** dan terverifikasi penuh di Windows lokal.
+  - Proyek siap melangkah ke Milestone M7 (Selective ZIP hardening, spritesheet generator statis, pembersihan, dan dokumentasi release).
+- **Next single task:** Mulai persiapan Milestone M7: perancangan ekspor Spritesheet statis untuk menggabungkan objek-objek terekstraksi/pixelated/stylized ke dalam satu lembar gambar bergrid.
 

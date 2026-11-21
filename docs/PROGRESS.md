@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti Windows lokal. M6: helper/API FastAPI SD15 teruji (D-039/D-040); antrean Express dan snapshot privat diimplementasikan, tes kontrak/regresi 103/103 PASS (D-041). Smoke backend dengan SD15 nyata terhenti oleh guard commit; pengguna menunda pengulangan. UI generatif/koreksi mask belum tersedia.
+> **Status aktual:** M1–M6 memiliki bukti Windows lokal. M6 selesai: AI Stylization backend & UI teruji, Mask Correction Tool (FR-12: Canvas Brush/Eraser manual + endpoint PUT `/api/jobs/:id/objects/:objectId` + validasi Sharp defensif) terimplementasi dan terverifikasi 100%. Automated browser smoke test (13 stages) PASS.
 
 ## Ringkasan
 
-- **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
-- **Current task:** Verifikasi Automated Headless Browser Smoke Test untuk Komponen UI Pixel Art Studio / Stylization (M6 UI) selesai (D-043). 13/13 tahapan uji browser end-to-end PASS 100% tanpa error console; bukti screenshot `scratch/proof_smoke_m6_ui.png` tersimpan.
-- **Overall status:** Satu FIFO ekstraksi/stylization, timeout dan URL generatif terpisah, polling serta preview/unduhan snapshot privat terintegrasi dan fungsional. UI kontrol M6 per objek terverifikasi di browser nyata via CDP.
-- **Last verification:** 2026-11-21 — Automated Headless Browser Smoke Test 13/13 PASS (17s, 0 console error); Frontend build PASS (256ms); Backend test suite 103/103 PASS (16.88s); AI API 14/14 PASS (17.40s); Pixelation 7/7 PASS (0.67s).
+- **Current milestone:** M6 — AI Stylization dan koreksi mask — Complete (Windows lokal).
+- **Current task:** Mask Correction Tool (FR-12) dan verifikasi Automated Headless Browser Smoke Test selesai (D-044). Seluruh test suite backend (111/111 PASS), AI API (14/14 PASS), frontend build (197ms), dan browser CDP smoke test (13/13 PASS) terkonfirmasi lulus 100%.
+- **Overall status:** Pipeline ekstraksi M3/M4, Classic Pixelation M5, AI Stylization M6, dan Mask Correction Canvas Editor terintegrasi penuh. Objek yang diedit di kanvas langsung terdistribusi ke turunan pixelation, stylization, dan ZIP.
+- **Last verification:** 2026-11-21 — Automated Headless Browser Smoke Test 13/13 PASS (16s, 0 console error); Frontend build PASS (197ms); Backend test suite 111/111 PASS (7.85s); AI API 14/14 PASS (9.28s); Pixelation 7/7 PASS (0.67s).
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress; backend & UI M6 PASS | FastAPI nyata teruji; antrean/snapshot Express 103 tes PASS; UI M6 browser smoke 13/13 PASS; fitur koreksi mask berikutnya |
+| M6 | AI stylization lokal dan koreksi mask | Complete (Windows lokal) | FastAPI nyata teruji; antrean/snapshot Express 111 tes PASS; UI M6 browser smoke 13/13 PASS; Mask correction FR-12 canvas editor & PUT API PASS (D-031–D-044) |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -151,14 +151,12 @@
 - Verifikasi sesi: tujuh tes ekstraksi existing + tujuh regresi validasi stylization 14/14 PASS; smoke Uvicorn nyata memakai runtime POC existing, offline, tanpa SCHP, dua request SD15 serial PASS. Hasil alpha exact, perubahan RGB nyata, original byte-identical, raw PNG 256×256 valid, hasil kedua jalur deterministik untuk input/seed sama.
 - Gerbang memori awal gagal; pengguna menyiapkan memori dua kali, bukan mengizinkan penurunan ambang. Gate tepat sebelum startup lolos (RAM available 3.467.902.976 byte/sisa commit 8.969.248.768 byte). Minimum sepanjang smoke 1.010.532.352/1.301.778.432 byte; tidak memicu guard, tetapi margin commit tipis. Service uji dihentikan dan fixture/hasil/log temporary dibersihkan.
 - Integrasi backend stylization (2026-11-21, D-041): POST object_id + parameter → 202/Location; polling dan preview/download berbasis manifest privat. Satu FIFO bersama ekstraksi, snapshot committed untuk polling aktif, recovery interrupted tanpa retry. PNG staging hanya dipublikasikan setelah metadata/dimensi/alpha exact lolos; parent/original/ZIP/pixelation tetap.
-- AiClient memiliki deadline generatif default 900000 ms dan URL terpisah opsional; browser tidak menentukan path. Error upstream aman, body response ikut deadline. HTTP timeout tidak membatalkan model remote; output terlambat tetap staging privat.
-- Git awal bersih pada `168f6cd`; tidak ada perubahan pengguna pending. Tiga belas file backend/test/config/dokumentasi berubah dalam sesi ini, tanpa staging/commit, download, paket baru, perubahan FastAPI/helper/frontend atau source model.
-- Suite backend terarah 103/103 PASS, termasuk fixture safe errors/artifacts/FIFO/restart dan regresi extraction/ZIP/pixelation; fixture bukan bukti AI generatif. Smoke nyata berhasil SCHP tiga objek lalu menghentikan SCHP sebelum SD15, tetapi SD15 dihentikan watchdog pada sisa commit 1.056.886.784 byte (<1 GiB). Backend snapshot failed aman; tidak ada hasil generatif sukses. Semua service/storage uji dibersihkan.
-- Pengguna memilih defer_live setelah guard. Tidak menurunkan guard, mengulang inferensi otomatis atau menyatakan backend E2E PASS. Next task adalah verifikasi nyata dengan headroom lebih besar, bukan UI dahulu.
+- Automated Headless Browser Smoke Test M6 UI (2026-11-21, D-043): script mandiri berbasis Chrome DevTools Protocol (CDP) menguji 13 tahapan browser end-to-end tanpa regresi. Menavigasi ke UI, memeriksa health check, upload fixture, ekstraksi 2 objek, rendering kontrol UI M6, form locking, polling serial, preview 100×100, download attachment PNG, dan lifecycle reset. 13/13 stages PASS 100%, 0 console error.
+- Implementasi Mask Correction Tool FR-12 (2026-11-21, D-044): Canvas 2D brush/eraser editor di modal dialog HTML5 `<dialog id="mask-editor-dialog">`. Menyediakan mode Penghapus (transparan), Kuas Pulihkan (memulihkan piksel foto asli secara instan via clipping canvas dan drawImage dari gambar sumber), slider brush size 2–60 px, tombol Undo ber-stack, Reset, dan Simpan. Backend `PUT /api/jobs/:id/objects/:objectId` memvalidasi RGBA 4 channels, exact width/height, penulisan atomik, dan kalkulasi ulang opaque pixels. Operasi turunan (M5, M6, ZIP) otomatis mengonsumsi siluet terkoreksi. Suite test 111/111 PASS, Vite build PASS, CDP smoke test PASS.
 
 ## In progress
 
-- M6: menunggu penerimaan nyata Express→SD15 dengan resource memadai setelah pengguna siap; implementasi backend dan tes kontrak selesai (D-041).
+- Persiapan Milestone M7: perancangan generator Spritesheet statis, perkuatan Selective ZIP, pembersihan aset/scratch, dan dokumentasi rilis akhir.
 
 ## Blockers / risks
 
@@ -184,7 +182,7 @@
 
 ## Next task — satu tugas saja
 
-Selesaikan smoke Express→SD15 nyata setelah pengguna menyatakan siap dan mengizinkan kelanjutan; target headroom ≥3 GiB RAM available/≥10 GiB sisa commit, guard runtime tetap. Jalankan SCHP/SD15 bergantian, periksa PNG/alpha/original/ZIP serta restart. Pilihan terakhir pengguna defer_live: jangan retry otomatis atau mengaktifkan UI dahulu.
+Rancang dan implementasikan generator Spritesheet statis untuk menggabungkan aset objek hasil ekstraksi/pixelation/stylization ke dalam satu lembar gambar bergrid PNG transparan beserta metadata JSON manifest (tahap awal Milestone M7).
 
 ## Inventaris kesiapan M3 — 2026-11-16
 

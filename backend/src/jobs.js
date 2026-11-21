@@ -113,6 +113,19 @@ export function createJobRouter(options) {
     }
   });
 
+  router.put('/:id/objects/:objectId', express.raw({ type: ['image/png', 'application/octet-stream'], limit: '10mb' }), async (request, response) => {
+    if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
+      response.status(400).json({ error: { code: 'PNG_BUFFER_REQUIRED', message: 'Kirim payload biner PNG dengan Content-Type image/png.' } });
+      return;
+    }
+    try {
+      const result = await manager.updateObject(request.params.id, request.params.objectId, request.body);
+      response.json(result);
+    } catch (error) {
+      fail(error, response);
+    }
+  });
+
   function serveFile(resolveFile, contentType, disposition, missingCode) {
     return async (request, response, next) => {
       try {

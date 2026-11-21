@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { writeZip } from './zip-export.js';
@@ -448,6 +448,67 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         }
         throw error;
       }
+    },
+    async updateObject(jobId, objectId, buffer) {
+      const id = validateId(jobId, 'JOB');
+      const objectKey = validateId(objectId, 'OBJECT');
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        throw new JobError(400, 'INVALID_PNG_INPUT', 'Kirim file PNG biner yang valid.');
+      }
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hanya job yang selesai yang dapat dikoreksi.');
+      }
+      const object = job.objects.find(obj => obj.id === objectKey);
+      if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
+      const { filePath } = await this.getObject(id, objectKey);
+
+      let metadata;
+      try {
+        const image = sharp(buffer, { limitInputPixels: 24_000_000, failOn: 'warning' });
+        metadata = await image.metadata();
+      } catch {
+        throw new JobError(400, 'INVALID_PNG_IMAGE', 'File harus berupa PNG yang valid.');
+      }
+
+      if (metadata.format !== 'png' || metadata.channels !== 4 || !metadata.hasAlpha) {
+        throw new JobError(400, 'INVALID_PNG_FORMAT', 'PNG harus memiliki saluran warna RGBA dengan transparansi alpha.');
+      }
+      if (metadata.width !== object.width || metadata.height !== object.height) {
+        throw new JobError(400, 'INVALID_PNG_DIMENSIONS', `Dimensi gambar harus sama persis dengan objek asli (${object.width} × ${object.height} piksel).`);
+      }
+
+      const { data, info } = await sharp(buffer, { limitInputPixels: 24_000_000 }).raw().toBuffer({ resolveWithObject: true });
+      if (info.width !== object.width || info.height !== object.height || info.channels !== 4) {
+        throw new JobError(400, 'INVALID_PNG_PIXELS', 'Data piksel PNG tidak valid.');
+      }
+
+      let opaquePixels = 0;
+      for (let offset = 3; offset < data.length; offset += 4) {
+        if (data[offset] > 0) opaquePixels++;
+      }
+
+      const directory = dirname(filePath);
+      const tempPath = join(directory, `${basename(filePath)}.tmp`);
+      await writeFile(tempPath, buffer, { mode: 0o600 });
+      await rename(tempPath, filePath);
+
+      object.updated_at = new Date().toISOString();
+      if (typeof object.pixel_count === 'number') {
+        object.pixel_count = opaquePixels;
+      }
+      job.updated_at = new Date().toISOString();
+      await save(job);
+
+      return {
+        id: object.id,
+        category: object.category,
+        width: object.width,
+        height: object.height,
+        pixel_count: object.pixel_count,
+        updated_at: object.updated_at,
+      };
     },
     async createStylization(jobId, input) {
       const id = validateId(jobId, 'JOB');

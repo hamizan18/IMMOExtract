@@ -9,6 +9,18 @@ const exportAll = document.querySelector('#export-all');
 const selectionCount = document.querySelector('#selection-count');
 const exportStatus = document.querySelector('#export-status');
 const exportDownload = document.querySelector('#export-download');
+const previewImage = document.querySelector('#preview-image');
+const maskDialog = document.querySelector('#mask-editor-dialog');
+const maskTitle = document.querySelector('#mask-editor-title');
+const maskClose = document.querySelector('#mask-editor-close');
+const maskCanvas = document.querySelector('#mask-editor-canvas');
+const maskBrushSize = document.querySelector('#mask-brush-size');
+const maskBrushSizeVal = document.querySelector('#mask-brush-size-val');
+const maskUndo = document.querySelector('#mask-undo');
+const maskReset = document.querySelector('#mask-reset');
+const maskCancel = document.querySelector('#mask-editor-cancel');
+const maskSave = document.querySelector('#mask-editor-save');
+const maskStatus = document.querySelector('#mask-editor-status');
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let uploadId = null;
 let jobId = null;
@@ -52,6 +64,7 @@ export function setUploadedImage(id) {
   stylizationPollTimers.clear();
   clearExportDownload();
   exportStatus.textContent = '';
+  if (maskDialog?.open) maskDialog.close();
   clearTimeout(pollTimer);
   pollTimer = null;
   uploadId = id;
@@ -110,6 +123,12 @@ function renderObjects(objects) {
     download.href = `${path}/download`;
     download.download = `${object.id}.png`;
     download.setAttribute('aria-label', `Unduh PNG asli: ${label}`);
+
+    const editMaskBtn = card.querySelector('[data-edit-mask-button]');
+    editMaskBtn.setAttribute('aria-label', `Koreksi mask: ${label}`);
+    editMaskBtn.addEventListener('click', () => {
+      openMaskEditor(object, label, image, download);
+    });
 
     const sizeSelect = card.querySelector('[data-pixel-size]');
     const paletteSelect = card.querySelector('[data-pixel-palette]');
@@ -475,3 +494,190 @@ async function exportObjects(all) {
 
 exportSelected.addEventListener('click', () => { void exportObjects(false); });
 exportAll.addEventListener('click', () => { void exportObjects(true); });
+
+let currentMaskObject = null;
+let currentMaskJobId = null;
+let currentMaskCardImg = null;
+let currentMaskCardDownload = null;
+let maskCtx = null;
+let maskUndoStack = [];
+let isDrawing = false;
+let lastPoint = null;
+let sourceCropCanvas = null;
+let originalObjectData = null;
+
+function getCanvasCoords(event) {
+  const rect = maskCanvas.getBoundingClientRect();
+  const scaleX = maskCanvas.width / rect.width;
+  const scaleY = maskCanvas.height / rect.height;
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  };
+}
+
+function drawStroke(p1, p2) {
+  if (!maskCtx) return;
+  const tool = document.querySelector('input[name="mask-tool"]:checked')?.value || 'eraser';
+  const radius = Math.max(1, Number(maskBrushSize.value) / 2);
+
+  maskCtx.save();
+  maskCtx.beginPath();
+  maskCtx.lineWidth = radius * 2;
+  maskCtx.lineCap = 'round';
+  maskCtx.lineJoin = 'round';
+  maskCtx.moveTo(p1.x, p1.y);
+  maskCtx.lineTo(p2.x, p2.y);
+
+  if (tool === 'eraser') {
+    maskCtx.globalCompositeOperation = 'destination-out';
+    maskCtx.stroke();
+  } else if (tool === 'restore' && sourceCropCanvas) {
+    maskCtx.stroke();
+    maskCtx.clip();
+    maskCtx.drawImage(sourceCropCanvas, 0, 0);
+  }
+  maskCtx.restore();
+}
+
+function handlePointerDown(event) {
+  if (event.button !== 0 || !maskCtx) return;
+  isDrawing = true;
+  maskUndoStack.push(maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height));
+  if (maskUndoStack.length > 20) maskUndoStack.shift();
+  maskUndo.disabled = false;
+  lastPoint = getCanvasCoords(event);
+  drawStroke(lastPoint, lastPoint);
+  maskCanvas.setPointerCapture?.(event.pointerId);
+}
+
+function handlePointerMove(event) {
+  if (!isDrawing || !lastPoint) return;
+  const current = getCanvasCoords(event);
+  drawStroke(lastPoint, current);
+  lastPoint = current;
+}
+
+function handlePointerUp(event) {
+  if (!isDrawing) return;
+  isDrawing = false;
+  lastPoint = null;
+  if (event.pointerId && maskCanvas.hasPointerCapture?.(event.pointerId)) {
+    maskCanvas.releasePointerCapture(event.pointerId);
+  }
+}
+
+function handleUndo() {
+  if (maskUndoStack.length === 0 || !maskCtx) return;
+  const prev = maskUndoStack.pop();
+  maskCtx.putImageData(prev, 0, 0);
+  maskUndo.disabled = maskUndoStack.length === 0;
+  maskStatus.textContent = 'Goresan terakhir dibatalkan (Undo).';
+}
+
+function handleReset() {
+  if (!originalObjectData || !maskCtx) return;
+  maskCtx.putImageData(originalObjectData, 0, 0);
+  maskUndoStack = [];
+  maskUndo.disabled = true;
+  maskStatus.textContent = 'Mask dikembalikan ke kondisi awal ekstraksi.';
+}
+
+async function openMaskEditor(object, label, cardImg, cardDownload) {
+  if (!jobId) return;
+  currentMaskObject = object;
+  currentMaskJobId = jobId;
+  currentMaskCardImg = cardImg;
+  currentMaskCardDownload = cardDownload;
+  maskTitle.textContent = `Koreksi Mask: ${label}`;
+  maskUndoStack = [];
+  maskUndo.disabled = true;
+  maskSave.disabled = true;
+  maskStatus.textContent = 'Memuat gambar objek…';
+  maskDialog.showModal();
+
+  maskCanvas.width = object.width;
+  maskCanvas.height = object.height;
+  maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+  maskCtx.clearRect(0, 0, object.width, object.height);
+
+  try {
+    sourceCropCanvas = document.createElement('canvas');
+    sourceCropCanvas.width = object.width;
+    sourceCropCanvas.height = object.height;
+    const sCtx = sourceCropCanvas.getContext('2d');
+    if (previewImage && previewImage.complete && previewImage.naturalWidth > 0) {
+      if (Array.isArray(object.bbox) && object.bbox.length === 4) {
+        const [left, top] = object.bbox;
+        sCtx.drawImage(previewImage, left, top, object.width, object.height, 0, 0, object.width, object.height);
+      } else {
+        sCtx.drawImage(previewImage, 0, 0, object.width, object.height);
+      }
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error('Gagal memuat gambar objek dari server.'));
+      img.src = cardImg.src;
+    });
+
+    maskCtx.drawImage(img, 0, 0);
+    originalObjectData = maskCtx.getImageData(0, 0, object.width, object.height);
+    maskSave.disabled = false;
+    maskStatus.textContent = 'Gunakan Penghapus untuk membuang background atau Kuas Pulihkan untuk mengembalikan bagian foto asli.';
+  } catch (err) {
+    maskStatus.textContent = `Error: ${err.message}`;
+  }
+}
+
+async function handleSaveMask() {
+  if (!currentMaskObject || !currentMaskJobId || !maskCanvas) return;
+  maskSave.disabled = true;
+  maskStatus.textContent = 'Menyimpan koreksi mask ke server lokal…';
+
+  try {
+    const blob = await new Promise(resolve => maskCanvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('Kanvas tidak dapat diubah ke format PNG.');
+
+    const response = await fetch(`/api/jobs/${currentMaskJobId}/objects/${currentMaskObject.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: blob,
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => null);
+      throw new Error(errData?.error?.message || 'Server gagal menyimpan hasil koreksi mask.');
+    }
+
+    const updated = await response.json();
+    if (typeof updated.pixel_count === 'number') {
+      currentMaskObject.pixel_count = updated.pixel_count;
+    }
+
+    const cacheBust = `?t=${Date.now()}`;
+    const newUrl = `/api/jobs/${currentMaskJobId}/objects/${currentMaskObject.id}${cacheBust}`;
+    currentMaskCardImg.src = newUrl;
+    currentMaskCardDownload.href = `/api/jobs/${currentMaskJobId}/objects/${currentMaskObject.id}/download${cacheBust}`;
+
+    maskDialog.close();
+  } catch (err) {
+    maskStatus.textContent = `Penyimpanan gagal: ${err.message}`;
+    maskSave.disabled = false;
+  }
+}
+
+maskBrushSize?.addEventListener('input', () => {
+  if (maskBrushSizeVal) maskBrushSizeVal.textContent = `${maskBrushSize.value} px`;
+});
+maskClose?.addEventListener('click', () => maskDialog?.close());
+maskCancel?.addEventListener('click', () => maskDialog?.close());
+maskUndo?.addEventListener('click', handleUndo);
+maskReset?.addEventListener('click', handleReset);
+maskSave?.addEventListener('click', () => { void handleSaveMask(); });
+maskCanvas?.addEventListener('pointerdown', handlePointerDown);
+maskCanvas?.addEventListener('pointermove', handlePointerMove);
+window.addEventListener('pointerup', handlePointerUp);
+window.addEventListener('pointercancel', handlePointerUp);

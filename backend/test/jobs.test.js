@@ -824,3 +824,71 @@ test('pixelation files require matching published manifests and canonical regula
   await mkdir(join(directory, 'image.png'));
   await assertPixelationFileError(base, job.job_id, result.pixelation_id, 404, 'PIXELATION_NOT_FOUND');
 });
+
+test('object revision updates canonical object file, rejects invalid dimensions/formats, and preserves integrity', async t => {
+  const { base } = await setup(t, { extractPath: writeCategoryOutput });
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  const targetObject = job.objects[1];
+  const objectUrl = `${base}/api/jobs/${job.job_id}/objects/${targetObject.id}`;
+
+  const originalBytes = Buffer.from(await (await fetch(objectUrl)).arrayBuffer());
+  const origMeta = await sharp(originalBytes).metadata();
+
+  const revisedData = Buffer.alloc(origMeta.width * origMeta.height * 4);
+  for (let i = 0; i < origMeta.width * origMeta.height; i++) {
+    revisedData[i * 4] = 200;
+    revisedData[i * 4 + 1] = 100;
+    revisedData[i * 4 + 2] = 50;
+    revisedData[i * 4 + 3] = (i % 2 === 0) ? 255 : 0;
+  }
+  const validRevisedPng = await sharp(revisedData, { raw: { width: origMeta.width, height: origMeta.height, channels: 4 } }).png().toBuffer();
+
+  const wrongSizePng = await sharp({ create: { width: origMeta.width + 10, height: origMeta.height, channels: 4, background: 'red' } }).png().toBuffer();
+  const resWrongSize = await fetch(objectUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/png' },
+    body: wrongSizePng,
+  });
+  assert.equal(resWrongSize.status, 400);
+  const errWrongSize = await resWrongSize.json();
+  assert.equal(errWrongSize.error.code, 'INVALID_PNG_DIMENSIONS');
+
+  const noAlphaPng = await sharp({ create: { width: origMeta.width, height: origMeta.height, channels: 3, background: 'blue' } }).png().toBuffer();
+  const resNoAlpha = await fetch(objectUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/png' },
+    body: noAlphaPng,
+  });
+  assert.equal(resNoAlpha.status, 400);
+  const errNoAlpha = await resNoAlpha.json();
+  assert.equal(errNoAlpha.error.code, 'INVALID_PNG_FORMAT');
+
+  const resCorrupt = await fetch(objectUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/png' },
+    body: Buffer.from('not-a-png-file'),
+  });
+  assert.equal(resCorrupt.status, 400);
+
+  const resSuccess = await fetch(objectUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'image/png' },
+    body: validRevisedPng,
+  });
+  assert.equal(resSuccess.status, 200);
+  const successJson = await resSuccess.json();
+  assert.equal(successJson.id, targetObject.id);
+  assert.equal(successJson.width, origMeta.width);
+  assert.equal(successJson.height, origMeta.height);
+
+  const updatedFetch = await fetch(objectUrl);
+  assert.equal(updatedFetch.status, 200);
+  const updatedBytes = Buffer.from(await updatedFetch.arrayBuffer());
+  assert.deepEqual(updatedBytes, validRevisedPng);
+
+  const downloadFetch = await fetch(`${objectUrl}/download`);
+  assert.equal(downloadFetch.status, 200);
+  assert.equal(downloadFetch.headers.get('content-disposition'), `attachment; filename="${targetObject.id}.png"`);
+  assert.deepEqual(Buffer.from(await downloadFetch.arrayBuffer()), validRevisedPng);
+});
