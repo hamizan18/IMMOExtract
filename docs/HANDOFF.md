@@ -4,7 +4,7 @@
 
 ## Last agent
 
-OMP — integrasi antrean stylization backend, snapshot privat dan pengujian kontrak (D-041), 2026-11-21. Pengguna memilih **defer_live** setelah smoke SD15 dihentikan guard commit. Tidak membuat commit.
+Antigravity CLI — inspeksi universal continue, audit memori OS Win32, serta eksekusi verifikasi test suite komprehensif (backend 103/103 PASS, frontend build PASS, FastAPI 14/14 PASS, SCHP CPU PASS, extractor PASS, pixelation 7/7 PASS), 2026-11-21. Working tree clean pada commit `816cd66` (`tambah .env`). Sesuai arahan handoff, pengujian live smoke backend SD15 tetap ditunda (`defer_live`) menunggu kesiapan memori dan izin pengguna.
 
 ## Current milestone
 
@@ -41,26 +41,28 @@ Implementasi backend dan dokumentasi disimpan. Pengujian SD15 nyata ulang ditund
 
 ## Uncommitted changes / Git status
 
-- Inspeksi awal status/diff/index bersih pada HEAD `168f6cd` (`AI Service Done`). Catatan tujuh perubahan pending sesi D-040 sudah kedaluwarsa.
-- Sesi ini mengubah 11 file existing dan membuat 2 file tes di atas; tidak di-stage/commit. Daftar berdasarkan inspeksi awal dan operasi edit, tidak menjalankan Git ulang untuk audit.
-- Tidak mengubah Python/FastAPI/helper, model, frontend, dependensi atau struktur proyek. Tidak download, reset, menghapus perubahan pengguna, menutup aplikasi pengguna atau mengubah pagefile.
-- Harness via stdin; seluruh service milik harness dihentikan/ditunggu dan storage/log/fixture temporary dibersihkan. LSP tidak dikonfigurasi.
+- Working tree clean pada HEAD `816cd66` (`tambah .env`). Perubahan D-041 sebelumnya telah di-commit ke Git oleh pengguna.
+- Sesi inspeksi ini hanya memperbarui `docs/HANDOFF.md` dan `docs/PROGRESS.md`; tidak ada perubahan source code, instalasi paket baru, atau download model.
+- Tidak ada staging/commit otomatis (sesuai aturan proyek).
 
 ## Current errors / limitations
 
-- **Smoke end-to-end FAIL karena guard commit**, bukan penyebab bug model yang sudah terbukti. Gate awal RAM available 3.917.631.488/sisa commit 8.888.893.440 byte; sesudah SCHP berhenti 3.858.649.088/8.786.952.192 byte, lolos gerbang 3/8 GiB.
-- Saat pipeline SD15 dimuat, watchdog melihat sisa commit **1.056.886.784 byte**, di bawah batas **1.073.741.824 byte (1 GiB)**. RAM available saat itu 1.661.292.544 byte (~1,55 GiB); yang memicu penghentian adalah commit, bukan RAM available.
-- Pengguna ditawarkan satu smoke ulang setelah available ≥3 GiB/sisa commit ≥10 GiB atau defer; memilih **defer_live**. Jangan menafsirkan pesan continue generik sebagai perubahan kondisi memori atau izin retry tanpa memeriksa kesiapan.
-- Guard runtime tetap available <512 MiB atau sisa commit <1 GiB; sampling bukan hard cap. Gerbang 3/10 GiB lebih konservatif, bukan jaminan keselamatan.
-- FIFO tidak mengatur lifecycle resident model. Dua service terpisah tetap dapat menghabiskan memori bila SCHP+SD15 hidup bersama; smoke menghentikan SCHP dahulu. Backend belum mengotomatiskan pergantian model.
-- Timeout tidak membatalkan model remote; snapshot failed tidak dapat diunduh meski file staging muncul terlambat. Retensi/batas antrean belum tersedia, endpoint ekstraksi sinkron M3 di luar FIFO.
+- **Smoke end-to-end SD15 Express backend nyata masih tertunda karena guard commit**. Hasil audit Win32 memory terkini: Total RAM 7.40 GiB, Available RAM 3.40 GiB (≥ 3 GiB PASS), Commit Limit 14.81 GiB, Commit Available 9.32 GiB (< 10 GiB gate rekomendasi).
+- Pengguna sebelumnya memilih **defer_live**. Sesuai protokol handoff, jangan menjalankan retry inferensi otomatis tanpa konfirmasi kesiapan memori dan izin pengguna.
+- Guard runtime tetap aktif: terminasi jika available <512 MiB atau sisa commit <1 GiB.
+- FIFO backend belum mengatur lifecycle resident model secara otomatis (SCHP dan SD15 perlu dijalankan bergantian).
+- UI generatif dan mask correction belum diimplementasikan.
 
 ## Tests / checks performed
 
-- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — **103/103**, 0 skip, 27.582s. Fixture hanya untuk kontrak; symlink/junction benar-benar diuji.
-- **FAIL resource guard:** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u -` — harness server.js + Uvicorn SCHP/SD15, loopback, offline, storage temporary. Ekstraksi nyata tiga objek PASS; SD15 dihentikan ketika commit melewati guard, backend failed aman.
-- **PASS terbatas pada harness yang sama:** path injection 400, POST queued 202, pending download 409, backend health 200, cleanup seluruh service/storage milik harness.
-- **NOT RUN:** PNG SD15 sukses/alpha/preservasi setelah generasi/restart backend nyata; terhenti sebelum hasil. UI/browser/build, suite Python ulang, SD15 default20/512 atau dua model bersamaan juga tidak dijalankan.
+- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — **103/103**, 0 fail, 0 skip (16.398s). Seluruh kontrak Express backend, antrean FIFO, timeout terpisah, snapshot privat, error handling, dan junction/symlink protection terverifikasi.
+- **PASS:** `npm run build --prefix frontend` — Vite v8.3.8 membangun bundle produksi (7 modul, 466ms).
+- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — **14/14**, 0 fail (18.044s): 7 integrasi ekstraksi model SCHP nyata + 7 validasi endpoint stylization/error handling.
+- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_schp_cpu.py` — forward pass ResNet-101 CPU (1.804s), upsampling, class map ATR-18 dan argmax pipeline PASS.
+- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_extractor.py` — parsing objek pakaian sintetis (1.902s), alpha channel transparency dan category crop PASS.
+- **PASS:** `node --test backend/test/pixelation.test.js` — **7/7**, 0 fail (2.37s): sampling nearest-neighbour, bounding, palet Retro 16, preservasi hidden RGB dan transparansi partial PASS.
+- **PASS audit memori:** Win32 GlobalMemoryStatusEx via ctypes — AvailPhys: 3.40 GiB, CommitAvail: 9.32 GiB.
+- **NOT RUN:** Live smoke SD15 Express backend (ditunda sesuai pilihan defer_live pengguna sampai memori disiapkan).
 
 ## Next action (only one)
 

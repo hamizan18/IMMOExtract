@@ -7,7 +7,7 @@
 - **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
 - **Current task:** Integrasi antrean backend stylization selesai di kode dan tes kontrak; penerimaan end-to-end nyata belum selesai karena guard resource (D-041).
 - **Overall status:** Satu FIFO ekstraksi/stylization, timeout dan URL generatif terpisah, polling serta preview/unduhan snapshot privat tersedia. Original/ZIP/pixelation tidak dimutasi. M6 belum selesai.
-- **Last verification:** 2026-11-21 — empat file tes backend 103/103 PASS, 0 skip, 27.582s. Smoke Express→SCHP nyata menghasilkan tiga objek; tahap SD15 FAIL setelah sisa commit <1 GiB memicu penghentian. Pengguna memilih defer_live, tanpa retry otomatis.
+- **Last verification:** 2026-11-21 — Universal continue & regresi komprehensif: Backend 103/103 PASS (16.398s), Frontend build PASS (466ms), FastAPI 14/14 PASS (18.044s), SCHP CPU PASS, Extractor PASS, Pixelation 7/7 PASS. Audit memori OS: Available RAM 3.40 GiB, Sisa Commit 9.32 GiB. Smoke backend SD15 nyata ditunda sesuai arahan defer_live.
 
 ## Milestone
 
@@ -412,6 +412,13 @@ Selesaikan smoke Express→SD15 nyata setelah pengguna menyatakan siap dan mengi
 | 2026-11-21 | `.venv-stylization-poc/Scripts/python.exe -B -u -` harness HTTP backend/SCHP/SD15 nyata | FAIL resource guard | SCHP nyata tiga objek PASS; SD15 dihentikan saat sisa commit 1.056.886.784 byte <1 GiB, backend failed aman; tidak ada PNG generatif sukses |
 | 2026-11-21 | Harness nyata: path injection, accepted/pending, health, cleanup | PASS terbatas | 400 path browser, 202 queued, download pending 409, health 200; service milik harness dan storage temporary dibersihkan |
 | 2026-11-21 | PNG generatif/alpha dan preservasi setelah generasi, restart backend nyata | NOT RUN | Smoke terhenti sebelum hasil SD15; tes fixture jalur tersebut PASS. Pengguna memilih defer_live |
+| 2026-11-21 | Universal continue: git status clean, audit memori Win32 (AvailPhys 3.40 GiB, CommitAvail 9.32 GiB) | PASS inspeksi | Working tree clean pada commit 816cd66; gerbang commit 10 GiB belum terpenuhi penuh |
+| 2026-11-21 | `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` | PASS | 103/103 tests PASS, 0 fail, 0 skip (16.398s); seluruh kontrak dan regresi backend valid |
+| 2026-11-21 | `npm run build --prefix frontend` | PASS | Vite 8.3.8 membangun bundle produksi (7 modules, 466ms) |
+| 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS | 14/14 tests PASS (18.044s): 7 ekstraksi SCHP nyata + 7 validasi stylization |
+| 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_schp_cpu.py` | PASS | Forward pass ResNet-101 CPU (1.804s), upsampling dan argmax map PASS |
+| 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_extractor.py` | PASS | HumanExtractor pipeline end-to-end (1.902s), alpha transparansi dan category parsing PASS |
+| 2026-11-21 | `node --test backend/test/pixelation.test.js` | PASS | 7/7 tests PASS (2.37s): sampling nearest, rounding, bounds, palet Retro 16 exact |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
