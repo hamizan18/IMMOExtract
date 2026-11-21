@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 # Ensure ai-service directory is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -262,6 +263,116 @@ class TestAIServiceAPI(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["objects"], [])
             self.assertEqual(os.listdir(job_dir), ["input.png"])
+
+
+class TestStylizationValidation(unittest.TestCase):
+    """Exercise API rejection paths without substituting fake AI results."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.source = os.path.join(self.tmp.name, "input.png")
+        Image.new("RGBA", (16, 24), (120, 60, 30, 128)).save(self.source)
+        with open(self.source, "rb") as source:
+            self.png = source.read()
+        environment = patch.dict(os.environ, {
+            "SCHP_CHECKPOINT_PATH": os.path.join(self.tmp.name, "missing-schp"),
+            "SD15_MODEL_PATH": os.path.join(self.tmp.name, "missing-sd15"),
+        })
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.client = self.enterContext(TestClient(app))
+
+    def post_both(self, options=None, content=None):
+        options = options or {}
+        payload = self.png if content is None else content
+        with open(self.source, "wb") as source:
+            source.write(payload)
+        return [
+            self.client.post("/stylize", files={"file": ("input.png", payload, "image/png")},
+                             data=options),
+            self.client.post("/stylize-path", json={"image_path": self.source, **options}),
+        ]
+
+    def test_unavailable_and_health(self):
+        health = self.client.get("/health").json()
+        self.assertFalse(health["stylizer_available"])
+        self.assertFalse(health["stylizer_loaded"])
+        for response in self.post_both():
+            self.assertEqual(response.status_code, 503)
+            self.assertNotIn("image_base64", response.json())
+
+    def test_invalid_parameters_before_model_load(self):
+        for options in (
+            {"strength": 0}, {"strength": 1.1}, {"strength": 0.01},
+            {"strength": "nan"}, {"strength": "inf"},
+            {"target_size": 0}, {"target_size": 257}, {"target_size": 520},
+            {"num_inference_steps": 1}, {"num_inference_steps": 51},
+            {"guidance_scale": "nan"}, {"guidance_scale": "inf"},
+            {"guidance_scale": -1}, {"guidance_scale": 21},
+            {"seed": -1}, {"seed": 2**63}, {"preset": "unknown"},
+            {"save_generated_path": os.path.join(self.tmp.name, "raw.png")},
+        ):
+            with self.subTest(options=options):
+                for response in self.post_both(options):
+                    self.assertEqual(response.status_code, 400, response.text)
+
+    def test_empty_and_corrupt_images(self):
+        for content in (b"", b"not a PNG", self.png[:40]):
+            with self.subTest(content=content):
+                for response in self.post_both(content=content):
+                    self.assertEqual(response.status_code, 400, response.text)
+
+    def test_oversized_files(self):
+        for response in self.post_both(content=b"x" * (10 * 1024 * 1024 + 1)):
+            self.assertEqual(response.status_code, 413)
+
+    def test_unsupported_animated_and_large_dimensions(self):
+        fixtures = []
+        for image, format_name in (
+            (Image.new("RGB", (8, 8)), "BMP"),
+            (Image.new("RGB", (8193, 1)), "PNG"),
+        ):
+            buffer = io.BytesIO()
+            image.save(buffer, format=format_name)
+            fixtures.append(buffer.getvalue())
+        buffer = io.BytesIO()
+        Image.new("RGBA", (8, 8), "red").save(
+            buffer, format="PNG", save_all=True,
+            append_images=[Image.new("RGBA", (8, 8), "blue")], duration=100,
+        )
+        fixtures.append(buffer.getvalue())
+        for content in fixtures:
+            for response in self.post_both(content=content):
+                self.assertEqual(response.status_code, 400, response.text)
+
+    def test_missing_path_and_no_path_leak(self):
+        missing = os.path.join(self.tmp.name, "private-missing.png")
+        response = self.client.post("/stylize-path", json={"image_path": missing})
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(self.tmp.name, response.text)
+
+    def test_output_paths_cannot_overwrite_source_or_each_other(self):
+        alias = os.path.join(self.tmp.name, "alias.png")
+        os.link(self.source, alias)
+        output = os.path.join(self.tmp.name, "result.png")
+        for options in (
+            {"output_path": self.source},
+            {"output_path": alias},
+            {"output_path": output, "save_generated_path": self.source},
+            {"output_path": output, "save_generated_path": output},
+        ):
+            response = self.client.post(
+                "/stylize-path", json={"image_path": self.source, **options}
+            )
+            self.assertEqual(response.status_code, 400, response.text)
+        response = self.client.post("/stylize",
+            files={"file": ("input.png", self.png, "image/png")},
+            data={"output_path": output, "save_generated_path": output})
+        self.assertEqual(response.status_code, 400)
+        with open(self.source, "rb") as source:
+            self.assertEqual(source.read(), self.png)
+        self.assertFalse(os.path.exists(output))
 
 
 if __name__ == "__main__":

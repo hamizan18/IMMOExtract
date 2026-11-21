@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. Classic Pixelation tersedia melalui helper, API snapshot dan UI per objek, termasuk palet Retro 16 opsional. M6 sedang evaluasi kelayakan; AI Stylization belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. M6 memiliki helper SD15 lokal dan endpoint FastAPI internal; integrasi Express/UI AI Stylization belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -115,9 +115,22 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 
 ## Kesiapan AI Stylization (M6)
 
-SD 1.5 img2img CPU tetap kandidat POC, bukan fitur aplikasi. Runtime terpisah `.venv-stylization-poc` dan checkpoint lokal terpaku sudah tersedia (D-033/D-034). Percobaan D-035 mempertahankan CPU FP32/safety checker dan memakai UNet disk-offload untuk RAM laptop: pipeline berhasil dimuat dalam 82.16 detik, tetapi inferensi 256 dihentikan karena private memory melewati guard 4 GiB. Belum ada hasil stylization; 512 tidak dijalankan. Penyebab lonjakan alokasi masih perlu diagnosis, bukan diatasi dengan menaikkan batas otomatis. Environment aplikasi `.venv`/`.venv-test`, requirements dan source aplikasi tidak diubah. Bukti, izin, batas resource dan risiko kualitas/alpha ada di `docs/DECISIONS.md` serta `docs/PROGRESS.md`.
+Helper SD15 CPU FP32 memakai UNet disk-offload bermitigasi dan safety checker lokal (D-037–D-039). Endpoint internal `POST /stylize` (multipart `file`) dan `POST /stylize-path` (JSON `image_path`) mengembalikan metadata generasi, flag `nsfw_detected`, serta PNG RGBA dengan alpha sumber dipasang kembali. RGB generatif bukan piksel ekstraksi asli; alpha exact tidak menjamin alignment atau kualitas pixel art.
 
-Tidak ada download model otomatis atau perubahan environment SCHP. AI Stylization tetap ditandai belum tersedia; Classic Pixelation bukan pengganti generasi AI.
+- Runtime existing: `ai-service/.venv-stylization-poc`; checkpoint default ada di `ai-service/models/sd15-poc/451f4fe16113bff5a5d2269ed5ad43b0592e9a14/`, atau konfigurasi `SD15_MODEL_PATH`. Tidak ada download otomatis atau instalasi ulang.
+- `/health`: `stylizer_available` berarti modul/dependensi dan direktori model ditemukan, **bukan** model sudah berhasil dimuat; `stylizer_loaded` menunjukkan pipeline sudah termuat. Dependencies/direktori tidak tersedia → request valid mendapat 503; ekstraksi tetap dapat berjalan di `.venv-test`.
+- Kedua endpoint menerima `preset` (`pixel-art`, `retro-rpg`, `game-boy`), `prompt`/`negative_prompt` opsional, `target_size` (kelipatan 8, 64–512; default 256), `num_inference_steps` (2–50; default 20), `strength` ((0,1], minimal satu langkah efektif; default 0.5), `guidance_scale` (0–20; default 7.5), `seed` (0 hingga 2^63−1; default 0).
+- `output_path` menyimpan PNG; `save_generated_path` opsional menyimpan RGB square dan memerlukan `output_path`. Input/output tidak boleh menunjuk file yang sama, termasuk hardlink. `include_base64` default true pada multipart, false pada JSON.
+- Gambar statis JPG/PNG/WebP, maksimum 10 MiB, sisi 8192, 24 megapiksel. Decode dinormalisasi RGBA, termasuk transparansi palet. Parameter/gambar invalid → 400, tipe/field invalid → 422, file hilang → 404, byte berlebih → 413. Request stylization kedua saat pipeline sibuk → 409, tanpa antrean/retry otomatis; kegagalan inferensi/penyimpanan → 500 JSON aman.
+- Jalankan satu worker di loopback saja. **Path hanya untuk caller lokal tepercaya**, bukan sandbox filesystem atau API publik; jangan meneruskan path browser. Express nantinya harus memilih objek dan tujuan dari storage/manifest privat.
+- Inferensi CPU memerlukan waktu dan headroom memori; batas 512 bukan bukti benchmark 512. Untuk pengujian stylization terisolasi, jangan memuat SCHP sekaligus. Contoh PowerShell pada terminal khusus:
+
+```powershell
+$env:SCHP_CHECKPOINT_PATH = 'disabled-for-stylization'
+.\ai-service\.venv-stylization-poc\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8001 --workers 1
+```
+
+Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` harus false. Jangan menimpa konfigurasi terminal ekstraksi. UI tetap menyatakan AI Stylization belum tersedia sampai integrasi backend/browser diuji. Classic Pixelation tetap mode terpisah.
 
 ## Menjalankan Aplikasi (M1–M5)
 

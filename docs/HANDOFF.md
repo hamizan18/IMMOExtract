@@ -4,76 +4,68 @@
 
 ## Last agent
 
-Antigravity — Implementasi helper modular `LocalStylizer` (`ai-service/stylizer.py`) dan validasi unit test `test_stylizer.py` (D-039), 2026-11-20. Seluruh 5 pengujian (4 preprocessing/lifecycle + 1 live SD15 1-step CPU inference) PASS dalam 62.08s dengan 100% exact alpha silhouette preservation dan zero regression pada modul ekstraksi atau pixelation.
+OMP — pemulihan perubahan terhenti dan penyelesaian endpoint FastAPI stylization internal (D-040), 2026-11-21. Tidak membuat commit.
 
 ## Current milestone
 
-**M6 — AI Stylization lokal dan koreksi mask — In progress; LocalStylizer helper PASS (D-039).**
-M1–M5 mempertahankan bukti verifikasi sebelumnya. AI Stylization endpoint FastAPI dan integrasi Express backend sedang disiapkan.
+**M6 — In progress.** Helper dan API FastAPI teruji; integrasi Express/UI generatif dan koreksi mask belum tersedia. Bukti M1–M5 terdahulu dipertahankan.
 
 ## Last completed task
 
-- **D-038 (POC Inferensi Penuh SD15 img2img 256×256 CPU):** Eksekusi 11 langkah denoising selesai dalam 241.87 detik (~20.99 detik/langkah) di CPU FP32 Ryzen 5 7430U. Artefak `generated.png` (256×256) dan `stylized.png` (192×256 RGBA) terverifikasi valid, alpha channel 100% cocok, safety checker aktif.
-- **D-039 (Implementasi Modul Helper `LocalStylizer` di `ai-service/stylizer.py`):**
-  - Mengisolasi pipeline SD15 CPU FP32 dengan loader bermitigasi `ClonedOffloadedWeightsLoader`.
-  - Manajemen siklus hidup memori terisolasi (`is_loaded`, `load`, `unload`, context manager).
-  - Preprocessing letterbox kanvas netral `(128, 128, 128)` 256×256 menjaga rasio aspek input.
-  - Post-processing un-letterbox NEAREST dan restorasi alpha mask sumber 1:1 (`np.array_equal == True`).
-  - Presets prompt bawaan (`pixel-art`, `retro-rpg`, `game-boy`).
-  - Dataclass `StylizationResult` dan method `save_result`.
-  - Integrasi safety checker bawaan SD15 aktif.
-- **Validasi Unit Test (`ai-service/test_stylizer.py`):**
-  - `TestStylizerPreprocessing`: 4/4 PASS (0.055s).
-  - `TestStylizerInferenceLive`: 1-step live CPU SD15 denoising PASS (62.08s).
-- **Verifikasi Anti-Regresi:**
-  - `ai-service/test_schp_cpu.py`: PASS.
-  - `ai-service/test_extractor.py`: PASS.
-  - `backend/test/pixelation.test.js`: 7/7 PASS.
-- Dokumen proyek (`docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`) disinkronkan.
+- Draft `/stylize` multipart dan `/stylize-path` JSON pada `ai-service/main.py` dilanjutkan, bukan ditulis ulang dari nol.
+- Lazy-loaded SD15 existing, metadata/base64 serta penyimpanan PNG/raw; alpha input dinormalisasi RGBA termasuk transparansi palet.
+- Validasi format statis, byte/dimensi, preset dan parameter model. Tolak output alias sumber/hardlink dan output yang bertabrakan; raw output memerlukan output utama.
+- Handler stylization threadpool menjaga event loop; lock menolak request stylization paralel dengan 409. Error inferensi/penyimpanan menjadi 500 JSON aman.
+- `/health` membedakan `stylizer_available` (konfigurasi ditemukan) dari `stylizer_loaded` (pipeline dimuat). Dependency generatif yang tidak tersedia tidak mematikan ekstraksi.
+- Tujuh regresi validasi baru tanpa AI palsu; suite API 14/14 PASS. Kedua route juga menghasilkan PNG melalui SD15 nyata di HTTP loopback.
 
 ## Current task
 
-Modul helper `LocalStylizer` telah teruji mandiri dan stabil. Tugas berikutnya adalah mengintegrasikannya ke FastAPI server di `ai-service/main.py` (menyediakan endpoint `POST /stylize` dan `POST /stylize-path`).
+Tugas endpoint FastAPI selesai dan terdokumentasi. Tidak melanjutkan implementasi Express/UI dalam sesi ini.
 
 ## Working components
 
-- Ekstraksi lokal SCHP ATR-18 (M3), PNG/ZIP asli dan download individual/ZIP (M4), serta Classic Pixelation 4 ukuran + 2 palet (M5) mempertahankan bukti verifikasi sebelumnya tanpa regresi.
-- Helper `LocalStylizer` (`ai-service/stylizer.py`) dan test suite (`ai-service/test_stylizer.py`) teruji PASS.
-- UI existing tetap menyatakan AI Stylization belum tersedia sampai endpoint terintegrasi end-to-end. Tidak membuat hasil AI palsu.
+- Ekstraksi SCHP dan API existing: tujuh tes nyata PASS dalam sesi ini.
+- Endpoint stylization: multipart 64.629s, JSON path 56.163s; SD15 256 px, nominal 2 dan **aktual 2 langkah per request**, seed 42, strength 0.5, guidance 7.5.
+- Hasil RGBA 128×160, alpha exact (termasuk alpha parsial/palet), RGB berubah, original byte-identical, raw RGB 256×256 valid, piksel kedua route sama untuk input/seed sama; safety checker melaporkan false.
+- Health tetap 200 selama lazy load (0.377s); request paralel 409. Health loaded berubah false → true.
+- PNG/ZIP asli dan Classic Pixelation tidak diubah; suite backend/frontend tidak dijalankan ulang.
 
 ## Modified files
 
-- `ai-service/stylizer.py` — modul baru `LocalStylizer`, loader `ClonedOffloadedWeightsLoader`, dataclass `StylizationResult`, preprocessing & alpha restoration.
-- `ai-service/test_stylizer.py` — test suite baru (preprocessing, aspect ratio, 100% alpha match, lazy load, live 1-step CPU inference).
-- `docs/DECISIONS.md` — penambahan entri D-038 (POC inferensi penuh 256) dan D-039 (modul helper `LocalStylizer`).
-- `docs/PROGRESS.md` — pembaruan status aktual M6, tabel milestone, entri D-038 & D-039, dan tugas aktif.
-- `docs/HANDOFF.md` — pembaruan status agen, log verifikasi, dan satu tindakan berikutnya.
+- `ai-service/main.py` — melanjutkan perubahan awal, validasi dan concurrency/persistence endpoint.
+- `ai-service/test_api.py` — tujuh regresi input/parameter/path/unavailable baru.
+- `README.md` — kontrak endpoint dan cara menjalankan service stylization terisolasi.
+- `docs/ARCHITECTURE.md` — batas integrasi FastAPI internal.
+- `docs/DECISIONS.md` — D-040 beserta hasil tes/resource aktual.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — status, bukti tes dan next task aktual.
 
 ## Uncommitted changes / Git status
 
-- `modified: docs/DECISIONS.md`
-- `modified: docs/PROGRESS.md`
-- `modified: docs/HANDOFF.md`
-- `untracked: ai-service/stylizer.py`
-- `untracked: ai-service/test_stylizer.py`
-Tanpa staging/commit otomatis sesuai aturan proyek.
+- Inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached`: hanya `ai-service/main.py` modified; index kosong. Catatan helper untracked/dokumen pending di handoff sebelumnya sudah kedaluwarsa.
+- Tujuh file di atas diubah dalam sesi ini dan tidak di-stage/commit. Daftar berdasarkan inspeksi awal dan operasi edit sesi; tidak menjalankan Git ulang sesudah edit.
+- Tidak reset, menghapus perubahan pengguna, download model, install paket atau mengubah helper/checkpoint/environment existing. AGENTS dimuat dari konteks; LSP tidak dikonfigurasi.
+- Harness smoke via stdin, service loopback dan direktori temporary fixture/hasil/log dibersihkan setelah selesai. Tidak ada script permanen atau foto pribadi baru.
 
 ## Current errors / limitations
 
-- Endpoint FastAPI `POST /stylize` dan integrasi client Express backend (`backend/src/ai-client.js`) belum dibuat.
-- Inferensi SD15 CPU pada resolusi 256×256 membutuhkan ~21 detik per langkah denoising (total ~3.5–4 menit untuk 10–11 langkah aktual), sehingga perlu penanganan timeout atau worker asinkron yang tepat saat integrasi backend.
+- Tidak ada kegagalan pada tes yang dijalankan. Warning deprecation Starlette/httpx existing tetap muncul.
+- Awal headroom tidak lolos 3 GiB RAM available/8 GiB sisa commit; pengguna memilih menyiapkan memori dua kali. Gate sebelum startup akhirnya lolos: 3.467.902.976 / 8.969.248.768 byte.
+- Minimum selama 1.818 sampel: RAM available 1.010.532.352 byte (~0,94 GiB), sisa commit 1.301.778.432 byte (~1,21 GiB). Guard <512 MiB/<1 GiB tidak terpicu, tetapi margin commit tipis. Jangan menganggap private commit sama dengan RSS atau sampling sebagai hard cap.
+- Smoke tidak memuat SCHP bersamaan; `SCHP_CHECKPOINT_PATH` child sengaja menuju file tidak ada. Runtime aplikasi masih dapat memuat SCHP default; jangan menjalankan kedua model bersamaan tanpa evaluasi resource.
+- API menerima path **caller lokal tepercaya**, bukan sandbox. Bind 127.0.0.1/satu worker; integrasi Express wajib memilih file berdasarkan manifest, tidak meneruskan path browser.
+- API 20 langkah/512, kualitas visual, fault injection disk/inferensi dan SCHP+SD15 bersamaan belum diuji sesi ini. Silhouette exact bukan jaminan alignment/kualitas pixel art. Output generatif belum tersedia di browser.
 
 ## Tests / checks performed
 
-- **PASS:** `ai-service/test_stylizer.py` suite (5/5 PASS dalam 62.08s) pada CPython 3.14.3 AMD64 / Windows 11 (`.venv-stylization-poc`).
-- **PASS:** `ai-service/test_extractor.py` SCHP extraction pipeline (1.94s) pada `.venv-test`.
-- **PASS:** `ai-service/test_schp_cpu.py` forward & upsampling pipeline pada `.venv-test`.
-- **PASS:** `backend/test/pixelation.test.js` Classic Pixelation unit tests (7/7 PASS dalam 1.80s).
-- **NOT RUN:** Integrasi HTTP API FastAPI stylization live, integrasi backend Express job manager untuk stylization, UI Pixel Art Studio generative mode.
+- **PASS:** `ai-service/.venv-test/Scripts/python.exe -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14, 18.743s; tujuh ekstraksi existing + tujuh validasi stylization.
+- **PASS:** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u -` — harness stdin memulai Uvicorn loopback port ephemeral, HF/Transformers offline, request HTTP via httpx dan fixture sintetis. Dua inferensi nyata, alpha/original/raw/base64/determinisme, health dan busy 409 terverifikasi; detail D-040.
+- **PASS:** Pengawas resource 100 ms tidak menghentikan smoke; harness menghentikan pohon service miliknya, menunggu launcher, membersihkan temporary directory.
+- **NOT RUN:** Suite helper/CPU/backend/frontend ulang, build/browser, 512/full-default API, kualitas visual, fault injection disk/inferensi, pipeline dua model bersamaan. Tidak diperlukan untuk mengklaim hasil smoke dua endpoint; M6 keseluruhan belum selesai.
 
 ## Next action (only one)
 
-**Integrasikan `LocalStylizer` ke `ai-service/main.py` dengan menambahkan endpoint REST `POST /stylize` (multipart image upload) dan `POST /stylize-path` (JSON local path), lalu validasi dengan unit test API `ai-service/test_api.py`.**
+**Integrasikan `/stylize-path` ke antrean backend Express dengan timeout generatif terpisah dan snapshot hasil privat berbasis manifest.** Jangan menerima path filesystem dari browser; pertahankan unduhan original dan Classic Pixelation independen.
 
 ## Handoff rules
 

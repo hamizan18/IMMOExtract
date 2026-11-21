@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M5 memiliki bukti verifikasi Windows lokal. M6: runtime/checkpoint tersedia; inferensi SD15 CPU 256×256 sukses (D-038), dan helper modular `LocalStylizer` (`ai-service/stylizer.py`) beserta test suite `ai-service/test_stylizer.py` selesai divalidasi (5/5 PASS, D-039) dengan 100% alpha preservation.
+> **Status aktual:** M1–M5 memiliki bukti Windows lokal. M6: helper `LocalStylizer` dan endpoint FastAPI internal `/stylize` serta `/stylize-path` teruji dengan SD15 nyata (D-039/D-040). Integrasi Express/UI generatif dan koreksi mask belum tersedia.
 
 ## Ringkasan
 
 - **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
-- **Current task:** Helper modular `LocalStylizer` (`ai-service/stylizer.py`) dan test suite `test_stylizer.py` selesai divalidasi (D-039); tugas berikutnya adalah mengintegrasikan endpoint REST `POST /stylize` dan/atau `POST /stylize-path` di `ai-service/main.py`.
-- **Overall status:** `LocalStylizer` menyediakan abstraksi bersih CPU FP32 SD15 img2img berbasis `ClonedOffloadedWeightsLoader`, preprocessing letterbox netral, NEAREST un-letterbox, dan restorasi 100% exact alpha silhouette. Seluruh 5 pengujian (4 preprocessing/lifecycle + 1 live SD15 1-step inference) PASS tanpa regresi pada modul ekstraksi atau pixelation.
-- **Last verification:** 2026-11-20 — suite `ai-service/test_stylizer.py` (5/5 PASS dalam 62.08s) dan regresi (`test_extractor.py`, `test_schp_cpu.py`, `backend/test/pixelation.test.js`) PASS pada Windows AMD64 (D-039).
+- **Current task:** Integrasi endpoint FastAPI stylization selesai, termasuk verifikasi HTTP nyata dua jalur dan regresi API (D-040).
+- **Overall status:** Lazy load, base64/PNG disk, alpha exact termasuk transparansi palet, sumber tidak berubah, request paralel ditolak 409 dan health tetap responsif terverifikasi. M6 belum selesai end-to-end di aplikasi browser.
+- **Last verification:** 2026-11-21 — `test_api.py` 14/14 PASS (18.743s); smoke HTTP SD15 256 px/2 langkah nominal PASS untuk multipart (64.629s) dan JSON path (56.163s), masing-masing 2 langkah aktual. Tidak mengulang suite milestone lain.
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress; LocalStylizer helper PASS (D-039) | Pipeline SD15 CPU offload termuat dan sukses inferensi; helper modular `LocalStylizer` terverifikasi 5/5 PASS; integrasi endpoint API sedang disiapkan |
+| M6 | AI stylization lokal dan koreksi mask | In progress; helper/API internal PASS (D-039/D-040) | Kedua endpoint SD15 nyata teruji; integrasi Express/UI dan koreksi mask belum tersedia |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -146,10 +146,14 @@
 - Pembuktian loader bermitigasi `ClonedOffloadedWeightsLoader` pada UNet (2026-11-20, D-037): integrasi patching loader terbukti berhasil mengeksekusi forward pass submodul `conv_in`, `down_blocks[0]` (74 parameter), dan model UNet penuh (686 parameter) pada CPU FP32. Satu langkah forward pass UNet selesai dalam 11.24 detik dengan output valid `[1, 4, 32, 32]`, nilai finite, parameter kembali ke `meta`, private memory puncak 797.06 MB, dan RSS 444.63 MB tanpa kebocoran memori.
 - Keberhasilan POC inferensi penuh SD15 img2img 256×256 CPU lokal bermitigasi (2026-11-20, D-038): inferensi 11 langkah denoising penuh (nominal 20 langkah, strength 0.5, PNDM, seed 0, guidance 7.5, 2 thread CPU) berhasil dieksekusi dari awal hingga akhir dalam 241.87 detik (~20.99 detik/langkah) pada CPU AMD Ryzen 5 7430U. Artefak `generated.png` (256×256 RGB) dan `stylized.png` (192×256 RGBA) terverifikasi valid secara programmatic, alpha channel sumber terjaga 100% identik (`np.array_equal == True`), transformasi RGB nyata, safety checker aktif dan clean, serta RAM fisik (RSS) terjaga stabil di 2.19–2.46 GiB.
 - Implementasi service modular `LocalStylizer` dan verifikasi test suite (2026-11-20, D-039): modul `ai-service/stylizer.py` mengabstraksikan pipeline SD15 CPU FP32 dengan loader `ClonedOffloadedWeightsLoader`, preset prompt, preprocessing letterbox pada kanvas netral `(128, 128, 128)`, un-letterbox NEAREST, dan restorasi 100% exact alpha channel sumber. Seluruh test suite `ai-service/test_stylizer.py` (4 unit test preprocessing/lifecycle + 1 live 1-step SD15 denoising test) PASS 100% dalam 62.08 detik. Pengujian regresi M1–M5 (`test_extractor.py`, `test_schp_cpu.py`, `backend/test/pixelation.test.js`) tetap PASS tanpa regresi.
+- Pemulihan tugas terhenti (2026-11-21, D-040): Git awal hanya `ai-service/main.py` modified, staged diff kosong. Draft endpoint dilanjutkan, bukan dibuat ulang; helper/test helper sebelumnya sudah tracked. Tidak staging/commit, reset, download atau memasang dependensi. AGENTS yang dimuat dalam konteks diikuti; LSP tidak tersedia.
+- FastAPI stylization: bounded static images dan parameter, normalisasi RGBA, perlindungan alias sumber/output, serialisasi load/inferensi dengan 409 saat sibuk, handler threadpool, error inferensi/penyimpanan aman, health availability vs loaded. Tetap API internal caller tepercaya, bukan sandbox path atau fitur browser.
+- Verifikasi sesi: tujuh tes ekstraksi existing + tujuh regresi validasi stylization 14/14 PASS; smoke Uvicorn nyata memakai runtime POC existing, offline, tanpa SCHP, dua request SD15 serial PASS. Hasil alpha exact, perubahan RGB nyata, original byte-identical, raw PNG 256×256 valid, hasil kedua jalur deterministik untuk input/seed sama.
+- Gerbang memori awal gagal; pengguna menyiapkan memori dua kali, bukan mengizinkan penurunan ambang. Gate tepat sebelum startup lolos (RAM available 3.467.902.976 byte/sisa commit 8.969.248.768 byte). Minimum sepanjang smoke 1.010.532.352/1.301.778.432 byte; tidak memicu guard, tetapi margin commit tipis. Service uji dihentikan dan fixture/hasil/log temporary dibersihkan.
 
 ## In progress
 
-- M6: Integrasi helper `LocalStylizer` ke endpoint REST FastAPI di `ai-service/main.py` (`POST /stylize` dan `POST /stylize-path`) sebelum menghubungkannya ke antrean backend Express.
+- M6 berikutnya: integrasi `/stylize-path` dengan antrean backend Express, timeout generatif terpisah dan snapshot hasil privat; endpoint FastAPI internal sudah teruji.
 
 ## Blockers / risks
 
@@ -169,13 +173,13 @@
 - ZIP diekspor sebagai snapshot baru per POST; belum ada deduplikasi, batas ekspor atau retensi. Crash sebelum manifest ekspor dipublikasikan dapat menyisakan direktori privat yang tidak dapat diunduh.
 - Pixelation memakai grid integer sehingga rasio aspek mengalami pembulatan dan detail tipis dapat hilang. Mode original mempertahankan RGBA piksel terpilih; Retro mengubah RGB terlihat ke palet tetap, bukan menjaga warna asli. Alpha/hidden RGB tetap exact; bukan preservasi seluruh silhouette. Decode sumber memakai memori sesuai dimensi; belum ada benchmark RAM maksimum.
 - Retro 16 membatasi RGB terlihat saja; PNG tetap RGBA8 dan dapat memiliki lebih dari 16 kombinasi RGBA karena alpha parsial/hidden RGB. Palet tidak adaptif/perseptual dan tidak memakai dithering.
-- Load pipeline SD15 CPU FP32 dengan UNet disk-offload PASS, tetapi inferensi 256 gagal guard private memory >4 GiB. Peak private counters pohon child ~12.32 GiB meski working set ~2.21 GiB; offload belum terbukti sesuai laptop ini. Sampling target 100 ms tidak mencegah lonjakan; jangan menaikkan guard atau retry model penuh otomatis. DirectML belum diuji.
-- Alpha sumber yang dipasang kembali tidak menjamin alignment; risiko halo/detail terpotong. Pengguna mengizinkan POC adaptif D-035, bukan bundling. Hasil generatif/alpha/latensi inferensi selesai/LoRA belum diuji karena guard menghentikan proses.
+- Riwayat kegagalan D-035 telah dilanjutkan oleh diagnosis/mitigasi dan inferensi sukses D-036–D-039; jangan mengulang probe lama sebagai next task. Memori tetap berisiko: private commit dan RAM fisik adalah resource berbeda, keduanya perlu headroom; sampling watchdog bukan batas keras.
+- Alpha sumber yang dipasang kembali tidak menjamin alignment; halo/detail terpotong dan kualitas pixel art tetap perlu evaluasi visual. Model hanya untuk evaluasi lokal, bukan izin bundling; LoRA/512 dan integrasi Express/UI belum teruji.
 - Jangan menandai fitur M4–M7 sebagai selesai hanya karena dokumentasinya ada.
 
 ## Next task — satu tugas saja
 
-Integrasikan `ClonedOffloadedWeightsLoader` ke script supervisor/child probe inferensi img2img 256×256 terawasi (D-035 adaptif) dan uji eksekusi langkah denoising pertama. Pertahankan guard private memory 4 GiB dan parameter D-035.
+Integrasikan `/stylize-path` ke antrean backend Express dengan timeout generatif terpisah dan snapshot hasil privat berbasis manifest. Jangan menerima path filesystem dari browser atau mengaktifkan UI sebelum alur backend teruji.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -393,6 +397,11 @@ Integrasikan `ClonedOffloadedWeightsLoader` ke script supervisor/child probe inf
 | 2026-11-20 | Diagnosis reproduksi alokasi `safe_open` safetensors Windows (scratch `test_loop.py`, `test_exception.py`, `test_solutions.py`) | PASS verifikasi D-036 | Terbukti 4 tensor aktif dari `safe_open` tanpa copy mengakumulasi 13.69 GiB private bytes (view mmap). Mitigasi `.clone()` terbukti konstan di 580.20 MB (RSS 214.86 MB) sepanjang 10 iterasi |
 | 2026-11-20 | Pengujian `ClonedOffloadedWeightsLoader` pada `conv_in`, `down_blocks[0]` dan full UNet (`test_mitigated_submodule.py`, `test_full_unet_forward.py`) | PASS verifikasi D-037 | Forward pass 686 parameter UNet selesai dalam 11.24s di CPU FP32; output `[1, 4, 32, 32]` valid finite; private bytes 797.06 MB (<800 MB), RSS 444.63 MB; parameter kembali ke meta tanpa kebocoran memory |
 | 2026-11-20 | Probe 512, hasil PNG generatif/alpha/original, kualitas visual, LoRA, build/suite aplikasi/browser | NOT RUN | Guard menghentikan 256 tanpa hasil; tidak retry otomatis. Source aplikasi tidak berubah |
+| 2026-11-21 | Inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached` | PASS | Hanya main.py modified; staged diff kosong. Perubahan tersebut dilanjutkan, tanpa commit |
+| 2026-11-21 | `ai-service/.venv-test/Scripts/python.exe -B -m unittest discover -s ai-service -p test_api.py -v` | PASS | 14/14, 18.743s: 7 ekstraksi SCHP nyata + 7 validasi stylization; warning Starlette/httpx existing |
+| 2026-11-21 | `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u -` — harness stdin Uvicorn/HTTP lokal | PASS | Multipart 64.629s; path 56.163s; SD15 256 px, nominal 2/aktual 2 langkah per request; alpha/palet/original/output disk dan determinisme dua jalur tervalidasi |
+| 2026-11-21 | Harness yang sama: health, concurrency, watchdog dan cleanup | PASS | Health 200 dalam 0.377s ketika load; request paralel 409; 1.818 sampel tanpa guard; service/fixture temporary dibersihkan |
+| 2026-11-21 | API 20 langkah/512, kualitas visual, SCHP+SD15 bersamaan, fault injection disk/inferensi, Express/UI, build/suite backend/frontend | NOT RUN | Di luar smoke terarah; tidak mengklaim M6 selesai atau mengulang verifikasi lama |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

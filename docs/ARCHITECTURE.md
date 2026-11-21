@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** M1–M5 teruji pada Windows lokal. Classic Pixelation memiliki helper, API snapshot privat, UI per objek serta palet Retro 16 opsional. Retensi dan M6 belum tersedia. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** M1–M5 teruji pada Windows lokal. M6 memiliki helper SD15 dan endpoint FastAPI internal; integrasi generatif Express/UI, koreksi mask dan retensi belum tersedia. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -103,6 +103,8 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | GET | `/api/health/ai` | Express memanggil health FastAPI (tersedia M1) |
 
 Internal AI service: `GET /health` tersedia pada M1, mengembalikan `{"status":"ok","service":"ai-service","model_loaded":false}`. Express `/api/health` mengembalikan `{"status":"ok","service":"backend"}`. `/api/health/ai` memanggil FastAPI dengan timeout bawaan 3 detik; berhasil mengembalikan kontrak health AI yang sama, gagal mengembalikan HTTP 503 dengan pesan aman. Health Express tetap independen. `POST /parse` belum tersedia; kontrak inferensi diputuskan di M3.
+
+**Stylization internal (D-040):** FastAPI menyediakan `POST /stylize` (multipart file) dan `/stylize-path` (JSON path tepercaya), tanpa route Express/browser baru. Pipeline SD15 lazy-loaded; satu lock per proses menolak stylization bersamaan dengan 409. Handler sinkron berjalan pada threadpool agar event loop tidak diblokir inferensi. Input bounded dan dinormalisasi RGBA; output PNG/base64, metadata, serta `nsfw_detected` mengikuti `LocalStylizer`. Path sumber/hasil harus berbeda. Health menambahkan `stylizer_available` (konfigurasi ditemukan, bukan bukti load) dan `stylizer_loaded`. Ini bukan sandbox path; bind loopback/satu worker dan gunakan proses stylization terpisah dari SCHP pada pengujian resource terbatas. Kontrak parameter lengkap ada di README; Express belum meneruskan status stylizer atau mengantrekan generasi.
 
 Pada development, Vite `127.0.0.1:5173` mem-proxy `/api` ke Express `127.0.0.1:3000`; Express mengakses FastAPI `127.0.0.1:8000`. Tidak ada static serving `storage/`, akses FastAPI langsung dari browser, atau CORS terbuka. Halaman M1 hanya status layanan, bukan UI produk penuh.
 
