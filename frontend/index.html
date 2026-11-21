@@ -55,6 +55,34 @@
           <p id="export-status" role="status" aria-live="polite" class="mt-3 break-words text-sm text-slate-300"></p>
           <a id="export-download" hidden class="mt-3 inline-block rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh ulang ZIP siap</a>
         </fieldset>
+        <fieldset class="mt-4 rounded-lg border border-white/20 p-3" aria-describedby="spritesheet-help">
+          <legend class="px-1 font-semibold">Ekspor Spritesheet Statis (M7)</legend>
+          <p id="spritesheet-help" class="text-sm text-slate-300">Gabungkan objek yang dipilih atau seluruh objek menjadi satu lembar spritesheet PNG transparan dan metadata JSON atlas.</p>
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-2 text-sm text-slate-200">
+              Padding:
+              <input id="spritesheet-padding" type="number" min="0" max="64" value="4" class="w-16 rounded border border-white/30 bg-[#171738] px-2 py-1 text-sm text-white focus-visible:outline-[#00F5D4]" />
+              px
+            </label>
+            <label class="flex items-center gap-2 text-sm text-slate-200">
+              Kolom:
+              <input id="spritesheet-columns" type="number" min="1" max="16" placeholder="Auto" class="w-16 rounded border border-white/30 bg-[#171738] px-2 py-1 text-sm text-white focus-visible:outline-[#00F5D4]" />
+            </label>
+            <button id="spritesheet-selected" type="button" disabled class="rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Spritesheet Pilihan</button>
+            <button id="spritesheet-all" type="button" disabled class="rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Spritesheet Semua</button>
+          </div>
+          <p id="spritesheet-status" role="status" aria-live="polite" class="mt-3 break-words text-sm text-slate-300"></p>
+          <div id="spritesheet-result" hidden class="mt-3 rounded-lg border border-white/20 p-3">
+            <div class="transparency-grid max-h-64 overflow-auto rounded-lg">
+              <img id="spritesheet-preview-img" alt="Preview Spritesheet" class="mx-auto object-contain" />
+            </div>
+            <p id="spritesheet-info" class="mt-2 text-xs text-slate-300"></p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <a id="spritesheet-download-png" class="inline-block rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh PNG Spritesheet</a>
+              <a id="spritesheet-download-atlas" class="inline-block rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh Atlas JSON</a>
+            </div>
+          </div>
+        </fieldset>
         <ul id="object-gallery" aria-label="Objek hasil ekstraksi" class="mt-4 grid gap-4 sm:grid-cols-2"></ul>
       </section>
       </div>
@@ -177,7 +205,7 @@
           <button id="mask-editor-save" type="button" class="rounded-lg bg-[#00F5D4] px-4 py-2 text-sm font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-[#00F5D4] disabled:opacity-50">Simpan Koreksi</button>
         </div>
       </dialog>
-      <p class="mt-6 text-sm text-slate-300">Ekstraksi dimulai hanya setelah menekan Ekstrak objek. Koreksi Mask, Classic Pixelation (M5), dan AI Pixel Art Stylization (M6) tersedia per objek.</p>
+      <p class="mt-6 text-sm text-slate-300">Ekstraksi dimulai hanya setelah menekan Ekstrak objek. Koreksi Mask, Classic Pixelation (M5), AI Pixel Art Stylization (M6), dan Ekspor Spritesheet Statis (M7) tersedia.</p>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>

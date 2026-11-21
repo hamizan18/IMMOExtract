@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M6 memiliki bukti Windows lokal. M6 selesai: AI Stylization backend & UI teruji, Mask Correction Tool (FR-12: Canvas Brush/Eraser manual + endpoint PUT `/api/jobs/:id/objects/:objectId` + validasi Sharp defensif) terimplementasi dan terverifikasi 100%. Automated browser smoke test (13 stages) PASS.
+> **Status aktual:** M1–M6 selesai dan memiliki bukti Windows lokal. M7 dalam proses: generator Spritesheet Statis PNG transparan dan metadata JSON Atlas (FR-13) terimplementasi di backend dan frontend serta terverifikasi 100%. Automated headless browser smoke test M7 PASS.
 
 ## Ringkasan
 
-- **Current milestone:** M6 — AI Stylization dan koreksi mask — Complete (Windows lokal).
-- **Current task:** Mask Correction Tool (FR-12) dan verifikasi Automated Headless Browser Smoke Test selesai (D-044). Seluruh test suite backend (111/111 PASS), AI API (14/14 PASS), frontend build (197ms), dan browser CDP smoke test (13/13 PASS) terkonfirmasi lulus 100%.
-- **Overall status:** Pipeline ekstraksi M3/M4, Classic Pixelation M5, AI Stylization M6, dan Mask Correction Canvas Editor terintegrasi penuh. Objek yang diedit di kanvas langsung terdistribusi ke turunan pixelation, stylization, dan ZIP.
-- **Last verification:** 2026-11-21 — Automated Headless Browser Smoke Test 13/13 PASS (16s, 0 console error); Frontend build PASS (197ms); Backend test suite 111/111 PASS (7.85s); AI API 14/14 PASS (9.28s); Pixelation 7/7 PASS (0.67s).
+- **Current milestone:** M7 — Selective ZIP, spritesheet statis, hardening, docs — In progress.
+- **Current task:** Generator Spritesheet Statis dan Atlas JSON (FR-13) selesai dan terverifikasi penuh (D-045). Seluruh test suite backend (116/116 PASS), AI API (14/14 PASS), frontend build (118ms), dan browser CDP smoke test (13/13 PASS) terkonfirmasi lulus 100%.
+- **Overall status:** Pipeline ekstraksi M3/M4, Classic Pixelation M5, AI Stylization M6, Mask Correction Editor, dan Generator Spritesheet M7 terintegrasi. Objek dapat digabungkan ke lembar spritesheet transparan dengan konfigurasi padding dan kolom yang fleksibel.
+- **Last verification:** 2026-11-21 — Automated Headless Browser Smoke Test M7 13/13 PASS (21s, 0 console error); Frontend build PASS (118ms); Backend test suite 116/116 PASS (7.89s); AI API 14/14 PASS (10.05s); Spritesheet unit tests 4/4 PASS (212ms).
 
 ## Milestone
 
@@ -19,7 +19,7 @@
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | Complete (Windows lokal) | FastAPI nyata teruji; antrean/snapshot Express 111 tes PASS; UI M6 browser smoke 13/13 PASS; Mask correction FR-12 canvas editor & PUT API PASS (D-031–D-044) |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | In progress | Spritesheet generator FR-13 PASS (D-045); Selective ZIP hardening & release docs berikutnya |
 
 ## Completed
 
@@ -153,10 +153,11 @@
 - Integrasi backend stylization (2026-11-21, D-041): POST object_id + parameter → 202/Location; polling dan preview/download berbasis manifest privat. Satu FIFO bersama ekstraksi, snapshot committed untuk polling aktif, recovery interrupted tanpa retry. PNG staging hanya dipublikasikan setelah metadata/dimensi/alpha exact lolos; parent/original/ZIP/pixelation tetap.
 - Automated Headless Browser Smoke Test M6 UI (2026-11-21, D-043): script mandiri berbasis Chrome DevTools Protocol (CDP) menguji 13 tahapan browser end-to-end tanpa regresi. Menavigasi ke UI, memeriksa health check, upload fixture, ekstraksi 2 objek, rendering kontrol UI M6, form locking, polling serial, preview 100×100, download attachment PNG, dan lifecycle reset. 13/13 stages PASS 100%, 0 console error.
 - Implementasi Mask Correction Tool FR-12 (2026-11-21, D-044): Canvas 2D brush/eraser editor di modal dialog HTML5 `<dialog id="mask-editor-dialog">`. Menyediakan mode Penghapus (transparan), Kuas Pulihkan (memulihkan piksel foto asli secara instan via clipping canvas dan drawImage dari gambar sumber), slider brush size 2–60 px, tombol Undo ber-stack, Reset, dan Simpan. Backend `PUT /api/jobs/:id/objects/:objectId` memvalidasi RGBA 4 channels, exact width/height, penulisan atomik, dan kalkulasi ulang opaque pixels. Operasi turunan (M5, M6, ZIP) otomatis mengonsumsi siluet terkoreksi. Suite test 111/111 PASS, Vite build PASS, CDP smoke test PASS.
+- Generator Spritesheet Statis dan Atlas JSON FR-13 (2026-11-21, D-045): modul `backend/src/spritesheet.js` (`packSpritesheet`) menyusun frame objek ke kanvas transparan RGBA dengan opsi padding (0–64) dan kolom (1–16), menghasilkan PNG komposit Sharp dan JSON atlas TexturePacker standard. Backend `POST /api/jobs/:id/spritesheet` dan endpoint penyajian inline/attachment untuk PNG serta Atlas JSON. UI frontend fieldset "Ekspor Spritesheet Statis" dengan preview langsung, info metadata, dan tombol unduh file PNG & Atlas JSON. Unit test 4/4 PASS, jobs test 59/59 PASS, full backend 116/116 PASS, CDP browser smoke test 13/13 PASS.
 
 ## In progress
 
-- Persiapan Milestone M7: perancangan generator Spritesheet statis, perkuatan Selective ZIP, pembersihan aset/scratch, dan dokumentasi rilis akhir.
+- Milestone M7: Selective ZIP hardening, penanganan concurrency/CRC integritas, dan persiapan dokumentasi rilis akhir.
 
 ## Blockers / risks
 
@@ -182,7 +183,7 @@
 
 ## Next task — satu tugas saja
 
-Rancang dan implementasikan generator Spritesheet statis untuk menggabungkan aset objek hasil ekstraksi/pixelation/stylization ke dalam satu lembar gambar bergrid PNG transparan beserta metadata JSON manifest (tahap awal Milestone M7).
+Lakukan hardening dan pengujian komprehensif pada fitur Selective ZIP (ekspor ZIP pilihan sebagian/semua objek), verifikasi konkurensi ekspor, integritas checksum/CRC arsip, serta penanganan kegagalan sumber yang tangguh (tahap lanjutan Milestone M7).
 
 ## Inventaris kesiapan M3 — 2026-11-16
 

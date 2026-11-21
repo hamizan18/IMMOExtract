@@ -745,3 +745,36 @@ vae/config.json
   - Proyek siap melangkah ke Milestone M7 (Selective ZIP hardening, spritesheet generator statis, pembersihan, dan dokumentasi release).
 - **Next single task:** Mulai persiapan Milestone M7: perancangan ekspor Spritesheet statis untuk menggabungkan objek-objek terekstraksi/pixelated/stylized ke dalam satu lembar gambar bergrid.
 
+## D-045 — Implementasi Generator Spritesheet Statis dan Atlas JSON (FR-13)
+
+- **Tanggal:** 2026-11-21.
+- **Status:** Verified / Accepted; backend test suite (25 subtest, 59 tests), modul helper `spritesheet.test.js` (4 tests), frontend build (Vite 7 modules), dan automated browser smoke test (13 stages) PASS 100%.
+- **Keputusan Teknis:**
+  1. **Modul Helper Komposisi (`backend/src/spritesheet.js`):**
+     - Fungsi `packSpritesheet(items, options)` menerima daftar objek gambar, padding antarpiksel (default 4 px, rentang 0–64), dan jumlah kolom grid (default otomatis $\min(\max(\lceil\sqrt{N}\rceil, 1), 8)$, rentang 1–16).
+     - Menghitung koordinat $(x, y)$ dan dimensi setiap frame secara deterministik dengan pembagian baris dinamis.
+     - Menggunakan Sharp untuk membuat kanvas transparan RGBA (`channels: 4`, `background: { r: 0, g: 0, b: 0, alpha: 0 }`), lalu melakukan compositing seluruh sprite dengan `png({ compressionLevel: 9 })`.
+     - Menghasilkan metadata atlas JSON format TexturePacker / PixiJS / Phaser standard (`meta` + `frames: { [id]: { frame: { x, y, w, h }, rotated: false, trimmed: false, spriteSourceSize, sourceSize, category } }`).
+     - Perlindungan defensif terhadap batas dekompresi: menolak spritesheet jika lebar, tinggi > 8192 px atau total piksel > 24.000.000 (`SPRITESHEET_DIMENSIONS_EXCEEDED`).
+  2. **API Backend Express & Snapshot Privat (`job-manager.js`, `jobs.js`):**
+     - Endpoint `POST /api/jobs/:id/spritesheet` menerima payload JSON `{ all: true }` atau `{ object_ids: [...] }` dengan parameter opsional `padding` dan `columns`.
+     - Validasi ketat: job harus `completed` (409), ID objek terdaftar tanpa duplikasi (400), objek tidak ditemukan (404), parameter tidak dikenal (400).
+     - Snapshot disimpan di direktori privat `<jobDirectory>/spritesheets/<spritesheetId>/` (`spritesheet.png`, `atlas.json`, dan `manifest.json`) dengan penulisan atomik `.tmp` -> `rename`.
+     - Endpoint penyajian aman via `serveFile`:
+       - `GET /api/jobs/:id/spritesheets/:spritesheetId` (inline preview PNG).
+       - `GET /api/jobs/:id/spritesheets/:spritesheetId/download` (attachment download `<id>.png`).
+       - `GET /api/jobs/:id/spritesheets/:spritesheetId/atlas` (inline JSON atlas).
+       - `GET /api/jobs/:id/spritesheets/:spritesheetId/atlas/download` (attachment download `<id>.atlas.json`).
+  3. **Antarmuka UI Frontend (`frontend/index.html`, `frontend/src/extraction-workspace.js`):**
+     - Fieldset "Ekspor Spritesheet Statis (M7)" dengan kontrol konfigurasi padding dan jumlah kolom.
+     - Dua tombol aksi: `Spritesheet Pilihan` (aktif saat checkbox objek dipilih) dan `Spritesheet Semua`.
+     - Indikator status aria-live, kontainer preview gambar spritesheet di atas transparency grid, teks dimensi/objek/grid info, dan tombol unduh untuk file PNG spritesheet serta Atlas JSON.
+     - Penguncian kontrol saat proses berjalan dan integrasi pembatalan dengan `AbortController` pada reset/upload baru via `setUploadedImage`.
+- **Bukti Pengujian Nyata:**
+  - `node --test backend/test/spritesheet.test.js`: **PASS** (4/4 tests PASS, 212ms).
+  - `node --test backend/test/jobs.test.js`: **PASS** (25 subtest, 59/59 tests PASS, 7.23s).
+  - Suite lengkap backend: **116/116 tests PASS** dalam 7.89s.
+  - `npm run build --prefix frontend`: **PASS** (7 modul, 118ms).
+  - `smoke_browser_m7.mjs` (Headless Chrome CDP): **PASS 100%** (13 stages, verifikasi preview spritesheet 318×312, unduhan file PNG dan Atlas JSON, spritesheet pilihan tunggal, reset, dan 0 console error).
+- **Next single task:** Hardening ekspor Selective ZIP: verifikasi keandalan arsip ZIP pilihan, penanganan concurrency dan validasi integritas checksum/CRC.
+

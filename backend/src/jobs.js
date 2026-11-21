@@ -54,6 +54,28 @@ export function createJobRouter(options) {
       fail(error, response);
     }
   });
+  router.post('/:id/spritesheet', express.json({ limit: '4kb' }), async (request, response) => {
+    if (!request.is('application/json')) {
+      response.status(415).json({ error: { code: 'SPRITESHEET_INPUT_REQUIRED', message: 'Kirim JSON all atau object_ids.' } });
+      return;
+    }
+    try {
+      const result = await manager.createSpritesheet(request.params.id, request.body);
+      const imageUrl = `/api/jobs/${result.job_id}/spritesheets/${result.spritesheet_id}`;
+      const downloadUrl = `${imageUrl}/download`;
+      const atlasUrl = `${imageUrl}/atlas`;
+      const atlasDownloadUrl = `${atlasUrl}/download`;
+      response.location(imageUrl).status(201).json({
+        ...result,
+        image_url: imageUrl,
+        download_url: downloadUrl,
+        atlas_url: atlasUrl,
+        atlas_download_url: atlasDownloadUrl,
+      });
+    } catch (error) {
+      fail(error, response);
+    }
+  });
   router.post('/:id/pixelate', express.json({ limit: '2kb' }), async (request, response) => {
     if (!request.is('application/json')) {
       response.status(415).json({ error: { code: 'PIXELATION_INPUT_REQUIRED', message: 'Kirim JSON object_id dan size.' } });
@@ -167,5 +189,11 @@ export function createJobRouter(options) {
   const stylizationFile = params => manager.getStylizationFile(params.id, params.stylizationId);
   router.get('/:id/stylizations/:stylizationId/image', serveFile(stylizationFile, 'image/png', 'inline', 'STYLIZATION_NOT_FOUND'));
   router.get('/:id/stylizations/:stylizationId/download', serveFile(stylizationFile, 'image/png', 'attachment', 'STYLIZATION_NOT_FOUND'));
+  const spritesheetFile = params => manager.getSpritesheetFile(params.id, params.spritesheetId);
+  router.get('/:id/spritesheets/:spritesheetId', serveFile(spritesheetFile, 'image/png', 'inline', 'SPRITESHEET_NOT_FOUND'));
+  router.get('/:id/spritesheets/:spritesheetId/download', serveFile(spritesheetFile, 'image/png', 'attachment', 'SPRITESHEET_NOT_FOUND'));
+  const spritesheetAtlas = params => manager.getSpritesheetAtlas(params.id, params.spritesheetId);
+  router.get('/:id/spritesheets/:spritesheetId/atlas', serveFile(spritesheetAtlas, 'application/json', 'inline', 'ATLAS_NOT_FOUND'));
+  router.get('/:id/spritesheets/:spritesheetId/atlas/download', serveFile(spritesheetAtlas, 'application/json', 'attachment', 'ATLAS_NOT_FOUND'));
   return router;
 }

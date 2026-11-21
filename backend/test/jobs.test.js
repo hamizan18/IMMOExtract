@@ -892,3 +892,124 @@ test('object revision updates canonical object file, rejects invalid dimensions/
   assert.equal(downloadFetch.headers.get('content-disposition'), `attachment; filename="${targetObject.id}.png"`);
   assert.deepEqual(Buffer.from(await downloadFetch.arrayBuffer()), validRevisedPng);
 });
+
+test('spritesheet creation publishes transparent PNG and atlas JSON, supports all/selection, padding and columns, and validates input', async (t) => {
+  const { base } = await setup(t, { extractPath: writeCategoryOutput });
+
+  const queued = await submit(base);
+  const job = await poll(base, queued.job_id, 'completed');
+  assert.equal(job.objects.length, 2);
+
+  // 1. Create spritesheet for all objects
+  const resAll = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all: true, padding: 6, columns: 2 }),
+  });
+  assert.equal(resAll.status, 201);
+  const sheetMeta = await resAll.json();
+  assert.equal(sheetMeta.job_id, job.job_id);
+  assert.equal(sheetMeta.status, 'completed');
+  assert.equal(sheetMeta.padding, 6);
+  assert.equal(sheetMeta.columns, 2);
+  assert.equal(sheetMeta.object_ids.length, 2);
+  assert.ok(sheetMeta.width > 0);
+  assert.ok(sheetMeta.height > 0);
+
+  // Verify preview and download endpoints
+  const previewRes = await fetch(`${base}${sheetMeta.image_url}`);
+  assert.equal(previewRes.status, 200);
+  assert.equal(previewRes.headers.get('content-type'), 'image/png');
+  assert.equal(previewRes.headers.get('content-disposition'), `inline; filename="${sheetMeta.spritesheet_id}.png"`);
+  const pngBytes = Buffer.from(await previewRes.arrayBuffer());
+  const pngInfo = await sharp(pngBytes).metadata();
+  assert.equal(pngInfo.width, sheetMeta.width);
+  assert.equal(pngInfo.height, sheetMeta.height);
+  assert.equal(pngInfo.channels, 4);
+  assert.equal(pngInfo.hasAlpha, true);
+
+  const downloadRes = await fetch(`${base}${sheetMeta.download_url}`);
+  assert.equal(downloadRes.status, 200);
+  assert.equal(downloadRes.headers.get('content-disposition'), `attachment; filename="${sheetMeta.spritesheet_id}.png"`);
+  assert.deepEqual(Buffer.from(await downloadRes.arrayBuffer()), pngBytes);
+
+  // Verify atlas JSON endpoints
+  const atlasRes = await fetch(`${base}${sheetMeta.atlas_url}`);
+  assert.equal(atlasRes.status, 200);
+  assert.equal(atlasRes.headers.get('content-type'), 'application/json');
+  assert.equal(atlasRes.headers.get('content-disposition'), `inline; filename="${sheetMeta.spritesheet_id}.atlas.json"`);
+  const atlasJson = await atlasRes.json();
+  assert.equal(atlasJson.meta.app, 'IMMOExtract');
+  assert.equal(atlasJson.meta.size.w, sheetMeta.width);
+  assert.equal(atlasJson.meta.size.h, sheetMeta.height);
+  assert.equal(Object.keys(atlasJson.frames).length, 2);
+  for (const objId of sheetMeta.object_ids) {
+    assert.ok(atlasJson.frames[objId]);
+    assert.ok(atlasJson.frames[objId].frame.w > 0);
+    assert.ok(atlasJson.frames[objId].frame.h > 0);
+  }
+
+  const atlasDlRes = await fetch(`${base}${sheetMeta.atlas_download_url}`);
+  assert.equal(atlasDlRes.status, 200);
+  assert.equal(atlasDlRes.headers.get('content-disposition'), `attachment; filename="${sheetMeta.spritesheet_id}.atlas.json"`);
+  assert.deepEqual(await atlasDlRes.json(), atlasJson);
+
+  // 2. Selection: single object
+  const singleRes = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object_ids: [job.objects[0].id], padding: 2, columns: 1 }),
+  });
+  assert.equal(singleRes.status, 201);
+  const singleMeta = await singleRes.json();
+  assert.equal(singleMeta.object_ids.length, 1);
+  assert.equal(singleMeta.padding, 2);
+  assert.equal(singleMeta.columns, 1);
+
+  // 3. Validation rejections
+  // Empty object_ids
+  const resEmpty = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object_ids: [] }),
+  });
+  assert.equal(resEmpty.status, 400);
+
+  // Duplicate object_ids
+  const resDup = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object_ids: [job.objects[0].id, job.objects[0].id] }),
+  });
+  assert.equal(resDup.status, 400);
+
+  // Invalid padding
+  const resBadPad = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all: true, padding: -1 }),
+  });
+  assert.equal(resBadPad.status, 400);
+
+  // Invalid columns
+  const resBadCol = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all: true, columns: 99 }),
+  });
+  assert.equal(resBadCol.status, 400);
+
+  // Unknown object ID
+  const resUnknownObj = await fetch(`${base}/api/jobs/${job.job_id}/spritesheet`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object_ids: ['a0000000-0000-4000-8000-000000000000'] }),
+  });
+  assert.equal(resUnknownObj.status, 404);
+
+  // 404 on non-existent spritesheet
+  const resMissingSheet = await fetch(`${base}/api/jobs/${job.job_id}/spritesheets/a0000000-0000-4000-8000-000000000000`);
+  assert.equal(resMissingSheet.status, 404);
+  const resMissingAtlas = await fetch(`${base}/api/jobs/${job.job_id}/spritesheets/a0000000-0000-4000-8000-000000000000/atlas`);
+  assert.equal(resMissingAtlas.status, 404);
+});

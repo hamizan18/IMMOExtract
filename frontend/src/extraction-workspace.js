@@ -9,6 +9,16 @@ const exportAll = document.querySelector('#export-all');
 const selectionCount = document.querySelector('#selection-count');
 const exportStatus = document.querySelector('#export-status');
 const exportDownload = document.querySelector('#export-download');
+const spritesheetPadding = document.querySelector('#spritesheet-padding');
+const spritesheetColumns = document.querySelector('#spritesheet-columns');
+const spritesheetSelected = document.querySelector('#spritesheet-selected');
+const spritesheetAll = document.querySelector('#spritesheet-all');
+const spritesheetStatus = document.querySelector('#spritesheet-status');
+const spritesheetResult = document.querySelector('#spritesheet-result');
+const spritesheetPreviewImg = document.querySelector('#spritesheet-preview-img');
+const spritesheetInfo = document.querySelector('#spritesheet-info');
+const spritesheetDownloadPng = document.querySelector('#spritesheet-download-png');
+const spritesheetDownloadAtlas = document.querySelector('#spritesheet-download-atlas');
 const previewImage = document.querySelector('#preview-image');
 const maskDialog = document.querySelector('#mask-editor-dialog');
 const maskTitle = document.querySelector('#mask-editor-title');
@@ -27,6 +37,7 @@ let jobId = null;
 let controller = null;
 let pollTimer = null;
 let exportController = null;
+let spritesheetController = null;
 const pixelationControllers = new Map();
 const stylizationControllers = new Map();
 const stylizationPollTimers = new Map();
@@ -35,9 +46,22 @@ function updateSelection() {
   const checkboxes = gallery.querySelectorAll('[data-select-object]');
   const selected = gallery.querySelectorAll('[data-select-object]:checked');
   selectionCount.textContent = `${selected.length} dari ${checkboxes.length} objek dipilih.`;
-  exportSelected.disabled = !!exportController || selected.length === 0;
-  exportAll.disabled = !!exportController || checkboxes.length === 0;
-  for (const checkbox of checkboxes) checkbox.disabled = !!exportController;
+  const busy = !!exportController || !!spritesheetController;
+  exportSelected.disabled = busy || selected.length === 0;
+  exportAll.disabled = busy || checkboxes.length === 0;
+  spritesheetSelected.disabled = busy || selected.length === 0;
+  spritesheetAll.disabled = busy || checkboxes.length === 0;
+  for (const checkbox of checkboxes) checkbox.disabled = busy;
+}
+
+function clearSpritesheetResult() {
+  spritesheetResult.hidden = true;
+  spritesheetPreviewImg.removeAttribute('src');
+  spritesheetInfo.textContent = '';
+  spritesheetDownloadPng.removeAttribute('href');
+  spritesheetDownloadAtlas.removeAttribute('href');
+  spritesheetDownloadPng.removeAttribute('download');
+  spritesheetDownloadAtlas.removeAttribute('download');
 }
 
 function clearExportDownload() {
@@ -56,6 +80,8 @@ export function setUploadedImage(id) {
   controller = null;
   exportController?.abort();
   exportController = null;
+  spritesheetController?.abort();
+  spritesheetController = null;
   for (const op of pixelationControllers.values()) op.abort();
   pixelationControllers.clear();
   for (const op of stylizationControllers.values()) op.abort();
@@ -63,7 +89,9 @@ export function setUploadedImage(id) {
   for (const timer of stylizationPollTimers.values()) clearTimeout(timer);
   stylizationPollTimers.clear();
   clearExportDownload();
+  clearSpritesheetResult();
   exportStatus.textContent = '';
+  spritesheetStatus.textContent = '';
   if (maskDialog?.open) maskDialog.close();
   clearTimeout(pollTimer);
   pollTimer = null;
@@ -494,6 +522,66 @@ async function exportObjects(all) {
 
 exportSelected.addEventListener('click', () => { void exportObjects(false); });
 exportAll.addEventListener('click', () => { void exportObjects(true); });
+
+async function handleSpritesheet(all) {
+  if (spritesheetController || exportController || !jobId || (all ? spritesheetAll.disabled : spritesheetSelected.disabled)) return;
+  const selected = Array.from(gallery.querySelectorAll('[data-select-object]:checked'), checkbox => checkbox.value);
+  if (!all && selected.length === 0) return;
+  const currentJobId = jobId;
+  const operation = new AbortController();
+  spritesheetController = operation;
+  clearSpritesheetResult();
+  updateSelection();
+  spritesheetStatus.textContent = 'Sedang membuat spritesheet di server lokal…';
+
+  const paddingVal = parseInt(spritesheetPadding.value, 10);
+  const padding = Number.isInteger(paddingVal) && paddingVal >= 0 && paddingVal <= 64 ? paddingVal : 4;
+  const columnsVal = parseInt(spritesheetColumns.value, 10);
+  const columns = Number.isInteger(columnsVal) && columnsVal >= 1 && columnsVal <= 16 ? columnsVal : undefined;
+
+  const payload = all ? { all: true, padding } : { object_ids: selected, padding };
+  if (columns) payload.columns = columns;
+
+  try {
+    const response = await fetch(`/api/jobs/${currentJobId}/spritesheet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.any([operation.signal, AbortSignal.timeout(15000)]),
+    });
+    const result = await response.json().catch(() => null);
+    if (spritesheetController !== operation || operation.signal.aborted) return;
+    if (!response.ok) {
+      throw new Error(typeof result?.error?.message === 'string'
+        ? result.error.message : 'Server tidak dapat membuat spritesheet.');
+    }
+    if (!result || !uuid.test(result.spritesheet_id) || result.job_id !== currentJobId
+        || result.status !== 'completed'
+        || !result.image_url || !result.atlas_url) {
+      throw new Error('Respons pembuatan spritesheet tidak valid.');
+    }
+
+    spritesheetPreviewImg.src = `${result.image_url}?t=${Date.now()}`;
+    spritesheetInfo.textContent = `${result.width} × ${result.height} piksel — ${result.object_ids.length} objek (Padding: ${result.padding}px, Kolom: ${result.columns})`;
+    spritesheetDownloadPng.href = result.download_url;
+    spritesheetDownloadPng.download = `${result.spritesheet_id}.png`;
+    spritesheetDownloadAtlas.href = result.atlas_download_url;
+    spritesheetDownloadAtlas.download = `${result.spritesheet_id}.atlas.json`;
+    spritesheetResult.hidden = false;
+    spritesheetStatus.textContent = 'Spritesheet berhasil dibuat dan siap diunduh!';
+  } catch (error) {
+    if (spritesheetController !== operation || operation.signal.aborted) return;
+    spritesheetStatus.textContent = `Pembuatan spritesheet belum dapat dikonfirmasi: ${error.message}`;
+  } finally {
+    if (spritesheetController === operation) {
+      spritesheetController = null;
+      updateSelection();
+    }
+  }
+}
+
+spritesheetSelected.addEventListener('click', () => { void handleSpritesheet(false); });
+spritesheetAll.addEventListener('click', () => { void handleSpritesheet(true); });
 
 let currentMaskObject = null;
 let currentMaskJobId = null;

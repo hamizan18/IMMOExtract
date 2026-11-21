@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { writeZip } from './zip-export.js';
 import { pixelatePng } from './pixelation.js';
+import { packSpritesheet, SpritesheetError } from './spritesheet.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const atrLabels = [
@@ -747,6 +748,154 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       } catch (error) {
         if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
           throw new JobError(404, 'EXPORT_NOT_FOUND', 'File ekspor tidak ditemukan.');
+        }
+        throw error;
+      }
+    },
+    async createSpritesheet(jobId, input) {
+      const id = validateId(jobId, 'JOB');
+      if (!input || typeof input !== 'object' || Array.isArray(input)) {
+        throw new JobError(400, 'INVALID_SPRITESHEET_INPUT', 'Kirim JSON all: true atau object_ids.');
+      }
+      if (Object.keys(input).some(k => !['all', 'object_ids', 'padding', 'columns'].includes(k))) {
+        throw new JobError(400, 'INVALID_SPRITESHEET_INPUT', 'Parameter tidak dikenal.');
+      }
+      if (!(input.all === true || (Array.isArray(input.object_ids) && input.object_ids.length > 0))) {
+        throw new JobError(400, 'INVALID_SPRITESHEET_INPUT', 'Kirim all: true atau object_ids yang tidak kosong.');
+      }
+
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+      }
+
+      const objectIds = (input.all === true ? job.objects.map(object => object.id) : input.object_ids)
+        .map(objectId => validateId(objectId, 'OBJECT'));
+      if (!objectIds.length) throw new JobError(409, 'SPRITESHEET_EMPTY', 'Tidak ada objek untuk dibuat spritesheet.');
+      if (new Set(objectIds).size !== objectIds.length) {
+        throw new JobError(400, 'DUPLICATE_OBJECT_ID', 'Setiap objek hanya boleh dipilih satu kali.');
+      }
+
+      const items = [];
+      for (const objectId of objectIds) {
+        const object = job.objects.find(obj => obj.id === objectId);
+        if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
+        const { filePath } = await this.getObject(id, objectId);
+        items.push({
+          id: object.id,
+          category: object.category,
+          width: object.width,
+          height: object.height,
+          filePath,
+        });
+      }
+
+      let packResult;
+      try {
+        packResult = await packSpritesheet(items, { padding: input.padding, columns: input.columns });
+      } catch (err) {
+        if (err instanceof SpritesheetError) {
+          throw new JobError(err.status, err.code, err.message);
+        }
+        throw err;
+      }
+
+      const jobDirectory = join(await realpath(root), id);
+      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+      const spritesheetsDirectory = join(jobDirectory, 'spritesheets');
+      await mkdir(spritesheetsDirectory, { recursive: true, mode: 0o700 });
+      if (await realpath(spritesheetsDirectory) !== spritesheetsDirectory) throw new Error('Invalid spritesheet directory');
+
+      const spritesheetId = randomUUID();
+      const directory = join(spritesheetsDirectory, spritesheetId);
+      await mkdir(directory, { mode: 0o700 });
+
+      try {
+        await writeFile(join(directory, 'spritesheet.tmp'), packResult.pngBuffer, { flag: 'wx', mode: 0o600 });
+        await rename(join(directory, 'spritesheet.tmp'), join(directory, 'spritesheet.png'));
+
+        await writeFile(join(directory, 'atlas.tmp'), JSON.stringify(packResult.atlas, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+        await rename(join(directory, 'atlas.tmp'), join(directory, 'atlas.json'));
+
+        const manifest = {
+          spritesheet_id: spritesheetId,
+          job_id: id,
+          status: 'completed',
+          object_ids: objectIds,
+          width: packResult.width,
+          height: packResult.height,
+          padding: packResult.padding,
+          columns: packResult.columns,
+          created_at: new Date().toISOString(),
+        };
+
+        await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+        await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+
+        return manifest;
+      } catch (error) {
+        await rm(directory, { recursive: true, force: true });
+        throw error;
+      }
+    },
+    async getSpritesheet(jobId, spritesheetId) {
+      const id = validateId(jobId, 'JOB');
+      const key = validateId(spritesheetId, 'SPRITESHEET');
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') {
+        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+      }
+      try {
+        const directory = join(await realpath(root), id, 'spritesheets', key);
+        const manifestPath = join(directory, 'manifest.json');
+        if (await realpath(manifestPath) !== manifestPath) throw new Error('Invalid spritesheet manifest location');
+        const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+        if (manifest.spritesheet_id !== key || manifest.job_id !== id || manifest.status !== 'completed'
+            || !Array.isArray(manifest.object_ids) || !manifest.object_ids.length
+            || new Set(manifest.object_ids).size !== manifest.object_ids.length
+            || manifest.object_ids.some(objectId => !job.objects.some(object => object.id === objectId))) {
+          throw new Error('Invalid spritesheet manifest');
+        }
+        return manifest;
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'SPRITESHEET_NOT_FOUND', 'Spritesheet tidak ditemukan.');
+        }
+        throw error;
+      }
+    },
+    async getSpritesheetFile(jobId, spritesheetId) {
+      await this.getSpritesheet(jobId, spritesheetId);
+      const id = validateId(jobId, 'JOB');
+      const key = validateId(spritesheetId, 'SPRITESHEET');
+      try {
+        const expected = join(await realpath(root), id, 'spritesheets', key, 'spritesheet.png');
+        const filePath = await realpath(expected);
+        if (filePath !== expected) throw new Error('Invalid spritesheet file location');
+        if (!(await stat(filePath)).isFile()) throw new JobError(404, 'SPRITESHEET_NOT_FOUND', 'File spritesheet tidak ditemukan.');
+        return { filePath, filename: `${key}.png` };
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'SPRITESHEET_NOT_FOUND', 'File spritesheet tidak ditemukan.');
+        }
+        throw error;
+      }
+    },
+    async getSpritesheetAtlas(jobId, spritesheetId) {
+      await this.getSpritesheet(jobId, spritesheetId);
+      const id = validateId(jobId, 'JOB');
+      const key = validateId(spritesheetId, 'SPRITESHEET');
+      try {
+        const expected = join(await realpath(root), id, 'spritesheets', key, 'atlas.json');
+        const filePath = await realpath(expected);
+        if (filePath !== expected) throw new Error('Invalid atlas file location');
+        if (!(await stat(filePath)).isFile()) throw new JobError(404, 'ATLAS_NOT_FOUND', 'File atlas tidak ditemukan.');
+        return { filePath, filename: `${key}.atlas.json` };
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'ATLAS_NOT_FOUND', 'File atlas tidak ditemukan.');
         }
         throw error;
       }
