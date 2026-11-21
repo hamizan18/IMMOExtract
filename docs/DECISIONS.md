@@ -778,3 +778,34 @@ vae/config.json
   - `smoke_browser_m7.mjs` (Headless Chrome CDP): **PASS 100%** (13 stages, verifikasi preview spritesheet 318×312, unduhan file PNG dan Atlas JSON, spritesheet pilihan tunggal, reset, dan 0 console error).
 - **Next single task:** Hardening ekspor Selective ZIP: verifikasi keandalan arsip ZIP pilihan, penanganan concurrency dan validasi integritas checksum/CRC.
 
+## D-046 — Hardening Fitur Ekspor Selective ZIP (FR-08), Checksum Integritas SHA-256, dan Endpoint Metadata Ekspor
+
+- **Tanggal:** 2026-11-21.
+- **Status:** Verified / Accepted; backend test suite (119 tests), modul helper `zip-export.test.js` (3 tests), AI service (14 tests), frontend build (Vite 7 modules), dan automated browser smoke test (13 stages) PASS 100%.
+- **Keputusan Teknis:**
+  1. **Streaming Checksum & Validasi Ukuran (`backend/src/zip-export.js`):**
+     - Modul `writeZip` diperkaya dengan kalkulasi streaming SHA-256 secara on-the-fly (`createHash('sha256')`) yang menyerap setiap chunk data keluaran archiver (`archive.on('data', chunk => hash.update(chunk))`). Ini meniadakan pembacaan ulang file arsip biner dari storage disk setelah selesai.
+     - Pengecekan defensif ukuran arsip: jika ukuran file keluaran berukuran 0 byte (`fileStat.size === 0`), operasi langsung dibatalkan dengan error eksplisit (`Produced empty ZIP archive`).
+     - Fungsi mengembalikan objek ringkas `{ size: fileStat.size, sha256: hash.digest('hex') }`.
+  2. **Penyimpanan Metadata Ekspor & Endpoint REST (`job-manager.js`, `jobs.js`):**
+     - Pada `createExport`, manifest privat `<jobDirectory>/exports/<exportId>/manifest.json` kini mencakup atribut:
+       - `files_count`: jumlah file objek PNG terpilih.
+       - `archive_size`: ukuran biner file ZIP dalam satuan byte.
+       - `sha256`: checksum heksadesimal 64 karakter dari seluruh bitstream arsip ZIP.
+     - Penyediaan method `getExportManifest(jobId, exportId)` yang memvalidasi integritas job manifest, eksistensi file ZIP di storage privat, dan mengembalikan atribut manifest publik.
+     - Penyediaan endpoint REST `GET /api/jobs/:id/exports/:exportId` yang mengembalikan JSON manifest ekspor beserta `download_url`, memungkinkan client memeriksa ukuran arsip dan checksum sebelum atau setelah mengunduh file biner.
+  3. **Unit Test & Verifikasi Komprehensif (`backend/test/zip-export.test.js` & `backend/test/jobs.test.js`):**
+     - Unit test independen `zip-export.test.js` menguji STORE mode (bebas re-kompresi deflasi), verifikasi exact byte payload via Python `zipfile.ZipFile.testzip()`, deteksi kegagalan atomik pada file masukan yang hilang (`ENOENT`), serta konkurensi pembuatan beberapa arsip simultan.
+     - Integrasi test di `jobs.test.js` memverifikasi endpoint metadata `GET /api/jobs/:id/exports/:exportId` (status 200, penolakan UUID salah 400, ekspor fiktif 404, serta akses lintas job 404).
+- **Bukti Pengujian Nyata:**
+  - `node --test backend/test/zip-export.test.js`: **PASS** (3/3 tests PASS, 564ms).
+  - `node --test backend/test/jobs.test.js`: **PASS** (25 subtest, 59/59 tests PASS, 7.62s).
+  - Seluruh suite pengujian backend: **119/119 tests PASS** dalam 8.24s.
+  - `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v`: **PASS** (14/14 tests PASS, 9.35s).
+  - `npm run build --prefix frontend`: **PASS** (7 modules transformed dalam 126ms).
+  - `smoke_browser_m7.mjs` (Headless Chrome CDP): **PASS 100%** (13 stages, 0 errors).
+- **Konsekuensi:**
+  - Fitur Ekspor Selective ZIP (FR-08) kini sepenuhnya hardened, aman, terukur, dan memiliki jaminan integritas kriptografis lokal.
+- **Next single task:** Persiapan rilis akhir M7: pembersihan artefak kerja non-esensial dan penyusunan dokumentasi penutupan rilis MVP.
+
+

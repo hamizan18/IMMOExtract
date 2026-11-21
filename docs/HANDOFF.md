@@ -4,39 +4,30 @@
 
 ## Last agent
 
-Antigravity CLI — implementasi penuh Generator Spritesheet Statis dan Atlas JSON (FR-13: modul `packSpritesheet`, endpoint Express `POST /api/jobs/:id/spritesheet`, endpoint serving inline/attachment PNG dan Atlas JSON, UI konfigurasi padding/kolom, preview spritesheet dan tombol unduh) serta verifikasi end-to-end Automated Headless Browser Smoke Test via Chrome CDP (D-045), 2026-11-21. Seluruh test suite backend (116/116 PASS), AI API (14/14 PASS), frontend build (118ms), dan browser CDP smoke test (13/13 stages PASS) terkonfirmasi lulus 100%.
+Antigravity CLI — penyelesaian Hardening Fitur Ekspor Selective ZIP (FR-08: streaming SHA-256 checksum on-the-fly, validasi ukuran arsip `size > 0`, penyimpanan `files_count`/`archive_size`/`sha256` di manifest ekspor, endpoint metadata `GET /api/jobs/:id/exports/:exportId`), modul test baru `backend/test/zip-export.test.js`, dan verifikasi menyeluruh seluruh test suite backend (119/119 PASS), AI API (14/14 PASS), frontend build (126ms), serta Automated CDP Browser Smoke Test (13/13 stages PASS), 2026-11-21 (D-046).
 
 ## Current milestone
 
-**M7 — In progress.** Milestone M7 tahap awal (Generator Spritesheet Statis FR-13) telah selesai diimplementasikan dan terverifikasi penuh di browser nyata via CDP. Tahap berikutnya adalah hardening ekspor Selective ZIP dan penyiapan dokumentasi rilis akhir.
+**M7 — In progress (tahap finalisasi).** Seluruh fitur fungsional utama M7 (Generator Spritesheet Statis FR-13 dan Hardening Selective ZIP FR-08) telah selesai diimplementasikan dan terverifikasi penuh di lingkungan lokal. Tahap berikutnya adalah finalisasi penutupan rilis MVP.
 
 ## Last completed task
 
-- **Generator Spritesheet Statis & Atlas JSON (FR-13, D-045):**
-  - **Modul Helper (`backend/src/spritesheet.js`, `backend/test/spritesheet.test.js`):**
-    - Fungsi `packSpritesheet(items, options)` menyusun gambar objek ke grid dinamis dengan padding (0–64) dan kolom (1–16).
-    - Menghitung dimensi sheet dan posisi tiap frame $(x, y, w, h)$.
-    - Kanvas transparan RGBA (`channels: 4`, `background: { r: 0, g: 0, b: 0, alpha: 0 }`) di-composite via Sharp dengan kompresi level 9.
-    - Menghasilkan metadata TexturePacker / PixiJS / Phaser JSON standard (`meta` dan `frames`).
-    - Unit test `spritesheet.test.js` (4/4 PASS).
-  - **Backend (`job-manager.js`, `jobs.js`, `jobs.test.js`):**
-    - `POST /api/jobs/:id/spritesheet` menerima `{ all: true }` atau `{ object_ids: [...] }` dengan parameter `padding` dan `columns`.
-    - Menyimpan snapshot di direktori privat `<jobDirectory>/spritesheets/<id>/` (`spritesheet.png`, `atlas.json`, `manifest.json`).
-    - Menyajikan rute inline dan attachment download untuk PNG spritesheet dan file JSON atlas.
-    - Subtest ke-25 `jobs.test.js` (59/59 tests) menguji all/selection, padding, columns, validasi 400/404/409/415, dan integritas file.
-  - **Frontend (`index.html`, `extraction-workspace.js`):**
-    - Menambahkan fieldset "Ekspor Spritesheet Statis (M7)" dengan input padding dan kolom.
-    - Tombol `Spritesheet Pilihan` dan `Spritesheet Semua`.
-    - Preview gambar spritesheet di atas grid transparansi, info dimensi dan jumlah objek, serta tombol unduh PNG dan Atlas JSON.
-  - **Verifikasi Aktual (All PASS):**
-    - Automated Headless Browser Smoke Test via CDP (`scratch/smoke_browser_m7.mjs`): 13/13 stages PASS 100% (verifikasi preview 318×312, unduhan PNG 1290 byte, unduhan Atlas JSON 2 frame, spritesheet pilihan 1 frame, reset cleanup, dan 0 console error).
-    - Vite build: PASS (7 modul, 118ms).
-    - Test suite backend: 116/116 tests PASS dalam 7.89s.
-    - AI Service unit tests: 14/14 tests PASS dalam 10.05s.
+- **Hardening Fitur Ekspor Selective ZIP & Endpoint Metadata (FR-08, D-046):**
+  - **Streaming Checksum & Validasi Ukuran (`backend/src/zip-export.js`):**
+    - Menghitung streaming SHA-256 on-the-fly via `archive.on('data', chunk => hash.update(chunk))` tanpa membaca ulang bitstream dari disk.
+    - Menolak pembentukan arsip berukuran 0 byte (`fileStat.size === 0`) dengan error eksplisit.
+    - Mengembalikan objek ringkas `{ size: fileStat.size, sha256: hash.digest('hex') }`.
+  - **Penyimpanan Metadata & Endpoint REST (`backend/src/job-manager.js`, `backend/src/jobs.js`):**
+    - Menyimpan atribut `files_count`, `archive_size`, dan `sha256` pada file privat `<jobDirectory>/exports/<exportId>/manifest.json`.
+    - Menyediakan method `getExportManifest(jobId, exportId)` yang memvalidasi integritas manifest ekspor dan job induk.
+    - Menambahkan endpoint REST `GET /api/jobs/:id/exports/:exportId` yang mengembalikan JSON metadata ekspor dan `download_url`.
+  - **Unit Test & Integration Test (`backend/test/zip-export.test.js`, `backend/test/jobs.test.js`):**
+    - Memverifikasi STORE mode tanpa re-kompresi deflasi, pencocokan exact byte payload via Python `zipfile.ZipFile.testzip()`, penolakan atomik pada missing files (`ENOENT`), serta konkurensi pembuatan beberapa ZIP simultan.
+    - Menguji endpoint metadata `GET /api/jobs/:id/exports/:exportId` (status 200, penolakan UUID salah 400, ekspor fiktif 404, serta akses lintas job 404).
 
 ## Current task
 
-Implementasi Spritesheet statis (FR-13) selesai. Melanjutkan ke hardening dan pengujian komprehensif Selective ZIP (FR-08) pada Milestone M7.
+Pembersihan workspace dari file temporer, audit status seluruh acceptance criteria M1–M7, dan penyusunan dokumentasi penutupan rilis MVP.
 
 ## Working components
 
@@ -45,20 +36,18 @@ Implementasi Spritesheet statis (FR-13) selesai. Melanjutkan ke hardening dan pe
 - AI Pixel Art Stylization (M6) berbasis pipeline lokal SD15 CPU FP32, FIFO orchestrator, polling serial, preview transparansi, dan unduhan attachment.
 - Mask Correction Tool (FR-12): Canvas brush/eraser manual interaktif dengan pemulihan instan foto asli dan endpoint revisi objek `PUT`.
 - Generator Spritesheet Statis & Atlas JSON (FR-13): komposisi Sharp transparan, TexturePacker atlas format, preview live dan unduhan PNG/Atlas.
+- Hardened Selective ZIP Export (FR-08): streaming SHA-256, ukuran non-nol, metadata endpoint, dan download ZIP STORE mode.
 - Automated headless browser smoke test runner berbasis CDP (`scratch/smoke_browser_m7.mjs`).
 
 ## Modified files
 
-- `backend/src/spritesheet.js` — Helper baru untuk packing spritesheet dan generasi atlas JSON.
-- `backend/test/spritesheet.test.js` — Unit test suite untuk layout dan validasi spritesheet.
-- `backend/src/job-manager.js` — Metode `createSpritesheet`, `getSpritesheet`, `getSpritesheetFile`, dan `getSpritesheetAtlas`.
-- `backend/src/jobs.js` — Rute `POST /:id/spritesheet` dan 4 rute GET serving file/atlas.
-- `backend/test/jobs.test.js` — Subtest ke-25 integrasi endpoint spritesheet.
-- `frontend/index.html` — Fieldset "Ekspor Spritesheet Statis (M7)" dan kontrol toolbar.
-- `frontend/src/extraction-workspace.js` — Logika interaktif pembuatan spritesheet dan binding DOM.
-- `.gitignore` — Tambahkan `scratch/` ke daftar abaikan Git.
-- `docs/DECISIONS.md` — Keputusan D-045 dicatat.
-- `docs/PROGRESS.md` — Progres Milestone M7 diperbarui; status FR-13 dicatat complete.
+- `backend/src/zip-export.js` — Streaming SHA-256 checksum on-the-fly dan pencegahan arsip kosong.
+- `backend/src/job-manager.js` — Penyimpanan `files_count`, `archive_size`, `sha256` di manifest ekspor dan method `getExportManifest`.
+- `backend/src/jobs.js` — Endpoint metadata `GET /api/jobs/:id/exports/:exportId`.
+- `backend/test/zip-export.test.js` — Unit test suite untuk modul `writeZip` (STORE mode, byte exactness via Python zipfile, missing file failure, dan konkurensi).
+- `backend/test/jobs.test.js` — Asersi metadata ekspor dan pengujian endpoint `GET /api/jobs/:id/exports/:exportId`.
+- `docs/DECISIONS.md` — Keputusan D-046 dicatat.
+- `docs/PROGRESS.md` — Progres Milestone M7 diperbarui; hasil verifikasi 119 backend tests dan test runner dicatat.
 - `docs/HANDOFF.md` — Status handoff disinkronkan ke kondisi kode dan pengujian terkini.
 
 ## Uncommitted changes / Git status
@@ -73,16 +62,16 @@ Implementasi Spritesheet statis (FR-13) selesai. Melanjutkan ke hardening dan pe
 
 ## Tests / checks performed
 
-- **PASS:** Automated Headless Browser Smoke Test M7 (`scratch/smoke_browser_m7.mjs`) — 13/13 stages PASS dalam 21 detik (0 console error); screenshot `scratch/proof_smoke_m7_spritesheet.png` tersimpan.
-- **PASS:** `npm run build --prefix frontend` — Vite build PASS (7 modul dalam 118ms).
-- **PASS:** `node --test backend/test/spritesheet.test.js backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js` — 116/116 tests PASS dalam 7.89s.
-- **PASS:** `node --test backend/test/spritesheet.test.js` — 4/4 tests PASS dalam 212ms.
-- **PASS:** `node --test backend/test/jobs.test.js` — 25 subtest, 59/59 tests PASS dalam 7.23s.
-- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14 tests PASS dalam 10.05s.
+- **PASS:** `node --test backend/test/zip-export.test.js` — 3/3 tests PASS dalam 564ms (STORE mode, exact byte verification via Python zipfile, missing entry atomic rejection, safe concurrent exports).
+- **PASS:** `node --test backend/test/spritesheet.test.js backend/test/zip-export.test.js backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js` — 119/119 tests PASS dalam 8.24s (0 fail, 0 skip).
+- **PASS:** `node --test backend/test/jobs.test.js` — 25 subtest, 59/59 tests PASS dalam 7.62s.
+- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14 tests PASS dalam 9.35s.
+- **PASS:** `npm run build --prefix frontend` — Vite build PASS (7 modul dalam 126ms).
+- **PASS:** Automated Headless Browser Smoke Test M7 (`scratch/smoke_browser_m7.mjs`) — 13/13 stages PASS dalam 18 detik (0 console error).
 
 ## Next action (only one)
 
-Lakukan hardening dan pengujian komprehensif pada fitur Selective ZIP (ekspor ZIP pilihan sebagian/semua objek), verifikasi konkurensi ekspor, integritas checksum/CRC arsip, serta penanganan kegagalan sumber yang tangguh (tahap lanjutan Milestone M7).
+Lakukan finalisasi penutupan rilis Milestone M7: pembersihan workspace dari file temporer, audit status seluruh acceptance criteria M1–M7, dan penyusunan catatan rilis MVP.
 
 ## Handoff rules
 
@@ -90,7 +79,5 @@ Lakukan hardening dan pengujian komprehensif pada fitur Selective ZIP (ekspor ZI
 2. Jangan menghapus perubahan agent sebelumnya atau melakukan reset destruktif.
 3. Ubah file sesedikit mungkin dan kerjakan satu milestone pada satu waktu.
 4. Tulis semua hasil tes yang benar-benar dieksekusi.
-5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
-6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
 5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
 6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.

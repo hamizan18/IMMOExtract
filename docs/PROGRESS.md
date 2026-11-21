@@ -154,10 +154,11 @@
 - Automated Headless Browser Smoke Test M6 UI (2026-11-21, D-043): script mandiri berbasis Chrome DevTools Protocol (CDP) menguji 13 tahapan browser end-to-end tanpa regresi. Menavigasi ke UI, memeriksa health check, upload fixture, ekstraksi 2 objek, rendering kontrol UI M6, form locking, polling serial, preview 100×100, download attachment PNG, dan lifecycle reset. 13/13 stages PASS 100%, 0 console error.
 - Implementasi Mask Correction Tool FR-12 (2026-11-21, D-044): Canvas 2D brush/eraser editor di modal dialog HTML5 `<dialog id="mask-editor-dialog">`. Menyediakan mode Penghapus (transparan), Kuas Pulihkan (memulihkan piksel foto asli secara instan via clipping canvas dan drawImage dari gambar sumber), slider brush size 2–60 px, tombol Undo ber-stack, Reset, dan Simpan. Backend `PUT /api/jobs/:id/objects/:objectId` memvalidasi RGBA 4 channels, exact width/height, penulisan atomik, dan kalkulasi ulang opaque pixels. Operasi turunan (M5, M6, ZIP) otomatis mengonsumsi siluet terkoreksi. Suite test 111/111 PASS, Vite build PASS, CDP smoke test PASS.
 - Generator Spritesheet Statis dan Atlas JSON FR-13 (2026-11-21, D-045): modul `backend/src/spritesheet.js` (`packSpritesheet`) menyusun frame objek ke kanvas transparan RGBA dengan opsi padding (0–64) dan kolom (1–16), menghasilkan PNG komposit Sharp dan JSON atlas TexturePacker standard. Backend `POST /api/jobs/:id/spritesheet` dan endpoint penyajian inline/attachment untuk PNG serta Atlas JSON. UI frontend fieldset "Ekspor Spritesheet Statis" dengan preview langsung, info metadata, dan tombol unduh file PNG & Atlas JSON. Unit test 4/4 PASS, jobs test 59/59 PASS, full backend 116/116 PASS, CDP browser smoke test 13/13 PASS.
+- Hardening Ekspor Selective ZIP FR-08 (2026-11-21, D-046): Modul `writeZip` diperkaya dengan streaming SHA-256 checksum on-the-fly (`archive.on('data')`) tanpa pembacaan ulang disk, validasi pencegahan arsip kosong (`size > 0`), serta pengembalian `{ size, sha256 }`. Manifest privat ekspor mencakup `files_count`, `archive_size`, dan `sha256`. Penyediaan endpoint `GET /api/jobs/:id/exports/:exportId` untuk metadata ekspor publik. Unit test terdedikasi `backend/test/zip-export.test.js` memverifikasi STORE mode, integritas byte via Python `zipfile`, penolakan atomic atas missing files, dan safety konkurensi. Backend suite 119/119 PASS.
 
 ## In progress
 
-- Milestone M7: Selective ZIP hardening, penanganan concurrency/CRC integritas, dan persiapan dokumentasi rilis akhir.
+- Milestone M7: Finalisasi pengujian akhir, pembersihan workspace, dan dokumentasi penutupan rilis MVP.
 
 ## Blockers / risks
 
@@ -183,7 +184,7 @@
 
 ## Next task — satu tugas saja
 
-Lakukan hardening dan pengujian komprehensif pada fitur Selective ZIP (ekspor ZIP pilihan sebagian/semua objek), verifikasi konkurensi ekspor, integritas checksum/CRC arsip, serta penanganan kegagalan sumber yang tangguh (tahap lanjutan Milestone M7).
+Lakukan finalisasi penutupan rilis Milestone M7: pembersihan workspace dari file temporer, audit status seluruh acceptance criteria M1–M7, dan penyusunan catatan rilis MVP.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -425,6 +426,12 @@ Lakukan hardening dan pengujian komprehensif pada fitur Selective ZIP (ekspor ZI
 | 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS regresi | 14/14 tests PASS (17.398s); ekstraksi SCHP dan validasi parameter stylization PASS |
 | 2026-11-21 | `node --test backend/test/pixelation.test.js` | PASS regresi | 7/7 tests PASS (0.669s); seluruh fungsi Classic Pixelation M5 tetap stabil |
 | 2026-11-21 | Automated Headless Browser Smoke Test M6 UI (`smoke_browser_m6.mjs`) | PASS 13/13 stages (17s) | Chrome headless via CDP: navigasi, health check, upload fixture, ekstraksi 2 objek, kartu M6 controls, form locking, serial polling, preview 100×100 ter-load, attachment download valid, reset cleanup, 0 console error; screenshot tersimpan di `scratch/proof_smoke_m6_ui.png` (26.490 byte) |
+| 2026-11-21 | `node --test backend/test/spritesheet.test.js` | PASS 4/4 tests (212ms) | Modul compositing spritesheet Sharp, grid kalkulasi kolom/padding, batas dekompresi, dan TexturePacker/PixiJS atlas JSON |
+| 2026-11-21 | Automated Headless Browser Smoke Test M7 (`scratch/smoke_browser_m7.mjs`) | PASS 13/13 stages (18s) | Navigasi, health, ekstraksi 2 objek, rendering M7 controls, generate spritesheet All & Selected, preview 318×312, direct download PNG & Atlas JSON via browser CDP, lifecycle reset, 0 console error |
+| 2026-11-21 | `node --test backend/test/zip-export.test.js` | PASS 3/3 tests (564ms) | STORE mode tanpa re-kompresi, hash SHA-256 on-the-fly streaming, payload exactness via Python zipfile.testzip, atomic failure pada missing file, dan safety konkurensi |
+| 2026-11-21 | `node --test backend/test/spritesheet.test.js backend/test/zip-export.test.js backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js` | PASS 119/119 tests (8.24s) | Seluruh unit test & integration test backend (termasuk spritesheet, zip export hardening, metadata endpoint GET /api/jobs/:id/exports/:exportId) PASS 100% |
+| 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS 14/14 tests (9.35s) | Unittest suite FastAPI: health, multipart/path extraction, safety checks, parameter bounds |
+| 2026-11-21 | `npm run build --prefix frontend` | PASS (126ms) | Vite memproses 7 modul tanpa warning/error, menghasilkan bundle dist produksi yang bersih |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

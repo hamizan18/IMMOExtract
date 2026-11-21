@@ -453,6 +453,9 @@ test('concurrent ZIP exports contain exactly selected/all original PNGs and surv
     assert.equal(response.headers.get('location'), result.download_url);
     assert.equal(result.status, 'completed');
     assert.equal(result.job_id, job.job_id);
+    assert.equal(result.files_count, result.object_ids.length);
+    assert.ok(result.archive_size > 0);
+    assert.match(result.sha256, /^[0-9a-f]{64}$/);
     assert.ok(!JSON.stringify(result).includes(options.jobDir));
     exports.push(result);
   }
@@ -462,13 +465,29 @@ test('concurrent ZIP exports contain exactly selected/all original PNGs and surv
     const result = exports[index];
     const expectedIds = index === 0 ? ids : selections[index].object_ids.map(id => id.toLowerCase());
     assert.deepEqual(result.object_ids, expectedIds);
+
+    // Verify GET /api/jobs/:id/exports/:exportId metadata endpoint
+    const metaRes = await fetch(`${restarted}/api/jobs/${job.job_id}/exports/${result.export_id}`);
+    assert.equal(metaRes.status, 200);
+    const meta = await metaRes.json();
+    assert.equal(meta.export_id, result.export_id);
+    assert.equal(meta.job_id, job.job_id);
+    assert.equal(meta.status, 'completed');
+    assert.deepEqual(meta.object_ids, expectedIds);
+    assert.equal(meta.files_count, expectedIds.length);
+    assert.equal(meta.archive_size, result.archive_size);
+    assert.equal(meta.sha256, result.sha256);
+    assert.equal(meta.download_url, result.download_url);
+
     const response = await fetch(`${restarted}${result.download_url}`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('content-type'), 'application/zip');
     assert.equal(response.headers.get('content-disposition'), `attachment; filename="${result.export_id}.zip"`);
     assert.equal(response.headers.get('cache-control'), 'no-store, private');
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
-    const entries = await readZipEntries(Buffer.from(await response.arrayBuffer()), join(root, `download-${index}.zip`));
+    const zipBytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(zipBytes.length, result.archive_size);
+    const entries = await readZipEntries(zipBytes, join(root, `download-${index}.zip`));
     assert.deepEqual(entries.map(([name]) => name).sort(), expectedIds.map(id => `${id}.png`).sort());
     for (const [name, base64] of entries) {
       const object = manifest.objects.find(object => `${object.id}.png` === name);
@@ -553,9 +572,13 @@ test('ZIP downloads require a matching published manifest and reject missing arc
   const second = await submit(base, queued.upload_id);
   await poll(base, second.job_id, 'completed');
   const url = id => `${base}/api/jobs/${job.job_id}/exports/${id}/download`;
+  const metaUrl = id => `${base}/api/jobs/${job.job_id}/exports/${id}`;
   await assertExportError(await fetch(url('invalid')), 400, 'INVALID_EXPORT_ID');
   await assertExportError(await fetch(url(randomUUID())), 404, 'EXPORT_NOT_FOUND');
   await assertExportError(await fetch(`${base}/api/jobs/${second.job_id}/exports/${result.export_id}/download`), 404, 'EXPORT_NOT_FOUND');
+  await assertExportError(await fetch(metaUrl('invalid')), 400, 'INVALID_EXPORT_ID');
+  await assertExportError(await fetch(metaUrl(randomUUID())), 404, 'EXPORT_NOT_FOUND');
+  await assertExportError(await fetch(`${base}/api/jobs/${second.job_id}/exports/${result.export_id}`), 404, 'EXPORT_NOT_FOUND');
   const directory = join(options.jobDir, job.job_id, 'exports', result.export_id);
   const manifestPath = join(directory, 'manifest.json');
   const manifestBytes = await readFile(manifestPath);

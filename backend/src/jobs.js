@@ -54,6 +54,15 @@ export function createJobRouter(options) {
       fail(error, response);
     }
   });
+  router.get('/:id/exports/:exportId', async (request, response) => {
+    try {
+      const result = await manager.getExportManifest(request.params.id, request.params.exportId);
+      const downloadUrl = `/api/jobs/${result.job_id}/exports/${result.export_id}/download`;
+      response.json({ ...result, download_url: downloadUrl });
+    } catch (error) {
+      fail(error, response);
+    }
+  });
   router.post('/:id/spritesheet', express.json({ limit: '4kb' }), async (request, response) => {
     if (!request.is('application/json')) {
       response.status(415).json({ error: { code: 'SPRITESHEET_INPUT_REQUIRED', message: 'Kirim JSON all atau object_ids.' } });
