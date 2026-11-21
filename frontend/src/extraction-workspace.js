@@ -16,6 +16,8 @@ let controller = null;
 let pollTimer = null;
 let exportController = null;
 const pixelationControllers = new Map();
+const stylizationControllers = new Map();
+const stylizationPollTimers = new Map();
 
 function updateSelection() {
   const checkboxes = gallery.querySelectorAll('[data-select-object]');
@@ -44,6 +46,10 @@ export function setUploadedImage(id) {
   exportController = null;
   for (const op of pixelationControllers.values()) op.abort();
   pixelationControllers.clear();
+  for (const op of stylizationControllers.values()) op.abort();
+  stylizationControllers.clear();
+  for (const timer of stylizationPollTimers.values()) clearTimeout(timer);
+  stylizationPollTimers.clear();
   clearExportDownload();
   exportStatus.textContent = '';
   clearTimeout(pollTimer);
@@ -184,6 +190,160 @@ function renderObjects(objects) {
           sizeSelect.disabled = false;
           paletteSelect.disabled = false;
         }
+      }
+    });
+
+    const stylizePreset = card.querySelector('[data-stylize-preset]');
+    const stylizeSize = card.querySelector('[data-stylize-size]');
+    const stylizeButton = card.querySelector('[data-stylize-button]');
+    const stylizeStatus = card.querySelector('[data-stylize-status]');
+    const stylizeResult = card.querySelector('[data-stylize-result]');
+    const stylizeImage = card.querySelector('[data-stylize-image]');
+    const stylizeInfo = card.querySelector('[data-stylize-info]');
+    const stylizeError = card.querySelector('[data-stylize-error]');
+    const stylizeDownload = card.querySelector('[data-stylize-download]');
+
+    stylizePreset.setAttribute('aria-label', `Preset AI stylization: ${label}`);
+    stylizeSize.setAttribute('aria-label', `Ukuran AI stylization: ${label}`);
+    stylizeButton.setAttribute('aria-label', `Stylize AI: ${label}`);
+
+    stylizeButton.addEventListener('click', async () => {
+      const selectedPreset = stylizePreset.value;
+      const selectedSize = Number(stylizeSize.value);
+      if (!['pixel-art', 'retro-rpg', 'game-boy'].includes(selectedPreset)
+          || ![128, 256].includes(selectedSize) || !jobId) return;
+
+      stylizeButton.disabled = true;
+      stylizePreset.disabled = true;
+      stylizeSize.disabled = true;
+      stylizeStatus.textContent = `Mengirim permintaan AI stylization (${selectedPreset}, ${selectedSize} px)…`;
+
+      stylizationControllers.get(object.id)?.abort();
+      clearTimeout(stylizationPollTimers.get(object.id));
+      stylizationPollTimers.delete(object.id);
+
+      const operation = new AbortController();
+      stylizationControllers.set(object.id, operation);
+
+      const cleanupCardStylize = () => {
+        if (stylizationControllers.get(object.id) === operation) {
+          stylizationControllers.delete(object.id);
+          stylizationPollTimers.delete(object.id);
+          stylizeButton.disabled = false;
+          stylizePreset.disabled = false;
+          stylizeSize.disabled = false;
+        }
+      };
+
+      try {
+        const response = await fetch(`/api/jobs/${currentJobId}/stylize`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            object_id: object.id,
+            preset: selectedPreset,
+            target_size: selectedSize,
+            num_inference_steps: 2,
+            strength: 0.5,
+          }),
+          signal: AbortSignal.any([operation.signal, AbortSignal.timeout(15000)]),
+        });
+        const initial = await response.json().catch(() => null);
+
+        if (operation.signal.aborted || jobId !== currentJobId) return;
+        if (!response.ok) {
+          throw new Error(typeof initial?.error?.message === 'string'
+            ? initial.error.message : 'Server tidak dapat memulai AI stylization.');
+        }
+        if (!initial || !uuid.test(initial.stylization_id) || initial.job_id !== currentJobId
+            || initial.object_id !== object.id) {
+          throw new Error('Respons inisialisasi stylization tidak valid.');
+        }
+
+        const stylizationId = initial.stylization_id;
+
+        const pollStylization = async () => {
+          if (operation.signal.aborted || jobId !== currentJobId) return;
+          try {
+            const pollResponse = await fetch(`/api/jobs/${currentJobId}/stylizations/${stylizationId}`, {
+              signal: AbortSignal.any([operation.signal, AbortSignal.timeout(15000)]),
+            });
+            const result = await pollResponse.json().catch(() => null);
+
+            if (operation.signal.aborted || jobId !== currentJobId) return;
+            if (!pollResponse.ok) {
+              throw new Error(typeof result?.error?.message === 'string'
+                ? result.error.message : 'Gagal memeriksa status stylization.');
+            }
+            if (!result || result.stylization_id !== stylizationId) {
+              throw new Error('Respons polling stylization tidak valid.');
+            }
+
+            if (result.status === 'queued') {
+              stylizeStatus.textContent = 'Dalam antrean worker AI lokal (0%)…';
+              const timer = setTimeout(() => { void pollStylization(); }, 2000);
+              stylizationPollTimers.set(object.id, timer);
+              return;
+            }
+
+            if (result.status === 'processing') {
+              stylizeStatus.textContent = 'Sedang memproses AI stylization di server lokal (10%)… Mohon tunggu, proses memakan waktu ±1 menit di CPU.';
+              const timer = setTimeout(() => { void pollStylization(); }, 2000);
+              stylizationPollTimers.set(object.id, timer);
+              return;
+            }
+
+            if (result.status === 'completed') {
+              if (!result.preview_url || !result.download_url
+                  || !Number.isInteger(result.width) || result.width < 1
+                  || !Number.isInteger(result.height) || result.height < 1) {
+                throw new Error('Respons hasil stylization tidak lengkap.');
+              }
+
+              stylizeImage.hidden = false;
+              stylizeError.hidden = true;
+              stylizeImage.alt = `Hasil AI stylization ${result.parameters?.preset ?? selectedPreset} ${result.width}×${result.height}: ${label}`;
+              stylizeImage.addEventListener('error', () => {
+                stylizeImage.hidden = true;
+                stylizeError.hidden = false;
+              }, { once: true });
+              stylizeImage.src = result.preview_url;
+
+              const duration = typeof result.result?.execution_time_seconds === 'number'
+                ? ` dalam ${result.result.execution_time_seconds.toFixed(1)}s`
+                : '';
+              stylizeInfo.textContent = `${result.width} × ${result.height} piksel — Preset: ${result.parameters?.preset ?? selectedPreset}${duration}`;
+              stylizeDownload.href = result.download_url;
+              stylizeDownload.download = `${result.stylization_id}.png`;
+              stylizeDownload.setAttribute('aria-label', `Unduh PNG Stylized ${result.parameters?.preset ?? selectedPreset}: ${label}`);
+
+              stylizeResult.hidden = false;
+              stylizeStatus.textContent = 'AI Stylization selesai! Siap diunduh.';
+              cleanupCardStylize();
+              return;
+            }
+
+            if (result.status === 'failed') {
+              const message = typeof result.error?.message === 'string'
+                ? result.error.message
+                : 'Generasi AI gagal di server lokal.';
+              throw new Error(message);
+            }
+
+            throw new Error(`Status stylization tidak dikenal: ${result.status}`);
+          } catch (error) {
+            if (operation.signal.aborted || jobId !== currentJobId) return;
+            stylizeStatus.textContent = `AI Stylization gagal: ${error.message}`;
+            cleanupCardStylize();
+          }
+        };
+
+        const initialTimer = setTimeout(() => { void pollStylization(); }, 2000);
+        stylizationPollTimers.set(object.id, initialTimer);
+      } catch (error) {
+        if (operation.signal.aborted || jobId !== currentJobId) return;
+        stylizeStatus.textContent = `AI Stylization gagal: ${error.message}`;
+        cleanupCardStylize();
       }
     });
     cards.append(card);

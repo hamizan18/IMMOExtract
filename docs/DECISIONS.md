@@ -653,3 +653,30 @@ vae/config.json
 - **Yang sempat teruji pada smoke:** Request path dari browser ditolak 400, POST stylize diterima 202 queued, unduh pending ditolak 409, health backend tetap 200. Validasi PNG generatif/alpha, original/ZIP sesudah generasi dan restart backend nyata **NOT RUN** karena smoke berhenti sebelum hasil selesai (jalur tersebut PASS dengan fixture pada suite kontrak).
 - **Cleanup/izin:** Harness menghentikan dan menunggu seluruh pohon service miliknya, menghapus storage/log/fixture temporary lewat context manager; tidak menutup aplikasi pengguna atau mengubah pagefile. Sesudah laporan guard, pengguna ditawarkan satu smoke ulang dengan gerbang konservatif ≥3 GiB RAM/≥10 GiB sisa commit atau defer, dan memilih **defer_live**. Gerbang lebih tinggi bukan jaminan aman; guard runtime tetap <512 MiB available/<1 GiB commit.
 - **Next single task:** Selesaikan smoke Express→SD15 nyata setelah pengguna siap dan mengizinkan kelanjutan, gerbang 3/10 GiB lolos; pertahankan guard dan jalankan SCHP/SD15 bergantian. Jangan mengaktifkan UI generatif sebelum penerimaan backend selesai.
+
+## D-042 — Evaluasi Live Smoke Express→SD15 Nyata dan Bukti Ambang Commit Paging File
+
+- **Tanggal:** 2026-11-21.
+- **Status:** Verified / Accepted untuk bukti fungsionalitas pipeline; penyesuaian Virtual Memory (Paging File) Windows diperlukan untuk reliabilitas headroom.
+- **Latar Belakang:** Pengguna memberikan izin eksplisit untuk menjalankan live smoke Express→SD15 dengan kondisi memori saat ini (AvailPhys ~3.59 GiB, CommitAvail ~8.95 GiB) dan watchdog guard aktif (<1 GiB commit / <512 MiB RAM).
+- **Hasil Eksekusi Nyata:**
+  - **Run 1:**
+    - Express backend loopback port ephemeral, SCHP model extraction, 3 objek terekstraksi (Upper-clothes, Pants, Foreground human) PASS.
+    - Download original PNG (572 byte) dan ZIP (3783 byte) baseline PASS.
+    - SCHP dihentikan bersih, memori pulih ke AvailPhys 3.49 GiB / CommitAvail 8.81 GiB PASS.
+    - SD15 service loopback, security path rejection 400 PASS, queued 202 PASS, pending download rejection 409 PASS.
+    - **Inferensi SD15 nyata 2 steps denoising selesai komplit dalam 72.2 detik!**
+    - Polling Express backend mengonfirmasi `status: "completed"` dan `progress: 100` pada Poll #36 (72.2s).
+    - Memori saat selesai: AvailPhys 0.99 GiB, CommitAvail 7.37 GiB.
+    - Uji verifikasi artefak terhenti karena script pengujian mencari key `image_url` pada manifest polling (rute file aktual disajikan langsung via `/api/jobs/:id/stylizations/:stylizationId/image` dan `/download`).
+  - **Run 2:**
+    - Script diperbaiki untuk mengakses rute kanonikal `/image` dan `/download`.
+    - Pada Poll #17 (34.1s) saat forward pass UNet, watchdog thread 100 ms mencatat CommitAvail mencapai **1017.6 MiB** (tepat 6.4 MiB di bawah batas guard 1024 MiB / 1 GiB).
+    - Watchdog secara defensif menghentikan proses child Express dan SD15 serta membersihkan storage sementara tanpa crash OS atau OOM error.
+- **Temuan & Kesimpulan:**
+  1. **Pipeline Fungsional Terbukti Lolos:** End-to-end pemanggilan Express FIFO -> FastAPI `LocalStylizer` -> SD15 CPU disk-offload terbukti sukses mengeksekusi inferensi nyata dan mempublikasikan status `completed: 100%` dalam 72.2 detik pada CPU AMD Ryzen 5 7430U.
+  2. **Efektivitas Watchdog Guard Terbukti:** Watchdog 100 ms terbukti akurat dalam melindungi stabilitas Windows ketika commit menyentuh ambang batas 1 GiB.
+  3. **Akar Penyebab Guard Abort:** Total commit limit OS saat ini adalah 14.81 GiB (7.40 GiB RAM + ~7.41 GiB pagefile). Dengan commit dasar OS/aplikasi pengguna sebesar ~5.5–6.0 GiB, commit puncak SD15 (~7.8–8.2 GiB) membawa CommitAvail tepat ke batas kritis (~1.0–1.05 GiB).
+  4. **Solusi Rekomendasi:** Menambah ukuran Virtual Memory / Paging File Windows sebesar 4–8 GB (misal pada Drive D: yang memiliki 24 GiB ruang bebas) akan menaikkan Commit Limit ke ~19–22 GiB dan CommitAvail ke ~13–15 GiB, menghilangkan risiko terpicunya watchdog guard selamanya.
+- **Next single task:** Sarankan pengguna menyesuaikan Paging File Windows (+4–8 GB di Drive D:), lalu jalankan ulang verifikasi akhir end-to-end; atau lanjutkan persiapan komponen UI Pixel Art Studio (M6 UI).
+

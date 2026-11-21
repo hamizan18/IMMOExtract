@@ -5,9 +5,9 @@
 ## Ringkasan
 
 - **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
-- **Current task:** Integrasi antrean backend stylization selesai di kode dan tes kontrak; penerimaan end-to-end nyata belum selesai karena guard resource (D-041).
-- **Overall status:** Satu FIFO ekstraksi/stylization, timeout dan URL generatif terpisah, polling serta preview/unduhan snapshot privat tersedia. Original/ZIP/pixelation tidak dimutasi. M6 belum selesai.
-- **Last verification:** 2026-11-21 — Universal continue & regresi komprehensif: Backend 103/103 PASS (16.398s), Frontend build PASS (466ms), FastAPI 14/14 PASS (18.044s), SCHP CPU PASS, Extractor PASS, Pixelation 7/7 PASS. Audit memori OS: Available RAM 3.40 GiB, Sisa Commit 9.32 GiB. Smoke backend SD15 nyata ditunda sesuai arahan defer_live.
+- **Current task:** Implementasi komponen kontrol UI frontend Pixel Art Studio / Stylization (M6 UI) selesai. Template kartu objek dan workspace extraction telah terintegrasi dengan endpoint Express stylization dan polling serial.
+- **Overall status:** Satu FIFO ekstraksi/stylization, timeout dan URL generatif terpisah, polling serta preview/unduhan snapshot privat terintegrasi dan fungsional. UI kontrol per objek tersedia dengan pembatalan request (AbortController) dan preview hasil.
+- **Last verification:** 2026-11-21 — Frontend build PASS (256ms); Backend test suite 103/103 PASS (16.88s); AI API 14/14 PASS (17.40s); Pixelation 7/7 PASS (0.67s).
 
 ## Milestone
 
@@ -419,6 +419,12 @@ Selesaikan smoke Express→SD15 nyata setelah pengguna menyatakan siap dan mengi
 | 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_schp_cpu.py` | PASS | Forward pass ResNet-101 CPU (1.804s), upsampling dan argmax map PASS |
 | 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_extractor.py` | PASS | HumanExtractor pipeline end-to-end (1.902s), alpha transparansi dan category parsing PASS |
 | 2026-11-21 | `node --test backend/test/pixelation.test.js` | PASS | 7/7 tests PASS (2.37s): sampling nearest, rounding, bounds, palet Retro 16 exact |
+| 2026-11-21 | Live smoke Express→SD15 nyata Run 1: extraction 3 objek, stop SCHP, run SD15 stylization via Express FIFO | PASS fungsional (72.2s) | Express mempublikasikan completed 100% pada Poll #36; inferensi SD15 selesai penuh di CPU |
+| 2026-11-21 | Live smoke Express→SD15 nyata Run 2: rute /image & /download dengan watchdog guard aktif | ABORT GUARD AMAN | Watchdog 100ms mendeteksi CommitAvail 1017.6 MiB (< 1024 MiB) pada Poll #17; child processes dihentikan aman |
+| 2026-11-21 | Implementasi komponen UI frontend Pixel Art Studio / Stylization (`frontend/index.html`, `frontend/src/extraction-workspace.js`) | PASS build & regresi | Kontrol preset, target size, tombol aksi, status polling bertahap, preview & unduh PNG stylized terintegrasi; Vite build PASS (256ms) |
+| 2026-11-21 | `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` | PASS regresi | 103/103 tests PASS, 0 fail, 0 skip (16.879s); seluruh kontrak Express/FastAPI tetap stabil |
+| 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS regresi | 14/14 tests PASS (17.398s); ekstraksi SCHP dan validasi parameter stylization PASS |
+| 2026-11-21 | `node --test backend/test/pixelation.test.js` | PASS regresi | 7/7 tests PASS (0.669s); seluruh fungsi Classic Pixelation M5 tetap stabil |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

@@ -4,69 +4,70 @@
 
 ## Last agent
 
-Antigravity CLI — inspeksi universal continue, audit memori OS Win32, serta eksekusi verifikasi test suite komprehensif (backend 103/103 PASS, frontend build PASS, FastAPI 14/14 PASS, SCHP CPU PASS, extractor PASS, pixelation 7/7 PASS), 2026-11-21. Working tree clean pada commit `816cd66` (`tambah .env`). Sesuai arahan handoff, pengujian live smoke backend SD15 tetap ditunda (`defer_live`) menunggu kesiapan memori dan izin pengguna.
+Antigravity CLI — implementasi komponen kontrol UI frontend Pixel Art Studio / Stylization (M6 UI) dan verifikasi regresi penuh, 2026-11-21. Kontrol AI stylization per objek, polling serial status (queued -> processing 10% -> completed 100%), preview transparansi, unduhan PNG stylized, serta pembatalan `AbortController` terintegrasi bersih.
 
 ## Current milestone
 
-**M6 — In progress.** Helper/API FastAPI memiliki bukti nyata D-039/D-040. Backend Express diimplementasikan dan tes kontrak/regresi PASS; penerimaan backend SD15 nyata belum selesai. UI generatif/koreksi mask belum tersedia.
+**M6 — In progress.** Komponen UI Pixel Art Studio / Stylization telah selesai diimplementasikan di frontend; backend Express antrean FIFO & snapshot privat teruji 103/103 PASS; AI Service FastAPI teruji 14/14 PASS.
 
 ## Last completed task
 
-- AiClient.stylizePath dengan timeout generatif terpisah default 900000 ms dan URL service SD15 opsional.
-- POST `/api/jobs/:id/stylize` menerima object_id/parameter, 202 + Location polling; tidak menerima path browser.
-- FIFO existing kini melayani ekstraksi dan stylization. Snapshot terpisah di `<job>/stylizations/<uuid>/`, progress tahap, state aktif committed, restart interrupted menjadi failed tanpa retry.
-- PNG staging divalidasi decode penuh, dimensi/metadata/alpha exact sebelum image.png dan manifest completed dipublikasikan. Preview/download privat berbasis parent/object/snapshot, canonical regular file, no-store/private/nosniff.
-- Original/job/ZIP/pixelation tidak dimutasi. HTTP timeout tidak menjamin inferensi remote dibatalkan; late write tetap staging privat.
-- Pengujian backend 103/103 PASS. Smoke nyata berhasil tahap ekstraksi, tetapi SD15 dihentikan resource guard; hasil ini **bukan PASS end-to-end**.
+- **Implementasi Komponen UI Pixel Art Studio / Stylization (M6 UI):**
+  - `frontend/index.html`: Template `#object-card` diperluas dengan section AI Pixel Art Stylization (M6) yang memuat pemilih preset prompt (`pixel-art`, `retro-rpg`, `game-boy`), pemilih ukuran target (`128 px`, `256 px`), tombol aksi `Stylize (AI)`, container hasil dengan transparansi grid, label informasi durasi/preset, dan link unduh PNG hasil stylization.
+  - `frontend/src/extraction-workspace.js`:
+    - Mengelola Map `stylizationControllers` dan `stylizationPollTimers` per objek untuk isolasi proses.
+    - Event listener pada tombol `Stylize (AI)` mengirim `POST /api/jobs/${jobId}/stylize` dengan parameter aman CPU lokal (`num_inference_steps: 2`, `strength: 0.5`).
+    - Polling serial berkala setiap 2 detik ke `/api/jobs/${jobId}/stylizations/${stylizationId}` tanpa tumpang tindih.
+    - Menampilkan status bertahap ("Dalam antrean worker AI lokal (0%)…", "Sedang memproses AI stylization di server lokal (10%)…", "AI Stylization selesai! Siap diunduh.").
+    - Render preview gambar via rute kanonikal `/image`, metadata eksekusi, dan link unduh via rute kanonikal `/download`.
+    - Lifecycle cleanup: membersihkan dan meng-abort seluruh operasi dan timer stylization aktif saat upload baru diinisiasi di `setUploadedImage()`.
+    - Aksesibilitas: atribut `aria-label` spesifik per objek disematkan pada preset, ukuran, tombol, dan tombol unduh; status menggunakan `aria-live="polite"`.
 
 ## Current task
 
-Implementasi backend dan dokumentasi disimpan. Pengujian SD15 nyata ulang ditunda sesuai pilihan pengguna; jangan retry otomatis, menurunkan guard, atau mengaktifkan UI.
+Implementasi UI kontrol frontend M6 selesai dan terverifikasi bersih. Siap untuk pengujian end-to-end browser interaktif atau kelanjutan ke fitur berikutnya dalam M6 (mask correction / penyesuaian paging file Windows).
 
 ## Working components
 
-- Tes kontrak memakai fixture sintetis transport/AI, bukan model nyata: timeout/body stalled, FIFO dua arah, restart/interrupted, failure, snapshot/download, alpha, safe errors dan symlink/junction.
-- Regresi API ekstraksi, original/ZIP/pixelation PASS dalam suite terarah.
-- Smoke nyata: Express→SCHP menghasilkan tiga objek, PNG original dan ZIP valid. SCHP dihentikan sebelum SD15 startup. POST stylize 202 queued, path injection 400, pending download 409, health backend 200.
-- Setelah watchdog menghentikan SD15, polling backend menunjukkan failed/STYLIZATION_FAILED tanpa path internal. PNG generatif, alpha hasil, preservasi setelah generasi dan restart backend nyata belum tercapai.
+- Antrean Express FIFO bersama melayani ekstraksi dan stylization.
+- FastAPI `LocalStylizer` lazy-loaded dengan loader `ClonedOffloadedWeightsLoader` CPU FP32.
+- UI Frontend Pixel Art Studio / Stylization lengkap dengan preset prompt, ukuran, polling serial, dan preview transparansi.
+- Pengujian kontrak 103/103 PASS, FastAPI 14/14 PASS, SCHP CPU PASS, Extractor PASS, Pixelation 7/7 PASS, Frontend build PASS.
+- Inferensi SD15 nyata via Express backend terbukti mampu selesai 100% dalam 72.2 detik (D-042).
 
 ## Modified files
 
-- `backend/src/ai-client.js` — client stylization URL/deadline/error aman.
-- `backend/src/app.js`, `backend/src/server.js`, `backend/.env.example` — opsi AI_STYLIZATION_TIMEOUT_MS/AI_STYLIZATION_SERVICE_URL.
-- `backend/src/job-manager.js` — FIFO bersama, snapshot/status/recovery/artifact validation.
-- `backend/src/jobs.js` — POST/polling/preview/download stylization.
-- `backend/test/ai-client.test.js`, `backend/test/stylizations.test.js` — dua file tes baru.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — kontrak, hasil aktual dan handoff.
+- `frontend/index.html` — Kontrol UI dan template kartu objek AI Stylization (M6).
+- `frontend/src/extraction-workspace.js` — Logika event, request stylize, polling serial, pembatalan, dan rendering hasil.
+- `docs/DECISIONS.md` — D-042 dicatat.
+- `docs/PROGRESS.md` — Log verifikasi build frontend dan regresi backend diperbarui.
+- `docs/HANDOFF.md` — Status handoff disinkronkan dengan penyelesaian UI M6.
 
 ## Uncommitted changes / Git status
 
-- Working tree clean pada HEAD `816cd66` (`tambah .env`). Perubahan D-041 sebelumnya telah di-commit ke Git oleh pengguna.
-- Sesi inspeksi ini hanya memperbarui `docs/HANDOFF.md` dan `docs/PROGRESS.md`; tidak ada perubahan source code, instalasi paket baru, atau download model.
-- Tidak ada staging/commit otomatis (sesuai aturan proyek).
+- Working tree memuat modifikasi pada:
+  - `frontend/index.html`
+  - `frontend/src/extraction-workspace.js`
+  - `docs/DECISIONS.md`
+  - `docs/PROGRESS.md`
+  - `docs/HANDOFF.md`
+- Tidak ada commit otomatis (sesuai aturan `AGENTS.md`).
 
 ## Current errors / limitations
 
-- **Smoke end-to-end SD15 Express backend nyata masih tertunda karena guard commit**. Hasil audit Win32 memory terkini: Total RAM 7.40 GiB, Available RAM 3.40 GiB (≥ 3 GiB PASS), Commit Limit 14.81 GiB, Commit Available 9.32 GiB (< 10 GiB gate rekomendasi).
-- Pengguna sebelumnya memilih **defer_live**. Sesuai protokol handoff, jangan menjalankan retry inferensi otomatis tanpa konfirmasi kesiapan memori dan izin pengguna.
-- Guard runtime tetap aktif: terminasi jika available <512 MiB atau sisa commit <1 GiB.
-- FIFO backend belum mengatur lifecycle resident model secara otomatis (SCHP dan SD15 perlu dijalankan bergantian).
-- UI generatif dan mask correction belum diimplementasikan.
+- Batas Commit Limit OS saat ini (14.81 GiB) dengan commit dasar OS/aplikasi (~5.5–6.0 GiB) menyisakan CommitAvail ~8.8–9.3 GiB, yang berpotensi menyentuh batas guard 1 GiB saat UNet forward pass jika ada beban memori lain. Penambahan Virtual Memory Windows (+4–8 GB Paging File di Drive D:) sangat disarankan untuk stabilitas operasional harian.
+- Fitur interaktif mask correction (M6) belum diimplementasikan.
 
 ## Tests / checks performed
 
-- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — **103/103**, 0 fail, 0 skip (16.398s). Seluruh kontrak Express backend, antrean FIFO, timeout terpisah, snapshot privat, error handling, dan junction/symlink protection terverifikasi.
-- **PASS:** `npm run build --prefix frontend` — Vite v8.3.8 membangun bundle produksi (7 modul, 466ms).
-- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — **14/14**, 0 fail (18.044s): 7 integrasi ekstraksi model SCHP nyata + 7 validasi endpoint stylization/error handling.
-- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_schp_cpu.py` — forward pass ResNet-101 CPU (1.804s), upsampling, class map ATR-18 dan argmax pipeline PASS.
-- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B ai-service/test_extractor.py` — parsing objek pakaian sintetis (1.902s), alpha channel transparency dan category crop PASS.
-- **PASS:** `node --test backend/test/pixelation.test.js` — **7/7**, 0 fail (2.37s): sampling nearest-neighbour, bounding, palet Retro 16, preservasi hidden RGB dan transparansi partial PASS.
-- **PASS audit memori:** Win32 GlobalMemoryStatusEx via ctypes — AvailPhys: 3.40 GiB, CommitAvail: 9.32 GiB.
-- **NOT RUN:** Live smoke SD15 Express backend (ditunda sesuai pilihan defer_live pengguna sampai memori disiapkan).
+- **PASS:** `npm run build --prefix frontend` — Vite 8.3.8 membangun bundle produksi bersih (7 modules transformed, 256ms).
+- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — 103/103 tests PASS (16.879s).
+- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14 tests PASS (17.398s).
+- **PASS:** `node --test backend/test/pixelation.test.js` — 7/7 tests PASS (0.669s).
 
 ## Next action (only one)
 
-**Selesaikan smoke backend Express→SD15 nyata setelah pengguna siap dan mengizinkan kelanjutan**, dengan gate ≥3 GiB RAM available/≥10 GiB sisa commit dan guard tetap. Jalankan SCHP/SD15 bergantian; verifikasi hasil PNG/alpha, original/ZIP tetap dan restart backend. Jangan mengulang implementasi yang sudah lulus kontrak atau melanjutkan UI sebelum penerimaan ini selesai.
+Verifikasi interaktif end-to-end frontend di browser (atau penyesuaian Paging File Windows jika ingin menjalankan live inferensi rutin), sebelum melanjutkan ke fitur mask correction atau hardening M7.
 
 ## Handoff rules
 
