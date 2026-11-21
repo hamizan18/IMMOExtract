@@ -4,7 +4,7 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. M6 memiliki helper SD15 lokal dan endpoint FastAPI internal; integrasi Express/UI AI Stylization belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. M6 memiliki helper/API SD15 dan integrasi antrean Express dengan snapshot privat; UI AI Stylization belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
@@ -81,7 +81,7 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Polling serial tiap 1 detik setelah respons, timeout request 15 detik. Jika pemeriksaan terputus, **Periksa status** melanjutkan job yang sama tanpa POST baru. Tidak ada retry otomatis; jika POST belum terkonfirmasi, UI memperingatkan bahwa mengirim lagi dapat membuat job baru.
 - Mengganti/menghapus gambar, membuka kamera atau meninggalkan halaman membatalkan request/polling browser dan membersihkan galeri. Job server tidak dibatalkan/dihapus. Hasil kosong/gagal dan kegagalan file preview ditampilkan apa adanya. Setelah job terminal, gunakan **Hapus pilihan** lalu pilih gambar untuk memulai lagi; tidak ada pemulihan job otomatis setelah reload.
 - Manifest dan hasil berada di `storage/jobs/<uuid>/`; jika `UPLOAD_DIR` diubah, direktori jobs default sejajar direktori upload. Jangan jalankan beberapa backend pada storage yang sama. Retensi/batas antrean belum tersedia.
-- Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend masih memakai `AI_HEALTH_TIMEOUT_MS` untuk client AI bersama (default 3000 ms); gunakan misalnya `30000` bila inferensi memerlukan waktu lebih panjang, lalu restart backend.
+- Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend memakai `AI_HEALTH_TIMEOUT_MS` untuk health/ekstraksi (default 3000 ms; gunakan misalnya 30000 untuk inferensi). Stylization mempunyai `AI_STYLIZATION_TIMEOUT_MS` terpisah (default 900000 ms), bukan memakai timeout health.
 - Restart backend dan AI service bersama setelah pembaruan kontrak kategori. Job lama tetap dapat dipolling, tetapi tidak ditambahi file kategori secara otomatis. Polling job aktif memakai snapshot yang sudah berhasil disimpan, menghindari konflik pembacaan/penggantian manifest di Windows.
 
 ### Ekspor ZIP melalui browser dan API
@@ -113,7 +113,7 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Di kartu objek, pilih **Ukuran** dan **Palet**, lalu **Pixelate**. Default **Warna asli**; **Retro 16 warna** mengubah warna, bukan alpha. Preview, keterangan hasil dan link unduhan menyebut palet hasil tersebut. Ganti pilihan tidak mengubah snapshot sebelumnya sampai Pixelate ditekan. Ukuran/palet/tombol terkunci selama request; reset upload meng-abort pengamatan hasil usang.
 - Pengujian 2026-11-19: `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` **64/64 PASS**; build frontend dan browser model asli empat grid Retro, kembali ke Warna asli, unduhan, alpha/RGB transparan, serta original/ZIP tetap identik **PASS**. Unduhan PNG/ZIP asli tetap independen.
 
-## Kesiapan AI Stylization (M6)
+## AI Stylization — helper, API dan antrean M6
 
 Helper SD15 CPU FP32 memakai UNet disk-offload bermitigasi dan safety checker lokal (D-037–D-039). Endpoint internal `POST /stylize` (multipart `file`) dan `POST /stylize-path` (JSON `image_path`) mengembalikan metadata generasi, flag `nsfw_detected`, serta PNG RGBA dengan alpha sumber dipasang kembali. RGB generatif bukan piksel ekstraksi asli; alpha exact tidak menjamin alignment atau kualitas pixel art.
 
@@ -130,7 +130,18 @@ $env:SCHP_CHECKPOINT_PATH = 'disabled-for-stylization'
 .\ai-service\.venv-stylization-poc\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8001 --workers 1
 ```
 
-Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` harus false. Jangan menimpa konfigurasi terminal ekstraksi. UI tetap menyatakan AI Stylization belum tersedia sampai integrasi backend/browser diuji. Classic Pixelation tetap mode terpisah.
+Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` harus false. Jangan menimpa konfigurasi terminal ekstraksi. UI tetap menyatakan AI Stylization belum tersedia sampai integrasi browser diuji. Classic Pixelation tetap mode terpisah.
+
+### API backend stylization
+
+- `POST /api/jobs/:id/stylize` menerima JSON `{"object_id":"<UUID objek>","preset":"pixel-art"}` dan parameter model opsional di atas. Body maksimal 8 KiB; seed dibatasi integer aman JavaScript (0..9007199254740991), prompt/negative_prompt harus string bila dikirim. Tidak menerima `image_path`, `output_path`, base64 atau field lain dari browser.
+- Respons **202 + Location** menunjuk `/api/jobs/:id/stylizations/:stylizationId`. GET URL tersebut memantau `queued → processing → completed/failed`; progress 0/10/100 adalah tahap, bukan persentase denoising. JSON completed menambahkan `preview_url`, `download_url`, ukuran hasil dan `result` metadata/flag safety checker.
+- Preview: `GET /api/jobs/:id/stylizations/:stylizationId/image`; unduhan: `GET /api/jobs/:id/stylizations/:stylizationId/download`. Hanya snapshot completed dan objek terdaftar pada parent job completed; no-store/private, nosniff, PNG byte-identical. Belum selesai/gagal → 409; ID/file tak ada → 404.
+- Satu FIFO job manager untuk ekstraksi dan stylization, tanpa retry otomatis. Restart menandai snapshot queued/processing sebagai failed (`STYLIZATION_INTERRUPTED`), tidak mengulang AI. Health/unduhan tetap tersedia ketika generasi berlangsung.
+- PNG sementara dan manifest ada di `<job>/stylizations/<uuid>/`; backend memeriksa canonical regular file, decode PNG, dimensi, metadata serta **alpha exact terhadap sumber** sebelum mempublikasikan `image.png` dan manifest completed. Manifest job utama, original, ZIP dan pixelation tidak diubah.
+- `AI_STYLIZATION_TIMEOUT_MS` mencakup request dan body JSON (1..2147483647 ms, default 900000). `AI_STYLIZATION_SERVICE_URL` opsional menunjuk service SD15 terpisah, default `AI_SERVICE_URL`. Untuk contoh port 8001 di atas, set `AI_STYLIZATION_SERVICE_URL=http://127.0.0.1:8001` pada backend lalu restart.
+- **Batas resource:** Antrean menyerialkan request, bukan lifecycle model. Menjalankan dua service sekaligus tetap dapat mempertahankan SCHP+SD15 dalam memori. Smoke menggunakan ekstraksi dahulu, menghentikan service SCHP, baru memulai SD15; aplikasi belum mengotomatiskan pergantian ini. HTTP timeout tidak membatalkan inferensi di server; hasil terlambat tetap staging privat dan tidak dipublikasikan. Tidak ada cleanup/retensi otomatis.
+- Verifikasi D-041: empat file tes backend **103/103 PASS** dengan fixture kontrak. Smoke model nyata berhasil ekstraksi tiga objek, tetapi SD15 dihentikan pengawas saat sisa commit <1 GiB; **penerimaan end-to-end backend belum lulus**. Pengguna menunda pengulangan. Lihat HANDOFF sebelum menjalankan inferensi lagi.
 
 ## Menjalankan Aplikasi (M1–M5)
 

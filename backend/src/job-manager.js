@@ -87,11 +87,66 @@ async function validateCategoryObjects(result, directory, width, height) {
   return objects;
 }
 
+function stylizationParameters(input) {
+  const defaults = {
+    preset: 'pixel-art', target_size: 256, num_inference_steps: 20,
+    strength: 0.5, guidance_scale: 7.5, seed: 0,
+  };
+  const allowed = ['object_id', 'prompt', 'negative_prompt', ...Object.keys(defaults)];
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+      || !Object.hasOwn(input, 'object_id') || Object.keys(input).some(key => !allowed.includes(key))) {
+    throw new JobError(400, 'INVALID_STYLIZATION_INPUT', 'Kirim object_id dan parameter stylization saja.');
+  }
+  const { object_id, ...options } = input;
+  const parameters = { ...defaults, ...options };
+  const { preset, target_size, num_inference_steps, strength, guidance_scale, seed } = parameters;
+  if (!['pixel-art', 'retro-rpg', 'game-boy'].includes(preset)
+      || !Number.isInteger(target_size) || target_size < 64 || target_size > 512 || target_size % 8
+      || !Number.isInteger(num_inference_steps) || num_inference_steps < 2 || num_inference_steps > 50
+      || !Number.isFinite(strength) || strength <= 0 || strength > 1 || Math.floor(strength * num_inference_steps) < 1
+      || !Number.isFinite(guidance_scale) || guidance_scale < 0 || guidance_scale > 20
+      || !Number.isSafeInteger(seed) || seed < 0
+      || ['prompt', 'negative_prompt'].some(key => Object.hasOwn(options, key) && typeof options[key] !== 'string')) {
+    throw new JobError(400, 'INVALID_STYLIZATION_INPUT', 'Parameter stylization tidak valid.');
+  }
+  return parameters;
+}
+
+function stylizationResult(result, parameters, width, height) {
+  if (!result || result.status !== 'success'
+      || !Array.isArray(result.original_size) || result.original_size.length !== 2
+      || result.original_size[0] !== width || result.original_size[1] !== height
+      || !Array.isArray(result.target_size) || result.target_size.length !== 2
+      || result.target_size.some(size => size !== parameters.target_size)
+      || typeof result.prompt !== 'string' || typeof result.negative_prompt !== 'string'
+      || !Number.isInteger(result.steps_executed) || result.steps_executed < 1
+      || result.strength !== parameters.strength || result.guidance_scale !== parameters.guidance_scale
+      || result.seed !== parameters.seed || typeof result.nsfw_detected !== 'boolean'
+      || !Number.isFinite(result.execution_time_seconds) || result.execution_time_seconds < 0) {
+    throw new Error('Invalid stylization response');
+  }
+  return Object.fromEntries([
+    'status', 'original_size', 'target_size', 'prompt', 'negative_prompt', 'steps_executed',
+    'strength', 'guidance_scale', 'seed', 'nsfw_detected', 'execution_time_seconds',
+  ].map(key => [key, result[key]]));
+}
+
+async function stylizationPixels(filePath) {
+  const image = sharp(filePath, { limitInputPixels: 24_000_000, failOn: 'warning' });
+  const metadata = await image.metadata();
+  if (metadata.format !== 'png' || !metadata.hasAlpha || metadata.channels !== 4
+      || metadata.width > 8192 || metadata.height > 8192 || (metadata.pages ?? 1) !== 1) {
+    throw new Error('Invalid stylization PNG');
+  }
+  return image.raw().toBuffer({ resolveWithObject: true });
+}
+
 export function createJobManager({ uploadDir, jobDir, aiClient }) {
   const uploads = resolve(uploadDir || fileURLToPath(new URL('../../storage/uploads/', import.meta.url)));
   const root = resolve(jobDir || join(dirname(uploads), 'jobs'));
   const queue = [];
   const active = new Map();
+  const activeStylizations = new Map();
   let running = false;
   let ready;
 
@@ -102,6 +157,114 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     await rename(temporary, join(directory, 'manifest.json'));
     // Poll committed snapshots while active: Windows cannot replace an open manifest.
     if (active.has(job.job_id)) active.set(job.job_id, { ...job });
+  }
+
+  async function canonicalFile(...parts) {
+    const expected = join(await realpath(root), ...parts);
+    if (await realpath(expected) !== expected) throw new Error('Invalid stylization file location');
+    if (!(await stat(expected)).isFile()) {
+      throw new JobError(404, 'STYLIZATION_NOT_FOUND', 'File hasil tidak ditemukan.');
+    }
+    return expected;
+  }
+
+  async function saveStylization(snapshot) {
+    const directory = join(await realpath(root), snapshot.job_id, 'stylizations', snapshot.stylization_id);
+    if (await realpath(directory) !== directory) throw new Error('Invalid stylization directory');
+    await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(snapshot, null, 2) + '\n', { mode: 0o600 });
+    await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+    if (activeStylizations.has(snapshot.stylization_id)) {
+      activeStylizations.set(snapshot.stylization_id, { ...snapshot });
+    }
+  }
+
+  async function recoverStylizations(jobId) {
+    const directory = join(await realpath(root), jobId, 'stylizations');
+    let entries;
+    try {
+      if (await realpath(directory) !== directory) throw new Error('Invalid stylization directory');
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !uuid.test(entry.name)) continue;
+      let snapshot;
+      try {
+        const manifest = await canonicalFile(jobId, 'stylizations', entry.name, 'manifest.json');
+        snapshot = JSON.parse(await readFile(manifest, 'utf8'));
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
+      if (snapshot.job_id !== jobId || snapshot.stylization_id !== entry.name) {
+        throw new Error('Invalid stored stylization ID');
+      }
+      if (['queued', 'processing'].includes(snapshot.status)) {
+        snapshot.status = 'failed';
+        snapshot.error = {
+          code: 'STYLIZATION_INTERRUPTED', message: 'Backend berhenti sebelum stylization selesai. Buat permintaan baru.',
+        };
+        snapshot.updated_at = new Date().toISOString();
+        await saveStylization(snapshot);
+      }
+    }
+  }
+
+  async function processStylization(snapshot) {
+    const key = snapshot.stylization_id;
+    try {
+      snapshot.status = 'processing';
+      snapshot.progress = 10;
+      snapshot.updated_at = new Date().toISOString();
+      await saveStylization(snapshot);
+      // Resolve again when dequeued: a source can disappear while waiting.
+      const { filePath } = await manager.getObject(snapshot.job_id, snapshot.object_id);
+      const source = await stylizationPixels(filePath);
+      const directory = join(await realpath(root), snapshot.job_id, 'stylizations', key);
+      if (await realpath(directory) !== directory) throw new Error('Invalid stylization directory');
+      const result = await aiClient.stylizePath({
+        imagePath: filePath, outputPath: join(directory, 'image.tmp.png'), parameters: snapshot.parameters,
+      });
+      const outputPath = await canonicalFile(snapshot.job_id, 'stylizations', key, 'image.tmp.png');
+      const output = await stylizationPixels(outputPath);
+      if (source.info.width !== output.info.width || source.info.height !== output.info.height
+          || source.info.channels !== 4 || output.info.channels !== 4) throw new Error('Invalid stylization dimensions');
+      for (let offset = 3; offset < source.data.length; offset += 4) {
+        if (source.data[offset] !== output.data[offset]) throw new Error('Invalid stylization alpha');
+      }
+      snapshot.result = stylizationResult(result, snapshot.parameters, output.info.width, output.info.height);
+      snapshot.width = output.info.width;
+      snapshot.height = output.info.height;
+      await rename(outputPath, join(directory, 'image.png'));
+      snapshot.status = 'completed';
+      snapshot.progress = 100;
+    } catch (error) {
+      console.error('Job stylization failed:', error.code || error.name);
+      snapshot.status = 'failed';
+      delete snapshot.result;
+      delete snapshot.width;
+      delete snapshot.height;
+      snapshot.error = {
+        code: error.name === 'TimeoutError' ? 'STYLIZATION_TIMEOUT' : 'STYLIZATION_FAILED',
+        message: 'Stylization gagal. Periksa layanan AI, batas waktu dan storage server.',
+      };
+      // A timeout does not cancel the remote model: retain its private staging directory.
+    }
+    snapshot.updated_at = new Date().toISOString();
+    try {
+      await saveStylization(snapshot);
+      activeStylizations.delete(key);
+    } catch (error) {
+      snapshot.status = 'failed';
+      snapshot.error = { code: 'STYLIZATION_STORAGE_FAILED', message: 'Hasil stylization tidak dapat disimpan.' };
+      delete snapshot.result;
+      delete snapshot.width;
+      delete snapshot.height;
+      activeStylizations.set(key, { ...snapshot });
+      console.error('Stylization persistence failed:', error.code || error.name);
+    }
   }
 
   function initialize() {
@@ -124,6 +287,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
           job.updated_at = new Date().toISOString();
           await save(job);
         }
+        await recoverStylizations(entry.name);
       }
     })();
     return ready;
@@ -134,7 +298,12 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     running = true;
     try {
       while (queue.length) {
-        const { job, imagePath } = queue.shift();
+        const work = queue.shift();
+        if (work.stylization) {
+          await processStylization(work.stylization);
+          continue;
+        }
+        const { job, imagePath } = work;
         try {
           job.status = 'processing';
           job.progress = 10;
@@ -203,7 +372,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     }
   }
 
-  return {
+  const manager = {
     async create(uploadId) {
       const id = validateId(uploadId, 'UPLOAD');
       await initialize();
@@ -276,6 +445,95 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       } catch (error) {
         if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
           throw new JobError(404, 'OBJECT_FILE_NOT_FOUND', 'File objek tidak ditemukan.');
+        }
+        throw error;
+      }
+    },
+    async createStylization(jobId, input) {
+      const id = validateId(jobId, 'JOB');
+      const parameters = stylizationParameters(input);
+      const objectId = validateId(input.object_id, 'OBJECT');
+      await this.getObject(id, objectId);
+      const jobDirectory = join(await realpath(root), id);
+      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+      const resultsDirectory = join(jobDirectory, 'stylizations');
+      await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
+      if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid stylization directory');
+      const key = randomUUID();
+      await mkdir(join(resultsDirectory, key), { mode: 0o700 });
+      const now = new Date().toISOString();
+      const snapshot = {
+        stylization_id: key, job_id: id, object_id: objectId,
+        status: 'queued', progress: 0, parameters, created_at: now, updated_at: now, error: null,
+      };
+      await saveStylization(snapshot);
+      activeStylizations.set(key, { ...snapshot });
+      queue.push({ stylization: snapshot });
+      setImmediate(() => { void drain(); });
+      return { ...snapshot };
+    },
+    async getStylization(jobId, stylizationId) {
+      const id = validateId(jobId, 'JOB');
+      const key = validateId(stylizationId, 'STYLIZATION');
+      const job = await this.get(id);
+      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+      if (job.status !== 'completed') throw new JobError(409, 'JOB_NOT_COMPLETED', 'Job ekstraksi belum selesai.');
+      let snapshot = activeStylizations.get(key);
+      if (snapshot && snapshot.job_id !== id) {
+        throw new JobError(404, 'STYLIZATION_NOT_FOUND', 'Hasil stylization tidak ditemukan.');
+      }
+      if (!snapshot) {
+        try {
+          const path = await canonicalFile(id, 'stylizations', key, 'manifest.json');
+          snapshot = JSON.parse(await readFile(path, 'utf8'));
+        } catch (error) {
+          if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+            throw new JobError(404, 'STYLIZATION_NOT_FOUND', 'Hasil stylization tidak ditemukan.');
+          }
+          throw error;
+        }
+      }
+      if (snapshot.job_id !== id || snapshot.stylization_id !== key
+          || !job.objects.some(object => object.id === snapshot.object_id)
+          || !['queued', 'processing', 'completed', 'failed'].includes(snapshot.status)
+          || !snapshot.parameters || typeof snapshot.parameters !== 'object' || Array.isArray(snapshot.parameters)
+          || ![0, 10, 100].includes(snapshot.progress)
+          || typeof snapshot.created_at !== 'string' || typeof snapshot.updated_at !== 'string') {
+        throw new Error('Invalid stylization manifest');
+      }
+      const parameters = stylizationParameters({ ...snapshot.parameters, object_id: snapshot.object_id });
+      let error = null;
+      if (snapshot.status === 'failed') {
+        if (!['STYLIZATION_FAILED', 'STYLIZATION_TIMEOUT', 'STYLIZATION_STORAGE_FAILED', 'STYLIZATION_INTERRUPTED']
+          .includes(snapshot.error?.code)) throw new Error('Invalid stylization error');
+        error = { code: snapshot.error.code, message: 'Stylization gagal. Periksa layanan AI, batas waktu dan storage server.' };
+      }
+      const output = {
+        stylization_id: key, job_id: id, object_id: snapshot.object_id, status: snapshot.status,
+        progress: snapshot.progress, parameters, created_at: snapshot.created_at, updated_at: snapshot.updated_at,
+        error,
+      };
+      if (snapshot.status === 'completed') {
+        if (!Number.isInteger(snapshot.width) || !Number.isInteger(snapshot.height)
+            || snapshot.width < 1 || snapshot.height < 1 || Math.max(snapshot.width, snapshot.height) > 8192
+            || snapshot.width * snapshot.height > 24_000_000) throw new Error('Invalid stylization dimensions');
+        output.width = snapshot.width;
+        output.height = snapshot.height;
+        output.result = stylizationResult(snapshot.result, parameters, snapshot.width, snapshot.height);
+      }
+      return output;
+    },
+    async getStylizationFile(jobId, stylizationId) {
+      const snapshot = await this.getStylization(jobId, stylizationId);
+      if (snapshot.status !== 'completed') {
+        throw new JobError(409, 'STYLIZATION_NOT_COMPLETED', 'PNG hanya tersedia setelah stylization selesai.');
+      }
+      try {
+        const filePath = await canonicalFile(snapshot.job_id, 'stylizations', snapshot.stylization_id, 'image.png');
+        return { filePath, filename: `${snapshot.stylization_id}.png` };
+      } catch (error) {
+        if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+          throw new JobError(404, 'STYLIZATION_NOT_FOUND', 'File stylization tidak ditemukan.');
         }
         throw error;
       }
@@ -433,4 +691,5 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       }
     },
   };
+  return manager;
 }

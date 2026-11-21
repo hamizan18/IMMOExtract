@@ -7,6 +7,8 @@ import { createJobRouter } from './jobs.js';
 export function createApp({
   aiServiceUrl = new URL('http://127.0.0.1:8000'),
   aiTimeoutMs = 30000,
+  aiStylizationTimeoutMs = 900000,
+  aiStylizationServiceUrl = aiServiceUrl,
   aiClient,
   uploadDir,
   jobDir,
@@ -15,7 +17,12 @@ export function createApp({
   const app = express();
   app.disable('x-powered-by');
 
-  const client = aiClient || new AiClient({ aiServiceUrl, timeoutMs: aiTimeoutMs });
+  const client = aiClient || new AiClient({
+    aiServiceUrl,
+    timeoutMs: aiTimeoutMs,
+    stylizationTimeoutMs: aiStylizationTimeoutMs,
+    stylizationServiceUrl: aiStylizationServiceUrl,
+  });
 
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok', service: 'backend' });

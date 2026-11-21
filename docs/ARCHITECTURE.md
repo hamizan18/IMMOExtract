@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** M1–M5 teruji pada Windows lokal. M6 memiliki helper SD15 dan endpoint FastAPI internal; integrasi generatif Express/UI, koreksi mask dan retensi belum tersedia. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** M1–M5 teruji pada Windows lokal. M6 memiliki helper/API SD15 dan antrean Express dengan snapshot privat; UI generatif, koreksi mask dan retensi belum tersedia. Bukti aktual ada di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -98,13 +98,20 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | POST | `/api/jobs/:id/pixelate` | Tersedia: JSON object_id, size (16/32/64/128), palette opsional original/retro16; HTTP 201 + Location |
 | GET | `/api/jobs/:id/pixelations/:pixelationId` | Tersedia: inline PNG hasil pixelation deterministik |
 | GET | `/api/jobs/:id/pixelations/:pixelationId/download` | Tersedia: attachment PNG hasil pixelation |
-| POST | `/api/jobs/:id/stylize` | Fase lanjut: generative image-to-image |
+| POST | `/api/jobs/:id/stylize` | Tersedia: object_id + parameter model, 202 + Location; antrean bersama ekstraksi |
+| GET | `/api/jobs/:id/stylizations/:stylizationId` | Tersedia: polling snapshot queued/processing/completed/failed tanpa path |
+| GET | `/api/jobs/:id/stylizations/:stylizationId/image` | Tersedia: preview PNG snapshot completed |
+| GET | `/api/jobs/:id/stylizations/:stylizationId/download` | Tersedia: attachment PNG snapshot completed |
 | GET | `/api/health` | Health Express (tersedia M1) |
 | GET | `/api/health/ai` | Express memanggil health FastAPI (tersedia M1) |
 
 Internal AI service: `GET /health` tersedia pada M1, mengembalikan `{"status":"ok","service":"ai-service","model_loaded":false}`. Express `/api/health` mengembalikan `{"status":"ok","service":"backend"}`. `/api/health/ai` memanggil FastAPI dengan timeout bawaan 3 detik; berhasil mengembalikan kontrak health AI yang sama, gagal mengembalikan HTTP 503 dengan pesan aman. Health Express tetap independen. `POST /parse` belum tersedia; kontrak inferensi diputuskan di M3.
 
-**Stylization internal (D-040):** FastAPI menyediakan `POST /stylize` (multipart file) dan `/stylize-path` (JSON path tepercaya), tanpa route Express/browser baru. Pipeline SD15 lazy-loaded; satu lock per proses menolak stylization bersamaan dengan 409. Handler sinkron berjalan pada threadpool agar event loop tidak diblokir inferensi. Input bounded dan dinormalisasi RGBA; output PNG/base64, metadata, serta `nsfw_detected` mengikuti `LocalStylizer`. Path sumber/hasil harus berbeda. Health menambahkan `stylizer_available` (konfigurasi ditemukan, bukan bukti load) dan `stylizer_loaded`. Ini bukan sandbox path; bind loopback/satu worker dan gunakan proses stylization terpisah dari SCHP pada pengujian resource terbatas. Kontrak parameter lengkap ada di README; Express belum meneruskan status stylizer atau mengantrekan generasi.
+**Stylization internal (D-040/D-041):** FastAPI menyediakan `POST /stylize` (multipart file) dan `/stylize-path` (JSON path tepercaya). Pipeline SD15 lazy-loaded; lock per proses menolak generasi bersamaan dengan 409. Handler sinkron memakai threadpool. Health internal menambahkan `stylizer_available` (konfigurasi ditemukan, bukan bukti load) dan `stylizer_loaded`; health proxy Express tetap untuk service ekstraksi.
+
+**Orchestrator stylization (D-041):** Express memilih source dari manifest objek completed, membuat manifest snapshot queued di `<job>/stylizations/<uuid>/`, lalu menambahkan tugas ke FIFO yang sama dengan ekstraksi. Satu request AI aktif per manager. `AiClient.stylizePath` memakai URL generatif opsional dan timeout khusus default 900000 ms, tanpa fallback/retry. Hanya backend membentuk path; output AI ke `image.tmp.png`, kemudian decode/validasi dimensi/alpha exact/metadata sebelum rename `image.png` dan manifest completed. State aktif memakai snapshot committed di memori untuk menghindari read/rename race Windows; restart mengubah interrupted menjadi failed. Polling/preview/download menghapus path internal dan mewajibkan parent/object/snapshot sesuai serta file canonical regular. Manifest job, original, ZIP/pixelation independen.
+
+**Batas lifecycle:** FIFO tidak unload SCHP/SD15 atau membatalkan inferensi remote saat HTTP timeout. Late writes tetap staging privat; snapshot failed tidak dapat diunduh. Retensi belum ada. Service SD15 opsional dapat dipisahkan lewat `AI_STYLIZATION_SERVICE_URL`, tetapi resource kedua proses tetap harus dikelola; smoke menghentikan SCHP sebelum memulai SD15. Endpoint ekstraksi sinkron M3 tetap di luar FIFO.
 
 Pada development, Vite `127.0.0.1:5173` mem-proxy `/api` ke Express `127.0.0.1:3000`; Express mengakses FastAPI `127.0.0.1:8000`. Tidak ada static serving `storage/`, akses FastAPI langsung dari browser, atau CORS terbuka. Halaman M1 hanya status layanan, bukan UI produk penuh.
 

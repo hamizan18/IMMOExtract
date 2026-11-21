@@ -9,9 +9,14 @@ export class AiClient {
   constructor({
     aiServiceUrl = new URL('http://127.0.0.1:8000'),
     timeoutMs = 30000,
+    stylizationTimeoutMs = 900000,
+    stylizationServiceUrl = aiServiceUrl,
   } = {}) {
     this.aiServiceUrl = aiServiceUrl instanceof URL ? aiServiceUrl : new URL(aiServiceUrl);
     this.timeoutMs = timeoutMs;
+    this.stylizationTimeoutMs = stylizationTimeoutMs;
+    this.stylizationServiceUrl = stylizationServiceUrl instanceof URL
+      ? stylizationServiceUrl : new URL(stylizationServiceUrl);
   }
 
   /**
@@ -60,6 +65,43 @@ export class AiClient {
       throw error;
     }
     return response.json();
+  }
+
+  /**
+   * Stylizes private local paths; the dedicated deadline covers the JSON body too.
+   * Parameters are normalized by the job manager before reaching this client.
+   */
+  async stylizePath({ imagePath, outputPath, parameters }) {
+    const url = new URL('/stylize-path', this.stylizationServiceUrl);
+    const signal = AbortSignal.timeout(this.stylizationTimeoutMs);
+    let response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...parameters,
+          image_path: imagePath,
+          output_path: outputPath,
+          include_base64: false,
+        }),
+        signal,
+        redirect: 'error',
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error('AI stylization request failed');
+      }
+      return await response.json();
+    } catch {
+      // Never expose upstream error bodies, filesystem paths or network details.
+      const error = new Error(response && !response.ok
+        ? `AI stylization failed with HTTP ${response.status}`
+        : signal.aborted ? 'AI stylization timed out' : 'AI stylization request failed');
+      if (response && !response.ok) error.status = response.status;
+      if (signal.aborted) error.name = 'TimeoutError';
+      throw error;
+    }
   }
 
   /**

@@ -69,6 +69,33 @@ export function createJobRouter(options) {
       fail(error, response);
     }
   });
+  function publicStylization(snapshot) {
+    const statusUrl = `/api/jobs/${snapshot.job_id}/stylizations/${snapshot.stylization_id}`;
+    return snapshot.status === 'completed'
+      ? { ...snapshot, preview_url: `${statusUrl}/image`, download_url: `${statusUrl}/download` }
+      : snapshot;
+  }
+
+  router.post('/:id/stylize', express.json({ limit: '8kb' }), async (request, response) => {
+    if (!request.is('application/json')) {
+      response.status(415).json({ error: { code: 'STYLIZATION_INPUT_REQUIRED', message: 'Kirim JSON object_id dan parameter stylization.' } });
+      return;
+    }
+    try {
+      const snapshot = await manager.createStylization(request.params.id, request.body);
+      response.location(`/api/jobs/${snapshot.job_id}/stylizations/${snapshot.stylization_id}`)
+        .status(202).json(publicStylization(snapshot));
+    } catch (error) {
+      fail(error, response);
+    }
+  });
+  router.get('/:id/stylizations/:stylizationId', async (request, response) => {
+    try {
+      response.json(publicStylization(await manager.getStylization(request.params.id, request.params.stylizationId)));
+    } catch (error) {
+      fail(error, response);
+    }
+  });
   router.use((error, _request, response, _next) => {
     const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : 500;
     response.status(status).json({ error: { code: 'INVALID_JOB_REQUEST', message: 'Permintaan job tidak dapat diproses.' } });
@@ -124,5 +151,8 @@ export function createJobRouter(options) {
   const pixelationFile = params => manager.getPixelation(params.id, params.pixelationId);
   router.get('/:id/pixelations/:pixelationId', serveFile(pixelationFile, 'image/png', 'inline', 'PIXELATION_NOT_FOUND'));
   router.get('/:id/pixelations/:pixelationId/download', serveFile(pixelationFile, 'image/png', 'attachment', 'PIXELATION_NOT_FOUND'));
+  const stylizationFile = params => manager.getStylizationFile(params.id, params.stylizationId);
+  router.get('/:id/stylizations/:stylizationId/image', serveFile(stylizationFile, 'image/png', 'inline', 'STYLIZATION_NOT_FOUND'));
+  router.get('/:id/stylizations/:stylizationId/download', serveFile(stylizationFile, 'image/png', 'attachment', 'STYLIZATION_NOT_FOUND'));
   return router;
 }

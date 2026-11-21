@@ -4,68 +4,67 @@
 
 ## Last agent
 
-OMP — pemulihan perubahan terhenti dan penyelesaian endpoint FastAPI stylization internal (D-040), 2026-11-21. Tidak membuat commit.
+OMP — integrasi antrean stylization backend, snapshot privat dan pengujian kontrak (D-041), 2026-11-21. Pengguna memilih **defer_live** setelah smoke SD15 dihentikan guard commit. Tidak membuat commit.
 
 ## Current milestone
 
-**M6 — In progress.** Helper dan API FastAPI teruji; integrasi Express/UI generatif dan koreksi mask belum tersedia. Bukti M1–M5 terdahulu dipertahankan.
+**M6 — In progress.** Helper/API FastAPI memiliki bukti nyata D-039/D-040. Backend Express diimplementasikan dan tes kontrak/regresi PASS; penerimaan backend SD15 nyata belum selesai. UI generatif/koreksi mask belum tersedia.
 
 ## Last completed task
 
-- Draft `/stylize` multipart dan `/stylize-path` JSON pada `ai-service/main.py` dilanjutkan, bukan ditulis ulang dari nol.
-- Lazy-loaded SD15 existing, metadata/base64 serta penyimpanan PNG/raw; alpha input dinormalisasi RGBA termasuk transparansi palet.
-- Validasi format statis, byte/dimensi, preset dan parameter model. Tolak output alias sumber/hardlink dan output yang bertabrakan; raw output memerlukan output utama.
-- Handler stylization threadpool menjaga event loop; lock menolak request stylization paralel dengan 409. Error inferensi/penyimpanan menjadi 500 JSON aman.
-- `/health` membedakan `stylizer_available` (konfigurasi ditemukan) dari `stylizer_loaded` (pipeline dimuat). Dependency generatif yang tidak tersedia tidak mematikan ekstraksi.
-- Tujuh regresi validasi baru tanpa AI palsu; suite API 14/14 PASS. Kedua route juga menghasilkan PNG melalui SD15 nyata di HTTP loopback.
+- AiClient.stylizePath dengan timeout generatif terpisah default 900000 ms dan URL service SD15 opsional.
+- POST `/api/jobs/:id/stylize` menerima object_id/parameter, 202 + Location polling; tidak menerima path browser.
+- FIFO existing kini melayani ekstraksi dan stylization. Snapshot terpisah di `<job>/stylizations/<uuid>/`, progress tahap, state aktif committed, restart interrupted menjadi failed tanpa retry.
+- PNG staging divalidasi decode penuh, dimensi/metadata/alpha exact sebelum image.png dan manifest completed dipublikasikan. Preview/download privat berbasis parent/object/snapshot, canonical regular file, no-store/private/nosniff.
+- Original/job/ZIP/pixelation tidak dimutasi. HTTP timeout tidak menjamin inferensi remote dibatalkan; late write tetap staging privat.
+- Pengujian backend 103/103 PASS. Smoke nyata berhasil tahap ekstraksi, tetapi SD15 dihentikan resource guard; hasil ini **bukan PASS end-to-end**.
 
 ## Current task
 
-Tugas endpoint FastAPI selesai dan terdokumentasi. Tidak melanjutkan implementasi Express/UI dalam sesi ini.
+Implementasi backend dan dokumentasi disimpan. Pengujian SD15 nyata ulang ditunda sesuai pilihan pengguna; jangan retry otomatis, menurunkan guard, atau mengaktifkan UI.
 
 ## Working components
 
-- Ekstraksi SCHP dan API existing: tujuh tes nyata PASS dalam sesi ini.
-- Endpoint stylization: multipart 64.629s, JSON path 56.163s; SD15 256 px, nominal 2 dan **aktual 2 langkah per request**, seed 42, strength 0.5, guidance 7.5.
-- Hasil RGBA 128×160, alpha exact (termasuk alpha parsial/palet), RGB berubah, original byte-identical, raw RGB 256×256 valid, piksel kedua route sama untuk input/seed sama; safety checker melaporkan false.
-- Health tetap 200 selama lazy load (0.377s); request paralel 409. Health loaded berubah false → true.
-- PNG/ZIP asli dan Classic Pixelation tidak diubah; suite backend/frontend tidak dijalankan ulang.
+- Tes kontrak memakai fixture sintetis transport/AI, bukan model nyata: timeout/body stalled, FIFO dua arah, restart/interrupted, failure, snapshot/download, alpha, safe errors dan symlink/junction.
+- Regresi API ekstraksi, original/ZIP/pixelation PASS dalam suite terarah.
+- Smoke nyata: Express→SCHP menghasilkan tiga objek, PNG original dan ZIP valid. SCHP dihentikan sebelum SD15 startup. POST stylize 202 queued, path injection 400, pending download 409, health backend 200.
+- Setelah watchdog menghentikan SD15, polling backend menunjukkan failed/STYLIZATION_FAILED tanpa path internal. PNG generatif, alpha hasil, preservasi setelah generasi dan restart backend nyata belum tercapai.
 
 ## Modified files
 
-- `ai-service/main.py` — melanjutkan perubahan awal, validasi dan concurrency/persistence endpoint.
-- `ai-service/test_api.py` — tujuh regresi input/parameter/path/unavailable baru.
-- `README.md` — kontrak endpoint dan cara menjalankan service stylization terisolasi.
-- `docs/ARCHITECTURE.md` — batas integrasi FastAPI internal.
-- `docs/DECISIONS.md` — D-040 beserta hasil tes/resource aktual.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — status, bukti tes dan next task aktual.
+- `backend/src/ai-client.js` — client stylization URL/deadline/error aman.
+- `backend/src/app.js`, `backend/src/server.js`, `backend/.env.example` — opsi AI_STYLIZATION_TIMEOUT_MS/AI_STYLIZATION_SERVICE_URL.
+- `backend/src/job-manager.js` — FIFO bersama, snapshot/status/recovery/artifact validation.
+- `backend/src/jobs.js` — POST/polling/preview/download stylization.
+- `backend/test/ai-client.test.js`, `backend/test/stylizations.test.js` — dua file tes baru.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — kontrak, hasil aktual dan handoff.
 
 ## Uncommitted changes / Git status
 
-- Inspeksi awal `git status --short`, `git diff --stat`, `git diff`, `git diff --cached`: hanya `ai-service/main.py` modified; index kosong. Catatan helper untracked/dokumen pending di handoff sebelumnya sudah kedaluwarsa.
-- Tujuh file di atas diubah dalam sesi ini dan tidak di-stage/commit. Daftar berdasarkan inspeksi awal dan operasi edit sesi; tidak menjalankan Git ulang sesudah edit.
-- Tidak reset, menghapus perubahan pengguna, download model, install paket atau mengubah helper/checkpoint/environment existing. AGENTS dimuat dari konteks; LSP tidak dikonfigurasi.
-- Harness smoke via stdin, service loopback dan direktori temporary fixture/hasil/log dibersihkan setelah selesai. Tidak ada script permanen atau foto pribadi baru.
+- Inspeksi awal status/diff/index bersih pada HEAD `168f6cd` (`AI Service Done`). Catatan tujuh perubahan pending sesi D-040 sudah kedaluwarsa.
+- Sesi ini mengubah 11 file existing dan membuat 2 file tes di atas; tidak di-stage/commit. Daftar berdasarkan inspeksi awal dan operasi edit, tidak menjalankan Git ulang untuk audit.
+- Tidak mengubah Python/FastAPI/helper, model, frontend, dependensi atau struktur proyek. Tidak download, reset, menghapus perubahan pengguna, menutup aplikasi pengguna atau mengubah pagefile.
+- Harness via stdin; seluruh service milik harness dihentikan/ditunggu dan storage/log/fixture temporary dibersihkan. LSP tidak dikonfigurasi.
 
 ## Current errors / limitations
 
-- Tidak ada kegagalan pada tes yang dijalankan. Warning deprecation Starlette/httpx existing tetap muncul.
-- Awal headroom tidak lolos 3 GiB RAM available/8 GiB sisa commit; pengguna memilih menyiapkan memori dua kali. Gate sebelum startup akhirnya lolos: 3.467.902.976 / 8.969.248.768 byte.
-- Minimum selama 1.818 sampel: RAM available 1.010.532.352 byte (~0,94 GiB), sisa commit 1.301.778.432 byte (~1,21 GiB). Guard <512 MiB/<1 GiB tidak terpicu, tetapi margin commit tipis. Jangan menganggap private commit sama dengan RSS atau sampling sebagai hard cap.
-- Smoke tidak memuat SCHP bersamaan; `SCHP_CHECKPOINT_PATH` child sengaja menuju file tidak ada. Runtime aplikasi masih dapat memuat SCHP default; jangan menjalankan kedua model bersamaan tanpa evaluasi resource.
-- API menerima path **caller lokal tepercaya**, bukan sandbox. Bind 127.0.0.1/satu worker; integrasi Express wajib memilih file berdasarkan manifest, tidak meneruskan path browser.
-- API 20 langkah/512, kualitas visual, fault injection disk/inferensi dan SCHP+SD15 bersamaan belum diuji sesi ini. Silhouette exact bukan jaminan alignment/kualitas pixel art. Output generatif belum tersedia di browser.
+- **Smoke end-to-end FAIL karena guard commit**, bukan penyebab bug model yang sudah terbukti. Gate awal RAM available 3.917.631.488/sisa commit 8.888.893.440 byte; sesudah SCHP berhenti 3.858.649.088/8.786.952.192 byte, lolos gerbang 3/8 GiB.
+- Saat pipeline SD15 dimuat, watchdog melihat sisa commit **1.056.886.784 byte**, di bawah batas **1.073.741.824 byte (1 GiB)**. RAM available saat itu 1.661.292.544 byte (~1,55 GiB); yang memicu penghentian adalah commit, bukan RAM available.
+- Pengguna ditawarkan satu smoke ulang setelah available ≥3 GiB/sisa commit ≥10 GiB atau defer; memilih **defer_live**. Jangan menafsirkan pesan continue generik sebagai perubahan kondisi memori atau izin retry tanpa memeriksa kesiapan.
+- Guard runtime tetap available <512 MiB atau sisa commit <1 GiB; sampling bukan hard cap. Gerbang 3/10 GiB lebih konservatif, bukan jaminan keselamatan.
+- FIFO tidak mengatur lifecycle resident model. Dua service terpisah tetap dapat menghabiskan memori bila SCHP+SD15 hidup bersama; smoke menghentikan SCHP dahulu. Backend belum mengotomatiskan pergantian model.
+- Timeout tidak membatalkan model remote; snapshot failed tidak dapat diunduh meski file staging muncul terlambat. Retensi/batas antrean belum tersedia, endpoint ekstraksi sinkron M3 di luar FIFO.
 
 ## Tests / checks performed
 
-- **PASS:** `ai-service/.venv-test/Scripts/python.exe -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14, 18.743s; tujuh ekstraksi existing + tujuh validasi stylization.
-- **PASS:** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u -` — harness stdin memulai Uvicorn loopback port ephemeral, HF/Transformers offline, request HTTP via httpx dan fixture sintetis. Dua inferensi nyata, alpha/original/raw/base64/determinisme, health dan busy 409 terverifikasi; detail D-040.
-- **PASS:** Pengawas resource 100 ms tidak menghentikan smoke; harness menghentikan pohon service miliknya, menunggu launcher, membersihkan temporary directory.
-- **NOT RUN:** Suite helper/CPU/backend/frontend ulang, build/browser, 512/full-default API, kualitas visual, fault injection disk/inferensi, pipeline dua model bersamaan. Tidak diperlukan untuk mengklaim hasil smoke dua endpoint; M6 keseluruhan belum selesai.
+- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — **103/103**, 0 skip, 27.582s. Fixture hanya untuk kontrak; symlink/junction benar-benar diuji.
+- **FAIL resource guard:** `ai-service/.venv-stylization-poc/Scripts/python.exe -B -u -` — harness server.js + Uvicorn SCHP/SD15, loopback, offline, storage temporary. Ekstraksi nyata tiga objek PASS; SD15 dihentikan ketika commit melewati guard, backend failed aman.
+- **PASS terbatas pada harness yang sama:** path injection 400, POST queued 202, pending download 409, backend health 200, cleanup seluruh service/storage milik harness.
+- **NOT RUN:** PNG SD15 sukses/alpha/preservasi setelah generasi/restart backend nyata; terhenti sebelum hasil. UI/browser/build, suite Python ulang, SD15 default20/512 atau dua model bersamaan juga tidak dijalankan.
 
 ## Next action (only one)
 
-**Integrasikan `/stylize-path` ke antrean backend Express dengan timeout generatif terpisah dan snapshot hasil privat berbasis manifest.** Jangan menerima path filesystem dari browser; pertahankan unduhan original dan Classic Pixelation independen.
+**Selesaikan smoke backend Express→SD15 nyata setelah pengguna siap dan mengizinkan kelanjutan**, dengan gate ≥3 GiB RAM available/≥10 GiB sisa commit dan guard tetap. Jalankan SCHP/SD15 bergantian; verifikasi hasil PNG/alpha, original/ZIP tetap dan restart backend. Jangan mengulang implementasi yang sudah lulus kontrak atau melanjutkan UI sebelum penerimaan ini selesai.
 
 ## Handoff rules
 
