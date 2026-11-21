@@ -808,4 +808,34 @@ vae/config.json
   - Fitur Ekspor Selective ZIP (FR-08) kini sepenuhnya hardened, aman, terukur, dan memiliki jaminan integritas kriptografis lokal.
 - **Next single task:** Persiapan rilis akhir M7: pembersihan artefak kerja non-esensial dan penyusunan dokumentasi penutupan rilis MVP.
 
+## D-047 — Penutupan Milestone M7 dan Status Kesiapan Rilis MVP IMMOExtract
+
+- **Tanggal:** 2026-11-21.
+- **Status:** Complete / Finalized.
+- **Keputusan & Ringkasan Pencapaian:**
+  1. **Pemenuhan Spesifikasi Fungsional (FR-01 s/d FR-13):**
+     - Seluruh persyaratan wajib dan tahap lanjut dalam `docs/PROJECT_SPEC.md` telah diselesaikan, diuji, dan didokumentasikan:
+       - **FR-01 & FR-02 (Input Gambar & Kamera Browser):** Penanganan upload file galeri dan snapshot kamera webcam browser dengan pembersihan stream aman (M2).
+       - **FR-03 (Validasi Defensif):** Pengecekan signature magic bytes, batas ukuran 10 MB, batas sisi 8192 px, dan pencegahan dekompresi berbahaya (M2).
+       - **FR-04 & FR-05 (Human Parsing & Ekstraksi Transparan):** Inferensi CPU lokal model SCHP ATR-18, crop bounding box terhitung, dan ekspor PNG RGBA per kategori (>50 px) (M3/M4).
+       - **FR-06 & FR-07 (Galeri & Unduhan Satuan):** Polling job async, kartu objek interaktif di UI dark futuristic, preview transparan, dan attachment download PNG asli (M4).
+       - **FR-08 (Selective ZIP Export Hardened):** STORE mode (tanpa re-kompresi deflasi redundant), kalkulasi streaming SHA-256 on-the-fly, perlindungan arsip kosong, dan endpoint metadata `GET /api/jobs/:id/exports/:exportId` (M4/M7).
+       - **FR-09 & FR-10 (Classic Pixelation Studio):** Downscaling deterministik nearest-neighbour pada 4 ukuran (16/32/64/128 px), kuantisasi palet Retro 16 warna, dan preservasi alpha exact (M5).
+       - **FR-11 (AI Pixel Art Stylization Lokal):** Pipeline SD15 CPU FP32 dengan memory-cloned offload loader, preset prompt, letterbox canvas, preservasi 100% exact alpha, dan antrean FIFO backend (M6).
+       - **FR-12 (Mask Correction Tool):** Dialog Canvas 2D interaktif dengan Penghapus (transparan) dan Kuas Pulihkan (foto asli instan), slider brush, undo stack, dan endpoint revisi `PUT /api/jobs/:id/objects/:objectId` (M6).
+       - **FR-13 (Generator Spritesheet Statis & Atlas JSON):** Komposisi komposit Sharp transparan, pengaturan grid padding/kolom, ekspor gambar lembar sprite, dan atlas JSON standar TexturePacker / PixiJS / Phaser (M7).
+  2. **Audit Verifikasi & Kualitas Perangkat Lunak:**
+     - **Backend Node.js/Express:** 119 unit dan integrasi tes (`node --test`) **PASS 100%** (0 failure, 0 skipped, durasi 8.24s).
+     - **AI Service Python/FastAPI:** 14 unit tes unittest (`test_api.py`) **PASS 100%** (durasi 9.35s).
+     - **Frontend Vite:** 7 modul JavaScript/CSS/HTML berhasil dibangun menjadi bundle produksi bersih tanpa peringatan (`dist/` 126ms).
+     - **Automated Browser Smoke Test (CDP):** Pengujian headless Chrome end-to-end (M6 dan M7) **PASS 100%** (13 stages berturut-turut, 0 console error).
+  3. **Keamanan & Kebersihan Workspace:**
+     - Tidak ada kredensial, kunci API, file `.env`, foto pribadi pengguna, atau checkpoint model binary besar yang ter-commit ke Git.
+     - Folder `storage/` dan `scratch/` diproteksi oleh `.gitignore`.
+     - Seluruh endpoint memvalidasi identitas UUID v4, menolak directory traversal, dan menolak symlink/junction pengalihan.
+- **Konsekuensi:**
+  - Fase Minimum Viable Product (MVP) proyek IMMOExtract secara resmi telah selesai secara menyeluruh.
+  - Proyek berada dalam kondisi stabil, bersih, terdokumentasi lengkap, dan siap digunakan atau dipresentasikan.
+
+
 

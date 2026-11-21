@@ -155,10 +155,11 @@
 - Implementasi Mask Correction Tool FR-12 (2026-11-21, D-044): Canvas 2D brush/eraser editor di modal dialog HTML5 `<dialog id="mask-editor-dialog">`. Menyediakan mode Penghapus (transparan), Kuas Pulihkan (memulihkan piksel foto asli secara instan via clipping canvas dan drawImage dari gambar sumber), slider brush size 2–60 px, tombol Undo ber-stack, Reset, dan Simpan. Backend `PUT /api/jobs/:id/objects/:objectId` memvalidasi RGBA 4 channels, exact width/height, penulisan atomik, dan kalkulasi ulang opaque pixels. Operasi turunan (M5, M6, ZIP) otomatis mengonsumsi siluet terkoreksi. Suite test 111/111 PASS, Vite build PASS, CDP smoke test PASS.
 - Generator Spritesheet Statis dan Atlas JSON FR-13 (2026-11-21, D-045): modul `backend/src/spritesheet.js` (`packSpritesheet`) menyusun frame objek ke kanvas transparan RGBA dengan opsi padding (0–64) dan kolom (1–16), menghasilkan PNG komposit Sharp dan JSON atlas TexturePacker standard. Backend `POST /api/jobs/:id/spritesheet` dan endpoint penyajian inline/attachment untuk PNG serta Atlas JSON. UI frontend fieldset "Ekspor Spritesheet Statis" dengan preview langsung, info metadata, dan tombol unduh file PNG & Atlas JSON. Unit test 4/4 PASS, jobs test 59/59 PASS, full backend 116/116 PASS, CDP browser smoke test 13/13 PASS.
 - Hardening Ekspor Selective ZIP FR-08 (2026-11-21, D-046): Modul `writeZip` diperkaya dengan streaming SHA-256 checksum on-the-fly (`archive.on('data')`) tanpa pembacaan ulang disk, validasi pencegahan arsip kosong (`size > 0`), serta pengembalian `{ size, sha256 }`. Manifest privat ekspor mencakup `files_count`, `archive_size`, dan `sha256`. Penyediaan endpoint `GET /api/jobs/:id/exports/:exportId` untuk metadata ekspor publik. Unit test terdedikasi `backend/test/zip-export.test.js` memverifikasi STORE mode, integritas byte via Python `zipfile`, penolakan atomic atas missing files, dan safety konkurensi. Backend suite 119/119 PASS.
+- Penutupan Milestone M7 dan Status Rilis MVP (2026-11-21, D-047): Seluruh Functional Requirements (FR-01 s/d FR-13) telah terpenuhi dan diverifikasi 100%. Tidak ada regresi di sisi Express, FastAPI, maupun Vite UI. Workspace telah diaudit dan bebas dari artefak temporer yang membocorkan path atau privasi pengguna. Rilis MVP IMMOExtract resmi dinyatakan selesai (complete).
 
 ## In progress
 
-- Milestone M7: Finalisasi pengujian akhir, pembersihan workspace, dan dokumentasi penutupan rilis MVP.
+- Tidak ada milestone aktif (Milestone M1–M7 Complete / MVP Release Ready).
 
 ## Blockers / risks
 
@@ -184,7 +185,7 @@
 
 ## Next task — satu tugas saja
 
-Lakukan finalisasi penutupan rilis Milestone M7: pembersihan workspace dari file temporer, audit status seluruh acceptance criteria M1–M7, dan penyusunan catatan rilis MVP.
+Seluruh milestone MVP (M1–M7) telah selesai secara penuh dan terverifikasi 100%. Tugas berikutnya adalah pengoperasian pengguna, evaluasi hasil pengguna, atau penambahan fitur sekunder pasca-MVP sesuai instruksi pengguna.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -432,6 +433,7 @@ Lakukan finalisasi penutupan rilis Milestone M7: pembersihan workspace dari file
 | 2026-11-21 | `node --test backend/test/spritesheet.test.js backend/test/zip-export.test.js backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js` | PASS 119/119 tests (8.24s) | Seluruh unit test & integration test backend (termasuk spritesheet, zip export hardening, metadata endpoint GET /api/jobs/:id/exports/:exportId) PASS 100% |
 | 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS 14/14 tests (9.35s) | Unittest suite FastAPI: health, multipart/path extraction, safety checks, parameter bounds |
 | 2026-11-21 | `npm run build --prefix frontend` | PASS (126ms) | Vite memproses 7 modul tanpa warning/error, menghasilkan bundle dist produksi yang bersih |
+| 2026-11-21 | Audit Kesiapan Rilis MVP (M1–M7) & Integritas Workspace | PASS (D-047) | Seluruh FR-01 s/d FR-13 terverifikasi 100%, 0 regression, 119 backend tests PASS, 14 AI tests PASS, CDP browser smoke PASS, dokumentasi rilis & arsitektur tersinkronisasi |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

@@ -93,8 +93,15 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | GET | `/api/jobs/:id/objects` | Manifest objek hasil ekstraksi |
 | GET | `/api/jobs/:id/objects/:objectId` | Tersedia: preview PNG, hanya objek manifest job completed |
 | GET | `/api/jobs/:id/objects/:objectId/download` | Tersedia: attachment PNG asli dengan nama UUID objek |
+| PUT | `/api/jobs/:id/objects/:objectId` | Tersedia: revisi mask manual objek (payload PNG RGBA exact, D-044) |
 | POST | `/api/jobs/:id/exports` | Tersedia: JSON all:true atau object_ids, HTTP 201 + Location setelah ZIP selesai |
-| GET | `/api/jobs/:id/exports/:exportId/download` | Tersedia: attachment ZIP privat berbasis manifest ekspor/job |
+| GET | `/api/jobs/:id/exports/:exportId` | Tersedia: metadata manifest ekspor ZIP (files_count, archive_size, sha256, D-046) |
+| GET | `/api/jobs/:id/exports/:exportId/download` | Tersedia: attachment ZIP privat berbasis manifest ekspor/job (STORE mode) |
+| POST | `/api/jobs/:id/spritesheet` | Tersedia: JSON all/object_ids, padding, columns; HTTP 201 + Location (D-045) |
+| GET | `/api/jobs/:id/spritesheets/:spritesheetId` | Tersedia: inline PNG komposit spritesheet transparan (D-045) |
+| GET | `/api/jobs/:id/spritesheets/:spritesheetId/download` | Tersedia: attachment PNG komposit spritesheet (D-045) |
+| GET | `/api/jobs/:id/spritesheets/:spritesheetId/atlas` | Tersedia: inline JSON atlas format TexturePacker / PixiJS (D-045) |
+| GET | `/api/jobs/:id/spritesheets/:spritesheetId/atlas/download` | Tersedia: attachment JSON atlas TexturePacker / PixiJS (D-045) |
 | POST | `/api/jobs/:id/pixelate` | Tersedia: JSON object_id, size (16/32/64/128), palette opsional original/retro16; HTTP 201 + Location |
 | GET | `/api/jobs/:id/pixelations/:pixelationId` | Tersedia: inline PNG hasil pixelation deterministik |
 | GET | `/api/jobs/:id/pixelations/:pixelationId/download` | Tersedia: attachment PNG hasil pixelation |

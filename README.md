@@ -4,18 +4,20 @@
 
 IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
 
-> **Status proyek:** M1–M5 selesai pada jalur Windows lokal yang teruji. M6 memiliki helper/API SD15 dan integrasi antrean Express dengan snapshot privat; UI AI Stylization belum tersedia. Bukti aktual di `docs/PROGRESS.md`; batasan dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** Seluruh milestone MVP (M1–M7) selesai pada jalur Windows lokal yang teruji dan terverifikasi penuh. Meliputi ekstraksi objek SCHP lokal (M3/M4), galeri & ekspor ZIP selektif hardened (M4/M7), Classic Pixelation deterministik (M5), AI Pixel Art Stylization lokal SD15 (M6), Mask Correction Tool interaktif (M6), serta Generator Spritesheet Statis & Atlas JSON (M7). Bukti pengujian nyata dicatat di `docs/PROGRESS.md`; catatan arsitektur dan keputusan di `docs/DECISIONS.md`.
 
 ## Gambaran fitur
 
-- Input foto dari galeri atau kamera browser.
-- Human parsing lokal untuk manusia, pakaian, dan beberapa aksesori yang didukung model.
-- PNG transparan per objek yang terdeteksi.
-- Preview, download satu objek, download beberapa objek, download semua dalam ZIP.
-- Classic Pixelation dengan pilihan ukuran/palet.
-- AI image-to-image stylization lokal **tahap lanjut**, tergantung kemampuan hardware dan hasil pengujian model.
+- Input foto dari galeri atau kamera browser (M2).
+- Human parsing lokal (SCHP ATR-18) untuk manusia, pakaian, dan aksesori (M3/M4).
+- PNG transparan per objek yang terdeteksi dengan crop bounding box presisi.
+- Mask Correction Tool: kuas penghapus dan kuas pemulih foto asli interaktif berbasis Canvas 2D (FR-12, M6).
+- Preview galeri objek, unduh satu PNG, unduh ZIP pilihan atau semua objek dengan integritas SHA-256 (FR-08, M4/M7).
+- Classic Pixelation deterministik dengan 4 grid ukuran (16/32/64/128) dan palet Retro 16 warna opsional (FR-09/FR-10, M5).
+- AI Pixel Art Stylization lokal berbasis Stable Diffusion 15 CPU FP32 dengan preset, restorasi 100% exact alpha, dan UI studio terintegrasi (FR-11, M6).
+- Ekspor Spritesheet Statis komposit PNG transparan dan metadata Atlas JSON format TexturePacker / PixiJS / Phaser standar (FR-13, M7).
 
-**Batasan:** satu orang utama pada MVP; tidak otomatis membuat sprite animasi, objek 3D, atau melengkapi bagian objek yang tersembunyi.
+**Batasan:** Satu orang utama pada MVP; tidak otomatis membuat sprite animasi runtime, objek 3D, atau melengkapi bagian tubuh/pakaian yang tertutup penuh (occlusion).
 
 ## Tech stack rencana
 
@@ -91,11 +93,12 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Error pembuatan/koneksi mempertahankan pilihan; mencoba lagi adalah permintaan ekspor baru, bukan retry otomatis. Ganti/hapus gambar, buka kamera atau tinggalkan halaman membatalkan pengamatan ekspor dan membersihkan link. Respons lama tidak memicu unduhan; proses/file yang sudah diterima server tidak dibatalkan.
 
 - `POST /api/jobs/<job_id>/exports`, `Content-Type: application/json`, dengan **salah satu** `{"all":true}` atau `{"object_ids":["<uuid>","<uuid>"]}`. ID harus terdaftar pada job completed; pilihan kosong/duplikat atau field tambahan ditolak. `all` mencakup foreground manusia dan seluruh kategori yang terdaftar.
-- HTTP **201** hanya setelah ZIP dan manifest ekspor selesai disimpan. Respons: `{export_id, job_id, status:"completed", object_ids, created_at, download_url}`; header `Location` sama dengan `download_url`.
+- HTTP **201** hanya setelah ZIP dan manifest ekspor selesai disimpan. Respons: `{export_id, job_id, status:"completed", object_ids, files_count, archive_size, sha256, created_at, download_url}`; header `Location` sama dengan `download_url`.
+- `GET /api/jobs/<job_id>/exports/<export_id>` mengembalikan JSON manifest ekspor lengkap beserta `download_url`, ukuran arsip dalam byte, jumlah file, dan checksum SHA-256 bitstream arsip.
 - `GET /api/jobs/<job_id>/exports/<export_id>/download` mengunduh attachment `<export_id>.zip`, no-store/private dan nosniff. Isi hanya `<object_id>.png` yang dipilih, byte asli tanpa pixelation; tidak memuat input, mask atau metadata privat.
-- ZIP disimpan privat di `<job>/exports/<export_id>/archive.zip` dengan manifest terpisah. Ekspor tidak mengubah manifest job; dapat diunduh setelah restart. ZIP selesai adalah snapshot, tidak bergantung pada keberadaan PNG sumber saat diunduh.
-- HTTP 400 untuk pilihan/UUID invalid, 404 untuk ID/file hilang, 409 untuk job non-completed atau ekspor semua tanpa objek, 415 untuk tipe request bukan JSON, 413 untuk body >2 KiB. Kegagalan storage/path menghasilkan 500 aman, bukan ZIP sebagian.
-- Backend memakai Archiver 8.0.0. Setelah mengambil perubahan dependensi, jalankan `npm install --no-audit --no-fund` dari direktori `backend`. Pengujian ZIP `node --test backend/test/jobs.test.js` memakai pembaca stdlib Python (`py -3` di Windows, `python3` di platform lain) untuk memeriksa isi/CRC.
+- ZIP disimpan privat di `<job>/exports/<export_id>/archive.zip` dengan manifest terpisah. Ekspor memakai STORE mode (tanpa re-kompresi deflasi redundant pada PNG) dan menghitung hash SHA-256 on-the-fly secara streaming. Ekspor tidak mengubah manifest job; dapat diunduh setelah restart. ZIP selesai adalah snapshot, tidak bergantung pada keberadaan PNG sumber saat diunduh.
+- HTTP 400 untuk pilihan/UUID invalid, 404 untuk ID/file hilang, 409 untuk job non-completed atau ekspor semua tanpa objek, 415 untuk tipe request bukan JSON, 413 untuk body >2 KiB. Kegagalan storage/path menghasilkan 500 aman, bukan ZIP sebagian atau arsip 0-byte kosong.
+- Backend memakai Archiver 8.0.0. Setelah mengambil perubahan dependensi, jalankan `npm install --no-audit --no-fund` dari direktori `backend`. Pengujian ZIP `node --test backend/test/zip-export.test.js backend/test/jobs.test.js` memakai pembaca stdlib Python (`py -3` di Windows, `python3` di platform lain) untuk memeriksa isi, central directory, dan CRC32 exact match.
 - Cleanup retensi belum tersedia; setiap POST sukses membuat ekspor baru. Unduhan ditangani browser native; kegagalan transfer tidak memiliki dialog khusus di aplikasi.
 
 ## Classic Pixelation — helper, API dan UI M5
@@ -143,7 +146,37 @@ Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` 
 - **Batas resource:** Antrean menyerialkan request, bukan lifecycle model. Menjalankan dua service sekaligus tetap dapat mempertahankan SCHP+SD15 dalam memori. Smoke menggunakan ekstraksi dahulu, menghentikan service SCHP, baru memulai SD15; aplikasi belum mengotomatiskan pergantian ini. HTTP timeout tidak membatalkan inferensi di server; hasil terlambat tetap staging privat dan tidak dipublikasikan. Tidak ada cleanup/retensi otomatis.
 - Verifikasi D-041: empat file tes backend **103/103 PASS** dengan fixture kontrak. Smoke model nyata berhasil ekstraksi tiga objek, tetapi SD15 dihentikan pengawas saat sisa commit <1 GiB; **penerimaan end-to-end backend belum lulus**. Pengguna menunda pengulangan. Lihat HANDOFF sebelum menjalankan inferensi lagi.
 
-## Menjalankan Aplikasi (M1–M5)
+## Koreksi Mask Manual (Mask Correction Tool — FR-12)
+
+- Tombol **Koreksi Mask** pada setiap kartu objek membuka dialog interaktif HTML5 (`#mask-editor-dialog`).
+- Kanvas interaktif 2D memungkinkan pengguna merapikan siluet objek secara manual:
+  - **Penghapus (Transparan):** menghapus piksel yang bocor di luar batas pakaian/aksesori dengan `destination-out`.
+  - **Kuas Pulihkan:** mengembalikan piksel asli dari foto input menggunakan clipping path canvas dan crop gambar sumber secara instan, tanpa inferensi AI tambahan.
+  - **Slider Brush Size:** mengatur diameter kuas/penghapus antara 2 hingga 60 piksel dengan preview angka.
+  - **Undo Stack & Reset:** riwayat modifikasi hingga 20 langkah `ImageData` dan tombol reset ke kondisi awal siluet.
+- **Simpan Koreksi:** mengirim binary PNG RGBA ke endpoint `PUT /api/jobs/:id/objects/:objectId`.
+- Backend memvalidasi integritas dimensi exact, saluran 4 channel RGBA, dekompresi piksel penuh, menulis file kanonikal secara atomik, dan memperbarui `pixel_count` serta timestamp pada manifest.
+- Hasil koreksi otomatis diumpankan ke operasi turunan (Classic Pixelation M5, AI Stylization M6, Spritesheet M7, dan ekspor ZIP) tanpa mutasi berlebih.
+
+## Generator Spritesheet Statis & Atlas JSON (FR-13)
+
+- Fieldset **Ekspor Spritesheet Statis (M7)** di bagian bawah galeri memungkinkan penggabungan seluruh atau sebagian objek ke dalam satu lembar gambar bergrid.
+- Konfigurasi parameter:
+  - **Padding Antar-Sprite:** jarak piksel antargambar (0–64 px; default 4 px).
+  - **Jumlah Kolom Grid:** susunan kolom lembar sprite (1–16 kolom; default otomatis disesuaikan).
+- Dua tombol aksi:
+  - **Spritesheet Pilihan:** menyusun hanya objek yang dicentang pada checkbox kartu.
+  - **Spritesheet Semua:** menyusun seluruh objek yang terdeteksi pada job.
+- Penyajian & Format:
+  - Menghasilkan gambar komposit PNG RGBA transparan berkualitas tinggi (kompresi Sharp level 9).
+  - Menghasilkan metadata **Atlas JSON** format standar TexturePacker / PixiJS / Phaser yang memuat koordinat `frame: { x, y, w, h }` setiap objek untuk integrasi langsung ke game engine (Godot, Unity, Phaser, dsb.).
+  - UI menampilkan preview visual, informasi dimensi total dan jumlah sprite, serta tombol unduh langsung untuk file PNG spritesheet dan file JSON atlas.
+- Endpoint API:
+  - `POST /api/jobs/:id/spritesheet`: menerima `{ all: true }` atau `{ object_ids: [...] }` dengan opsional `padding` dan `columns`, mengembalikan status 201 + Location snapshot.
+  - `GET /api/jobs/:id/spritesheets/:spritesheetId` & `.../download`: menyajikan PNG inline atau attachment download.
+  - `GET /api/jobs/:id/spritesheets/:spritesheetId/atlas` & `.../download`: menyajikan file JSON atlas inline atau attachment download.
+
+## Menjalankan Aplikasi (M1–M7 / Full MVP)
 
 Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3** dengan PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`).
 
