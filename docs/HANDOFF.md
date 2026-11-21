@@ -4,28 +4,32 @@
 
 ## Last agent
 
-Antigravity CLI — implementasi komponen kontrol UI frontend Pixel Art Studio / Stylization (M6 UI) dan verifikasi regresi penuh, 2026-11-21. Kontrol AI stylization per objek, polling serial status (queued -> processing 10% -> completed 100%), preview transparansi, unduhan PNG stylized, serta pembatalan `AbortController` terintegrasi bersih.
+Antigravity CLI — pelaksanaan Automated Headless Browser Smoke Test untuk Komponen UI Pixel Art Studio / Stylization (M6 UI) dan verifikasi end-to-end 13/13 tahap via Chrome CDP (D-043), 2026-11-21. Navigasi, health check, upload fixture, ekstraksi 2 objek, kontrol UI M6, form locking, polling serial, render preview 100×100, download attachment PNG, reset cleanup, dan 0 console error terkonfirmasi lulus 100%.
 
 ## Current milestone
 
-**M6 — In progress.** Komponen UI Pixel Art Studio / Stylization telah selesai diimplementasikan di frontend; backend Express antrean FIFO & snapshot privat teruji 103/103 PASS; AI Service FastAPI teruji 14/14 PASS.
+**M6 — In progress.** Komponen UI Pixel Art Studio / Stylization telah selesai diimplementasikan di frontend dan terverifikasi penuh di browser headless via Chrome CDP; backend Express antrean FIFO & snapshot privat teruji 103/103 PASS; AI Service FastAPI teruji 14/14 PASS.
 
 ## Last completed task
 
-- **Implementasi Komponen UI Pixel Art Studio / Stylization (M6 UI):**
-  - `frontend/index.html`: Template `#object-card` diperluas dengan section AI Pixel Art Stylization (M6) yang memuat pemilih preset prompt (`pixel-art`, `retro-rpg`, `game-boy`), pemilih ukuran target (`128 px`, `256 px`), tombol aksi `Stylize (AI)`, container hasil dengan transparansi grid, label informasi durasi/preset, dan link unduh PNG hasil stylization.
-  - `frontend/src/extraction-workspace.js`:
-    - Mengelola Map `stylizationControllers` dan `stylizationPollTimers` per objek untuk isolasi proses.
-    - Event listener pada tombol `Stylize (AI)` mengirim `POST /api/jobs/${jobId}/stylize` dengan parameter aman CPU lokal (`num_inference_steps: 2`, `strength: 0.5`).
-    - Polling serial berkala setiap 2 detik ke `/api/jobs/${jobId}/stylizations/${stylizationId}` tanpa tumpang tindih.
-    - Menampilkan status bertahap ("Dalam antrean worker AI lokal (0%)…", "Sedang memproses AI stylization di server lokal (10%)…", "AI Stylization selesai! Siap diunduh.").
-    - Render preview gambar via rute kanonikal `/image`, metadata eksekusi, dan link unduh via rute kanonikal `/download`.
-    - Lifecycle cleanup: membersihkan dan meng-abort seluruh operasi dan timer stylization aktif saat upload baru diinisiasi di `setUploadedImage()`.
-    - Aksesibilitas: atribut `aria-label` spesifik per objek disematkan pada preset, ukuran, tombol, dan tombol unduh; status menggunakan `aria-live="polite"`.
+- **Automated Headless Browser Smoke Test M6 UI (`smoke_browser_m6.mjs`, D-043):**
+  - Script mandiri berbasis Node.js 22 WebSocket CDP meluncurkan browser Chrome headless terisolasi.
+  - Mem-boot backend Express & frontend static server pada port loopback ephemeral.
+  - Menguji alur lengkap:
+    1. Buka aplikasi frontend (`IMMOExtract — Ekstraksi Objek`), verifikasi judul dan health check ("Terhubung.").
+    2. Upload fixture gambar sintetis via `#image-input`, verifikasi aktivasi tombol `#extract-objects`.
+    3. Ekstraksi objek menghasilkan 2 kartu di `#object-gallery` (Foreground human + Upper-clothes).
+    4. Verifikasi elemen M6 pada kartu: judul `AI Pixel Art Stylization (M6)`, opsi preset (`pixel-art`, `retro-rpg`, `game-boy`), opsi ukuran (`128`, `256`), tombol aksi `Stylize (AI)`, dan label aksesibel (`aria-label`, `aria-live="polite"`).
+    5. Interaksi klik `Stylize (AI)`: input form terkunci (`disabled: true`) selama proses berjalan, serial polling memantau progress bertahap hingga status "AI Stylization selesai! Siap diunduh.".
+    6. Render hasil: `[data-stylize-result]` terbuka, preview gambar ter-load penuh (`imgComplete: true`, `naturalWidth: 100`), teks metadata (`100 × 100 piksel — Preset: retro-rpg dalam 0.3s`), link unduh attachment `.png`, dan input form kembali aktif (`disabled: false`).
+    7. Uji download via context fetch mengembalikan HTTP 200 attachment (476 byte).
+    8. Uji reset via `#clear-image` membersihkan seluruh kartu galeri (`0 cards`).
+    9. Console browser: **0 error**.
+    10. Bukti visual disimpan di `scratch/proof_smoke_m6_ui.png` (26.490 byte). Seluruh server dan proses child ditutup rapi.
 
 ## Current task
 
-Implementasi UI kontrol frontend M6 selesai dan terverifikasi bersih. Siap untuk pengujian end-to-end browser interaktif atau kelanjutan ke fitur berikutnya dalam M6 (mask correction / penyesuaian paging file Windows).
+Automated headless browser smoke test selesai dengan status PASS 100%. Siap melanjutkan ke perancangan dan implementasi fitur **Mask Correction Tool (FR-12)** sebagai bagian akhir dari spesifikasi M6.
 
 ## Working components
 
@@ -33,21 +37,21 @@ Implementasi UI kontrol frontend M6 selesai dan terverifikasi bersih. Siap untuk
 - FastAPI `LocalStylizer` lazy-loaded dengan loader `ClonedOffloadedWeightsLoader` CPU FP32.
 - UI Frontend Pixel Art Studio / Stylization lengkap dengan preset prompt, ukuran, polling serial, dan preview transparansi.
 - Pengujian kontrak 103/103 PASS, FastAPI 14/14 PASS, SCHP CPU PASS, Extractor PASS, Pixelation 7/7 PASS, Frontend build PASS.
+- Headless browser smoke test 13/13 stages PASS (17s).
 - Inferensi SD15 nyata via Express backend terbukti mampu selesai 100% dalam 72.2 detik (D-042).
 
 ## Modified files
 
-- `frontend/index.html` — Kontrol UI dan template kartu objek AI Stylization (M6).
-- `frontend/src/extraction-workspace.js` — Logika event, request stylize, polling serial, pembatalan, dan rendering hasil.
-- `docs/DECISIONS.md` — D-042 dicatat.
-- `docs/PROGRESS.md` — Log verifikasi build frontend dan regresi backend diperbarui.
-- `docs/HANDOFF.md` — Status handoff disinkronkan dengan penyelesaian UI M6.
+- `.gitignore` — Tambahkan `.playwright-mcp/` ke daftar abaikan Git.
+- `docs/DECISIONS.md` — D-043 dicatat.
+- `docs/PROGRESS.md` — Log verifikasi browser smoke test diperbarui.
+- `docs/HANDOFF.md` — Status handoff disinkronkan dengan hasil pengujian browser.
+- Scratch files: `brain/.../scratch/smoke_browser_m6.mjs` & `proof_smoke_m6_ui.png`.
 
 ## Uncommitted changes / Git status
 
 - Working tree memuat modifikasi pada:
-  - `frontend/index.html`
-  - `frontend/src/extraction-workspace.js`
+  - `.gitignore`
   - `docs/DECISIONS.md`
   - `docs/PROGRESS.md`
   - `docs/HANDOFF.md`
@@ -55,19 +59,20 @@ Implementasi UI kontrol frontend M6 selesai dan terverifikasi bersih. Siap untuk
 
 ## Current errors / limitations
 
-- Batas Commit Limit OS saat ini (14.81 GiB) dengan commit dasar OS/aplikasi (~5.5–6.0 GiB) menyisakan CommitAvail ~8.8–9.3 GiB, yang berpotensi menyentuh batas guard 1 GiB saat UNet forward pass jika ada beban memori lain. Penambahan Virtual Memory Windows (+4–8 GB Paging File di Drive D:) sangat disarankan untuk stabilitas operasional harian.
-- Fitur interaktif mask correction (M6) belum diimplementasikan.
+- Batas Commit Limit OS saat ini (14.81 GiB) dengan commit dasar OS/aplikasi (~5.5–6.0 GiB) menyisakan CommitAvail ~8.8–9.3 GiB, yang berpotensi menyentuh batas guard 1 GiB saat UNet forward pass jika ada beban memori lain. Penambahan Virtual Memory Windows (+4–8 GB Paging File di Drive D:) disarankan jika pengguna ingin menjalankan inferensi AI SD15 rutin.
+- Fitur interaktif mask correction (FR-12) belum diimplementasikan.
 
 ## Tests / checks performed
 
-- **PASS:** `npm run build --prefix frontend` — Vite 8.3.8 membangun bundle produksi bersih (7 modules transformed, 256ms).
-- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — 103/103 tests PASS (16.879s).
-- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14 tests PASS (17.398s).
-- **PASS:** `node --test backend/test/pixelation.test.js` — 7/7 tests PASS (0.669s).
+- **PASS:** Automated Headless Browser Smoke Test (`smoke_browser_m6.mjs`) — 13/13 stages PASS dalam 17 detik (0 console error); screenshot `scratch/proof_smoke_m6_ui.png` tersimpan.
+- **PASS:** `npm run build --prefix frontend` — Vite build PASS.
+- **PASS:** `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` — 103/103 tests PASS.
+- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14 tests PASS.
+- **PASS:** `node --test backend/test/pixelation.test.js` — 7/7 tests PASS.
 
 ## Next action (only one)
 
-Verifikasi interaktif end-to-end frontend di browser (atau penyesuaian Paging File Windows jika ingin menjalankan live inferensi rutin), sebelum melanjutkan ke fitur mask correction atau hardening M7.
+Rancang dan implementasikan fitur interaktif koreksi mask manual (FR-12: canvas brush/eraser editor untuk menyempurnakan siluet objek hasil ekstraksi) sebelum lanjut ke milestone M7.
 
 ## Handoff rules
 

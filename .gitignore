@@ -14,3 +14,4 @@ ai-service/models/
 *.pth
 *.ckpt
 *.safetensors
+.playwright-mcp/

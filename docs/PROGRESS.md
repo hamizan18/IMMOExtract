@@ -5,9 +5,9 @@
 ## Ringkasan
 
 - **Current milestone:** M6 — AI Stylization dan koreksi mask — In progress.
-- **Current task:** Implementasi komponen kontrol UI frontend Pixel Art Studio / Stylization (M6 UI) selesai. Template kartu objek dan workspace extraction telah terintegrasi dengan endpoint Express stylization dan polling serial.
-- **Overall status:** Satu FIFO ekstraksi/stylization, timeout dan URL generatif terpisah, polling serta preview/unduhan snapshot privat terintegrasi dan fungsional. UI kontrol per objek tersedia dengan pembatalan request (AbortController) dan preview hasil.
-- **Last verification:** 2026-11-21 — Frontend build PASS (256ms); Backend test suite 103/103 PASS (16.88s); AI API 14/14 PASS (17.40s); Pixelation 7/7 PASS (0.67s).
+- **Current task:** Verifikasi Automated Headless Browser Smoke Test untuk Komponen UI Pixel Art Studio / Stylization (M6 UI) selesai (D-043). 13/13 tahapan uji browser end-to-end PASS 100% tanpa error console; bukti screenshot `scratch/proof_smoke_m6_ui.png` tersimpan.
+- **Overall status:** Satu FIFO ekstraksi/stylization, timeout dan URL generatif terpisah, polling serta preview/unduhan snapshot privat terintegrasi dan fungsional. UI kontrol M6 per objek terverifikasi di browser nyata via CDP.
+- **Last verification:** 2026-11-21 — Automated Headless Browser Smoke Test 13/13 PASS (17s, 0 console error); Frontend build PASS (256ms); Backend test suite 103/103 PASS (16.88s); AI API 14/14 PASS (17.40s); Pixelation 7/7 PASS (0.67s).
 
 ## Milestone
 
@@ -18,7 +18,7 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | In progress; backend contract PASS, real E2E tertunda | FastAPI nyata teruji; antrean/snapshot Express 103 tes PASS; smoke SD15 backend dihentikan guard resource, UI/mask belum tersedia |
+| M6 | AI stylization lokal dan koreksi mask | In progress; backend & UI M6 PASS | FastAPI nyata teruji; antrean/snapshot Express 103 tes PASS; UI M6 browser smoke 13/13 PASS; fitur koreksi mask berikutnya |
 | M7 | Selective ZIP, spritesheet statis, hardening, docs | ⬜ Not started | Regression tests dan panduan jalankan diverifikasi |
 
 ## Completed
@@ -425,6 +425,7 @@ Selesaikan smoke Express→SD15 nyata setelah pengguna menyatakan siap dan mengi
 | 2026-11-21 | `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js` | PASS regresi | 103/103 tests PASS, 0 fail, 0 skip (16.879s); seluruh kontrak Express/FastAPI tetap stabil |
 | 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS regresi | 14/14 tests PASS (17.398s); ekstraksi SCHP dan validasi parameter stylization PASS |
 | 2026-11-21 | `node --test backend/test/pixelation.test.js` | PASS regresi | 7/7 tests PASS (0.669s); seluruh fungsi Classic Pixelation M5 tetap stabil |
+| 2026-11-21 | Automated Headless Browser Smoke Test M6 UI (`smoke_browser_m6.mjs`) | PASS 13/13 stages (17s) | Chrome headless via CDP: navigasi, health check, upload fixture, ekstraksi 2 objek, kartu M6 controls, form locking, serial polling, preview 100×100 ter-load, attachment download valid, reset cleanup, 0 console error; screenshot tersimpan di `scratch/proof_smoke_m6_ui.png` (26.490 byte) |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

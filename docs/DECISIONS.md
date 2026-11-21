@@ -680,3 +680,31 @@ vae/config.json
   4. **Solusi Rekomendasi:** Menambah ukuran Virtual Memory / Paging File Windows sebesar 4–8 GB (misal pada Drive D: yang memiliki 24 GiB ruang bebas) akan menaikkan Commit Limit ke ~19–22 GiB dan CommitAvail ke ~13–15 GiB, menghilangkan risiko terpicunya watchdog guard selamanya.
 - **Next single task:** Sarankan pengguna menyesuaikan Paging File Windows (+4–8 GB di Drive D:), lalu jalankan ulang verifikasi akhir end-to-end; atau lanjutkan persiapan komponen UI Pixel Art Studio (M6 UI).
 
+## D-043 — Verifikasi Automated Headless Browser Smoke Test untuk Komponen UI Pixel Art Studio / Stylization (M6 UI)
+
+- **Tanggal:** 2026-11-21.
+- **Status:** Verified / Accepted.
+- **Latar Belakang:** Menyusul implementasi komponen kontrol UI M6 pada commit `78a804a`, verifikasi otomatis end-to-end browser diperlukan untuk membuktikan integritas visual, DOM rendering, form locking, serial polling, preview transparansi, dan unduhan aset tanpa regresi.
+- **Metodologi Pengujian:**
+  - Script mandiri `smoke_browser_m6.mjs` dijalankan dengan Node.js 22 murni via WebSocket Chrome DevTools Protocol (CDP) langsung ke binary Chromium/Chrome headless (`--headless=new`, `--remote-debugging-port=0`, `--no-sandbox`).
+  - Express backend dan frontend static proxy dijalankan pada port loopback ephemeral terisolasi.
+  - Mock AI Client mengeksekusi pipeline ekstraksi dan stylization secara deterministik dengan validasi ketat dimensi, saluran RGBA, dan exact alpha preservation.
+- **Hasil Pengujian Aktual (13/13 Tahapan Lulus 100%):**
+  1. Boot Express backend loopback PASS.
+  2. Boot Frontend static server & API proxy PASS.
+  3. Launch headless browser via CDP & WebSocket DevTools handshake PASS.
+  4. Navigasi ke frontend (`IMMOExtract — Ekstraksi Objek`) PASS.
+  5. UI Service health check (Backend: "Terhubung.") PASS.
+  6. Upload fixture sintetis 200×300 via `#image-input` dan aktivasi tombol ekstrak PASS.
+  7. Ekstraksi objek menghasilkan 2 kartu (Foreground human + Upper-clothes) PASS.
+  8. Verifikasi elemen kartu objek M6: judul `AI Pixel Art Stylization (M6)`, opsi preset (`pixel-art`, `retro-rpg`, `game-boy`), opsi ukuran (`128`, `256`), tombol aksi `Stylize (AI)`, container hasil `hidden`, dan accessible label (`aria-label`, `aria-live="polite"`) PASS.
+  9. Interaksi AI Stylization: pemilihan preset `retro-rpg`, penguncian kontrol input (disabled) selama proses aktif, polling serial progres, hingga status "AI Stylization selesai! Siap diunduh." PASS.
+  10. Render preview hasil pada `[data-stylize-image]` ter-load penuh (`naturalWidth: 100`), teks info metadata `100 × 100 piksel — Preset: retro-rpg dalam 0.3s`, tombol unduh ber-href `/download` dengan nama file UUID `.png`, kontrol input kembali aktif (enabled) PASS.
+  11. Pengunduhan langsung via context browser fetch mengembalikan HTTP 200, `Content-Type: image/png`, `Content-Disposition: attachment; filename="...png"` PASS.
+  12. Siklus hidup reset (`#clear-image`) membersihkan seluruh kartu galeri (`length === 0`) PASS.
+  13. Inspeksi browser console mencatat **0 errors**, dan screenshot bukti visual tersimpan di `scratch/proof_smoke_m6_ui.png` (26.490 byte). Seluruh proses dan server dibersihkan otomatis.
+- **Konsekuensi:**
+  - Komponen antarmuka frontend untuk M6 Pixel Art Studio / Stylization terbukti 100% stabil, fungsional, dan aksesibel di lingkungan browser nyata.
+  - Tahap M6 berikutnya dapat dilanjutkan ke perancangan fitur **Mask Correction Tool** (FR-12).
+- **Next single task:** Rancang dan implementasikan fitur interaktif koreksi mask manual (FR-12) pada kanvas ekstraksi sebelum masuk ke tahap pixelation/stylization.
+
