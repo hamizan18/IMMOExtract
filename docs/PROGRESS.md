@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047. Bug klik tunggal penghapus mask dari penerimaan 2026-11-22 kini diperbaiki dan terverifikasi. Penerimaan tetap terbatas; kuas Pulihkan dan kualitas foto nyata belum tercakup oleh perbaikan ini.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047. Klik penghapus dan kuas Pulihkan kini diperbaiki serta terverifikasi melalui browser. Penerimaan tetap terbatas: fixture sintetis/AI mock pada regresi mask bukan bukti kualitas foto nyata atau SD15.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Perbaikan klik tunggal penghapus mask selesai; berikutnya verifikasi kuas Pulihkan terhadap piksel foto sumber.
-- **Overall status:** Penghapus memakai disk arc/fill ketika kedua titik identik; stroke drag tidak diubah. Regresi browser memeriksa radius klik, Undo, drag dan PNG hasil save.
-- **Last verification:** 2026-11-22 — `npm run build --prefix frontend` PASS (188 ms); harness browser PASS sebelum dan sesudah dipindahkan dari scratch ke `scripts/smoke_browser_m7.mjs`. Harness memakai AI mock, frontend produksi dan backend nyata; bukan inferensi AI baru.
+- **Current task:** Perbaikan kuas Pulihkan selesai; berikutnya selaraskan README/ARCHITECTURE dengan status dan batas bukti aktual.
+- **Overall status:** Penghapus dan Pulihkan memiliki regresi klik/drag/Undo/save. Pulihkan memakai clip lingkaran/kapsul dan komposisi `copy` agar RGB/alpha sumber menggantikan piksel hanya pada area kuas, tanpa stroke hitam atau penumpukan alpha.
+- **Last verification:** 2026-11-22 — reproduksi Pulihkan FAIL sebelum perbaikan; build frontend PASS (126 ms); `node scripts/smoke_browser_m7.mjs` final PASS (5,98 s). Harness memakai AI mock, browser dan backend nyata.
 
 ## Milestone
 
@@ -18,8 +18,8 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | Implemented; bug klik penghapus diperbaiki | Regresi browser 2026-11-22 membuktikan klik/radius, Undo, drag dan PNG tersimpan; kuas Pulihkan belum tercakup. SD15 tidak diuji ulang |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Bukti SCHP nyata dari sesi sebelumnya; harness permanen kini menguji regresi penghapus serta spritesheet/reset dengan AI mock |
+| M6 | AI stylization lokal dan koreksi mask | Implemented; bug penghapus/Pulihkan diperbaiki | Regresi browser 2026-11-22 membuktikan klik, drag horizontal/diagonal, Undo, sumber RGB/alpha, offset crop dan PNG tersimpan. SD15 tidak diuji ulang |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Harness mask + spritesheet/reset PASS dengan AI mock; narasi README/ARCHITECTURE perlu diselaraskan dengan bukti terkini |
 
 ## Completed
 
@@ -164,14 +164,17 @@
 - Reset mengosongkan galeri, menyembunyikan spritesheet dan menonaktifkan ekstraksi; nol console/runtime error aplikasi. Tab dan tiga layanan uji dihentikan; fixture, storage temporary dan empat file unduhan uji dibersihkan. Storage/foto pengguna tidak disentuh; tanpa commit atau perubahan source/dependensi.
 - Perbaikan klik tunggal penghapus (2026-11-22, sesi lanjutan): `drawStroke()` memakai disk arc/fill berjari-jari brush/2 dengan `destination-out` ketika kedua titik sama; stroke drag, Undo dan kontrak save tidak diubah. Regresi Chrome/CDP membuktikan alpha pusat/dalam radius 0, luar radius 255, Undo mengembalikan 255, drag tetap bekerja dan PNG unduhan mempertahankan hasil klik.
 - Harness existing dipindahkan dari `scratch/smoke_browser_m7.mjs` (ignored) ke `scripts/smoke_browser_m7.mjs` agar regresi dapat disimpan bersama source; tidak ada duplikasi/shim. Folder output scratch dibuat bila belum ada. Build dan harness pada lokasi baru PASS; AI mock + backend nyata, storage temporary. Tidak ada perubahan dependensi atau keputusan arsitektur.
+- Perbaikan kuas Pulihkan (2026-11-22, sesi lanjutan): regresi baru membuktikan klik tidak memulihkan piksel (actual `[0,0,0,0]`, sumber `[100,150,240,255]`). Implementasi lama memanggil stroke lalu clip pada garis terbuka; clip memakai area isi path, bukan lebar stroke.
+- Pulihkan kini membentuk clip lingkaran untuk klik dan kapsul untuk drag, lalu menggambar crop sumber dengan komposisi `copy`. Tidak menggambar stroke berwarna; alpha sumber diganti, bukan ditumpuk. Kontrak bbox, Undo dan endpoint save tetap sama. D-044 diperjelas, tanpa arsitektur/dependensi baru.
+- Regresi fixture gradien/alpha parsial membuktikan RGB/alpha sumber, batas kuas, Undo, drag horizontal/diagonal, alpha tidak menumpuk pada sapuan ulang, sumber transparan tidak menjadi hitam, offset bbox objek crop serta hasil PNG tersimpan. Piksel acuan dinormalisasi lewat Canvas karena premultiplied-alpha dapat membulatkan RGB transparansi parsial; bukan klaim byte RGB asli selalu identik.
 
 ## In progress
 
-- Penerimaan lokal pascapenutupan D-047: bug klik penghapus selesai. Tugas berikutnya memverifikasi kuas Pulihkan terhadap piksel foto sumber, tanpa fitur atau milestone baru.
+- Selaraskan narasi README/ARCHITECTURE dengan implementasi dan batas pengujian aktual; kedua bug mask yang ditemukan telah diperbaiki. Tidak membuka milestone atau fitur baru.
 
 ## Blockers / risks
 
-- **Temuan 2026-11-22 — RESOLVED:** klik tunggal penghapus sebelumnya tidak mengubah alpha. Perbaikan disk arc/fill lulus regresi browser (klik/radius, Undo, drag dan PNG tersimpan). Kuas Pulihkan tidak diubah atau diuji pada perbaikan ini.
+- **Temuan mask 2026-11-22 — RESOLVED:** klik penghapus dan kuas Pulihkan kini lulus regresi browser terarah. Batas bukti: fixture sintetis, pixel probes interior/luar brush, crop dan PNG tersimpan; tepi kuas mengikuti antialiasing Canvas.
 - **Batas bukti terbaru:** fixture sintetis, bukan foto manusia nyata; kamera dan SD15 tidak dijalankan. RAM available 1,36 GiB dan commit available 6,44 GiB sebelum startup; SD15 tidak dimuat untuk menghindari risiko resource yang sudah tercatat.
 
 - Latensi ekstraksi live HTTP terukur ~1.82–2.20 detik per gambar pada AMD Ryzen 5 7430U dengan ukuran RAM model ~255 MB; inferensi dan post-processing CPU terbukti sangat responsif dan tidak membebani memori laptop.
@@ -196,7 +199,7 @@
 
 ## Next task — satu tugas saja
 
-Verifikasi kuas Pulihkan: setelah penghapusan, klik dan drag harus mengembalikan RGB/alpha foto sumber hanya pada area brush; Undo dan PNG unduhan setelah save harus sesuai. Gunakan fixture lokal/harness browser tanpa memuat SD15. Pengujian penghapus bukan bukti kuas Pulihkan lulus.
+Selaraskan README dan ARCHITECTURE dengan status implementasi/penerimaan aktual: hapus pernyataan fitur yang sudah ada sebagai belum tersedia, pertahankan batas resource SD15/retensi/kualitas foto nyata, dan bedakan tes AI mock dari inferensi nyata. Gunakan bukti PROGRESS/HANDOFF tanpa mengulang suite luas.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -460,6 +463,12 @@ Verifikasi kuas Pulihkan: setelah penghapusan, klik dan drag harus mengembalikan
 | 2026-11-22 | `npm run build --prefix frontend && node scratch/smoke_browser_m7.mjs` | PASS | Build 188 ms; browser menguji klik penghapus, area dalam/luar radius, Undo, drag dan alpha PNG tersimpan; spritesheet/reset existing tetap lulus. AI mock, bukan inferensi |
 | 2026-11-22 | `node scripts/smoke_browser_m7.mjs` setelah pemindahan harness dan mkdir output | PASS | Regresi klik/Undo/drag/save serta spritesheet/reset lulus dari lokasi permanen; durasi perintah 4,99 s. Browser/server/storage terisolasi |
 | 2026-11-22 | Kuas Pulihkan, SCHP/SD15 nyata, kamera, suite backend/Python | NOT RUN | Di luar perbaikan penghapus; tidak ada perubahan backend/model. Bukti inferensi nyata sesi sebelumnya tetap historis |
+| 2026-11-22 | Sesi Pulihkan: `git status --short; git diff --stat; git diff; git diff --cached --stat` | PASS inspeksi | Working tree/index bersih sebelum perubahan; perbaikan penghapus sebelumnya sudah tersedia |
+| 2026-11-22 | `node scripts/smoke_browser_m7.mjs` sebelum perbaikan Pulihkan | FAIL aplikasi / repro | Klik restore tetap RGBA `[0,0,0,0]`, seharusnya `[100,150,240,255]`; regresi penghapus sebelumnya tetap PASS |
+| 2026-11-22 | `npm run build --prefix frontend && node scripts/smoke_browser_m7.mjs` setelah perbaikan | Build PASS; ERROR harness | Build 126 ms. Semua probe foreground, alpha berulang dan bbox lulus; probe luar drag membaca y=100 pada crop tinggi 100 sehingga di luar kanvas. Tes diperbaiki ke y=95, masih di luar kuas |
+| 2026-11-22 | `node scripts/smoke_browser_m7.mjs` dengan koordinat tes terkoreksi | PASS | 5,98 s; Pulihkan klik/drag horizontal/diagonal, RGB/alpha sumber, bounds, Undo, alpha berulang, bbox dan PNG save; penghapus dan spritesheet/reset existing tetap lulus |
+| 2026-11-22 | Python socket `connect_ex` pada enam port kedua server dari tiga run | PASS cleanup | Semua listener uji sudah tertutup |
+| 2026-11-22 | SCHP/SD15 nyata, kamera, suite backend/Python | NOT RUN | Perubahan terbatas frontend mask dan regresi browser dengan AI mock; tidak ada perubahan backend/model |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

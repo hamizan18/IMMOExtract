@@ -627,8 +627,19 @@ function drawStroke(p1, p2) {
       maskCtx.stroke();
     }
   } else if (tool === 'restore' && sourceCropCanvas) {
-    maskCtx.stroke();
+    // clip() uses the filled path, not the outline produced by stroke().
+    maskCtx.beginPath();
+    if (p1.x === p2.x && p1.y === p2.y) {
+      maskCtx.arc(p1.x, p1.y, radius, 0, Math.PI * 2);
+    } else {
+      const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      maskCtx.arc(p1.x, p1.y, radius, angle + Math.PI / 2, angle + 3 * Math.PI / 2);
+      maskCtx.arc(p2.x, p2.y, radius, angle - Math.PI / 2, angle + Math.PI / 2);
+    }
+    maskCtx.closePath();
     maskCtx.clip();
+    // Replace source alpha too, including transparent pixels and repeated strokes.
+    maskCtx.globalCompositeOperation = 'copy';
     maskCtx.drawImage(sourceCropCanvas, 0, 0);
   }
   maskCtx.restore();

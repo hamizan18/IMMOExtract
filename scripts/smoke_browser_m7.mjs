@@ -18,10 +18,11 @@ async function createSourceFixture(width = 200, height = 300) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
       const isBody = x >= 50 && x <= 150 && y >= 50 && y <= 250;
-      data[idx] = isBody ? 80 : 0;
-      data[idx + 1] = isBody ? 160 : 0;
+      data[idx] = isBody ? x : 0;
+      data[idx + 1] = isBody ? y % 256 : 0;
       data[idx + 2] = isBody ? 240 : 0;
-      data[idx + 3] = isBody ? 255 : 0;
+      const translucent = x >= 80 && x < 95 && y >= 140 && y < 160;
+      data[idx + 3] = isBody ? (translucent ? 128 : 255) : 0;
     }
   }
   return sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
@@ -542,6 +543,100 @@ async function main() {
     assert.equal(corrected.data[(150 * 200 + 100) * 4 + 3], 0, 'Saved PNG retains click erasure');
     assert.equal(corrected.data[(150 * 200 + 110) * 4 + 3], 255, 'Saved PNG retains surrounding pixels');
     console.log('   PASS: eraser click radius, Undo, drag, and persisted PNG alpha.');
+
+    console.log('11c. Testing Restore brush RGB/alpha, bounds, Undo, and cropped objects...');
+    const readMaskPixel = (x, y) => pageCdp.evaluate((x, y) => {
+      return Array.from(document.querySelector('#mask-editor-canvas')
+        .getContext('2d').getImageData(x, y, 1, 1).data);
+    }, x, y);
+    // Canvas-normalized source pixels account for browser premultiplied-alpha rounding.
+    const sourcePixels = await pageCdp.evaluate(() => {
+      const image = document.querySelector('#preview-image');
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+      return [[100, 150], [90, 150], [40, 150]].map(([x, y]) =>
+        Array.from(ctx.getImageData(x, y, 1, 1).data));
+    });
+    const openMask = async (cardIndex) => {
+      await pageCdp.evaluate(index => {
+        document.querySelectorAll('#object-gallery li [data-edit-mask-button]')[index].click();
+      }, cardIndex);
+      await waitFor(() => pageCdp.evaluate(() =>
+        document.querySelector('#mask-editor-dialog').open
+          && !document.querySelector('#mask-editor-save').disabled));
+      const box = await pageCdp.evaluate(() => {
+        const c = document.querySelector('#mask-editor-canvas');
+        const r = c.getBoundingClientRect();
+        return { x: r.left, y: r.top, sx: r.width / c.width, sy: r.height / c.height };
+      });
+      return (x, y) => ({ x: box.x + x * box.sx, y: box.y + y * box.sy });
+    };
+    const selectMaskTool = tool => pageCdp.evaluate(value => {
+      document.querySelector(`input[name="mask-tool"][value="${value}"]`).click();
+    }, tool);
+    const undoMask = () => pageCdp.evaluate("document.querySelector('#mask-undo').click()");
+    const saveMask = async (cardIndex) => {
+      await pageCdp.evaluate("document.querySelector('#mask-editor-save').click()");
+      await waitFor(() => pageCdp.evaluate("!document.querySelector('#mask-editor-dialog').open"));
+      const url = await pageCdp.evaluate(index =>
+        document.querySelectorAll('#object-gallery li [data-download-original]')[index]
+          .getAttribute('href'), cardIndex);
+      const response = await fetch(`http://127.0.0.1:${backendPort}${url}`);
+      assert.equal(response.status, 200);
+      return sharp(Buffer.from(await response.arrayBuffer()))
+        .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    };
+    const pngPixel = (png, x, y) => Array.from(
+      png.data.subarray((y * png.info.width + x) * 4, (y * png.info.width + x) * 4 + 4),
+    );
+    const foregroundPoint = await openMask(0);
+    await selectMaskTool('restore');
+    await eraseGesture(foregroundPoint(100, 150));
+    assert.deepEqual(await readMaskPixel(100, 150), sourcePixels[0], 'Restore click recovers source RGBA');
+    await undoMask();
+    assert.equal(await readMaskAlpha(100, 150), 0, 'Undo restore click recovers erased mask');
+    await selectMaskTool('eraser');
+    await eraseGesture(foregroundPoint(60, 150), foregroundPoint(140, 150));
+    await selectMaskTool('restore');
+    await eraseGesture(foregroundPoint(100, 150));
+    assert.deepEqual(await readMaskPixel(100, 150), sourcePixels[0]);
+    assert.equal(await readMaskAlpha(110, 150), 0, 'Restore click leaves outside radius erased');
+    await undoMask();
+    await eraseGesture(foregroundPoint(80, 150), foregroundPoint(120, 150));
+    assert.deepEqual(await readMaskPixel(100, 150), sourcePixels[0], 'Drag restores RGB, not black stroke');
+    assert.deepEqual(await readMaskPixel(90, 150), sourcePixels[1], 'Drag restores source partial alpha');
+    assert.equal(await readMaskAlpha(70, 150), 0, 'Restore drag preserves outside its capsule');
+    await undoMask();
+    assert.equal(await readMaskAlpha(100, 150), 0, 'Undo restore drag recovers erased band');
+    await eraseGesture(foregroundPoint(80, 150), foregroundPoint(120, 150));
+    await eraseGesture(foregroundPoint(80, 150), foregroundPoint(120, 150));
+    assert.deepEqual(await readMaskPixel(90, 150), sourcePixels[1], 'Repeated restore must not accumulate alpha');
+    await eraseGesture(foregroundPoint(40, 150));
+    assert.deepEqual(await readMaskPixel(40, 150), sourcePixels[2], 'Transparent source must not paint black');
+    const restoredForeground = await saveMask(0);
+    assert.deepEqual(pngPixel(restoredForeground, 100, 150), sourcePixels[0]);
+    assert.deepEqual(pngPixel(restoredForeground, 90, 150), sourcePixels[1]);
+    assert.deepEqual(pngPixel(restoredForeground, 40, 150), sourcePixels[2]);
+    assert.equal(pngPixel(restoredForeground, 70, 150)[3], 0);
+    const categoryPoint = await openMask(1);
+    const categoryOriginal = await readMaskPixel(50, 80);
+    await eraseGesture(categoryPoint(50, 80));
+    assert.deepEqual(await readMaskPixel(50, 80), sourcePixels[0], 'Cropped object uses source bbox offset');
+    assert.deepEqual(await readMaskPixel(60, 80), categoryOriginal, 'Outside cropped brush remains unchanged');
+    await undoMask();
+    assert.deepEqual(await readMaskPixel(50, 80), categoryOriginal);
+    await eraseGesture(categoryPoint(30, 60), categoryPoint(70, 100));
+    assert.deepEqual(await readMaskPixel(50, 80), sourcePixels[0], 'Diagonal drag restores source');
+    assert.deepEqual(await readMaskPixel(50, 95), categoryOriginal, 'Diagonal drag leaves outside unchanged');
+    const restoredCategory = await saveMask(1);
+    assert.equal(restoredCategory.info.width, 100);
+    assert.equal(restoredCategory.info.height, 100);
+    assert.deepEqual(pngPixel(restoredCategory, 50, 80), sourcePixels[0]);
+    assert.deepEqual(pngPixel(restoredCategory, 50, 95), categoryOriginal);
+    console.log('   PASS: Restore click/drag, source RGBA, bounds, Undo, repeated alpha, bbox and saved PNG.');
 
     // 12. Screenshot proof
     console.log('12. Capturing proof screenshot...');

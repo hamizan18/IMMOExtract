@@ -1,59 +1,59 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** ikuti konteks AGENTS dan dokumen proyek. Implementasi M1–M7 ditutup D-047; penerimaan belum membuktikan seluruh fitur bebas bug. Temuan klik tunggal penghapus kini selesai.
+> **Untuk agent berikutnya:** ikuti konteks AGENTS dan dokumen proyek. Implementasi M1–M7 ditutup D-047; kedua temuan mask (klik penghapus dan kuas Pulihkan) kini diperbaiki. Regresi mask dengan AI mock bukan bukti seluruh MVP bebas bug.
 
 ## Last agent
 
-OMP — perbaikan klik tunggal penghapus mask dan regresi browser, 2026-11-22.
+OMP — verifikasi dan perbaikan kuas Pulihkan, 2026-11-22.
 
 ## Current milestone / task
 
-M7 — penerimaan lokal pascapenutupan implementasi. Perbaikan klik penghapus selesai; berikutnya verifikasi kuas Pulihkan. Tidak ada fitur/milestone baru.
+M7 — penerimaan lokal pascapenutupan implementasi. Perbaikan Pulihkan selesai; berikutnya sinkronisasi status README/ARCHITECTURE. Tidak ada fitur/milestone baru.
 
 ## Last completed task
 
-- Git awal/index bersih; source mask dan D-044 diperiksa. LSP tidak dikonfigurasi.
-- `drawStroke()` pada penghapus kini menggambar disk arc/fill berjari-jari brush/2 dengan `destination-out` untuk dua titik identik. Stroke drag, Undo, save dan backend tidak diubah.
-- Regresi menggunakan event mouse CDP asli, pemeriksaan piksel Canvas dan decode PNG dari endpoint download lewat Sharp.
-- Harness existing dipindahkan dari ignored `scratch/smoke_browser_m7.mjs` ke `scripts/smoke_browser_m7.mjs` agar regresi dapat disimpan bersama source. Tanpa duplikasi/shim; folder output scratch dibuat bila belum ada.
-- Harness memakai AI mock + frontend produksi + backend nyata, fixture/storage temporary dan browser terisolasi. Ini bukan inferensi SCHP/SD15 baru.
+- Git awal/index bersih; kontrak D-044 dan source mask diperiksa. LSP tidak dikonfigurasi.
+- Regresi baru membuktikan kegagalan klik restore: piksel tetap `[0,0,0,0]`, bukan RGBA sumber `[100,150,240,255]`.
+- Penyebab: `clip()` memakai area isi path, bukan outline `stroke()` pada garis terbuka. Pulihkan kini membentuk lingkaran saat klik/kapsul saat drag, lalu menyalin crop sumber dengan komposisi `copy`.
+- Komposisi tersebut mengganti alpha sumber, termasuk transparan/parsial, tanpa stroke hitam atau alpha menumpuk pada sapuan ulang. Bbox, Undo, save dan backend tidak diubah.
+- Regresi memakai event mouse CDP, Canvas nyata, backend nyata dan decode PNG Sharp; AI mock dengan fixture gradien/alpha parsial, bukan inferensi SCHP/SD15.
 
 ## Verified behavior
 
-- Foreground fixture 200×300, brush 15 px: klik (100,150) mengubah alpha pusat dan (104,150) menjadi 0; titik luar radius (110,150) tetap 255.
-- Undo mengembalikan alpha pusat 255; drag melintasi pusat menghapus alpha dan dapat di-Undo.
-- Klik berikutnya dan save menghasilkan PNG unduhan 200×300 dengan alpha pusat 0 serta piksel luar radius 255.
-- Alur existing spritesheet semua/pilihan, atlas, endpoint unduhan HTTP, reset dan pemeriksaan console tetap PASS.
-- Bukti SCHP nyata ada pada log sesi penerimaan sebelumnya di PROGRESS; tidak dijalankan ulang.
+- Klik Pulihkan mengembalikan RGB/alpha foto sumber, sementara area luar radius tetap terhapus. Undo mengembalikan mask sebelumnya.
+- Drag horizontal/diagonal memulihkan area kuas saja; alpha parsial tetap sama pada sapuan ulang dan sumber transparan tidak menjadi hitam.
+- Objek crop memakai offset bbox yang benar. PNG foreground dan crop yang diunduh setelah save sesuai piksel hasil koreksi; area luar kuas tetap utuh.
+- Acuan RGBA berasal dari Canvas foto sumber: transparansi parsial dapat membulatkan RGB akibat premultiplied-alpha. Tepi kuas mengikuti antialiasing; tidak mengklaim seluruh byte RGB file asli identik.
+- Regresi penghapus serta alur spritesheet semua/pilihan, atlas, unduhan HTTP, reset dan pemeriksaan console existing tetap PASS.
 
 ## Modified files / uncommitted changes
 
-- `frontend/src/extraction-workspace.js` — disk penghapus untuk titik identik.
-- `scripts/smoke_browser_m7.mjs` — harness existing dari scratch, regresi penghapus dan mkdir output; berkas baru di lokasi yang tidak diabaikan Git.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — status aktual dan bukti verifikasi.
+- `frontend/src/extraction-workspace.js` — clip lingkaran/kapsul dan komposisi copy untuk Pulihkan.
+- `scripts/smoke_browser_m7.mjs` — fixture gradien/alpha parsial dan regresi Pulihkan/crop/PNG tersimpan.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md`, `docs/DECISIONS.md` — bukti aktual, tugas berikutnya dan klarifikasi mekanisme D-044.
 - Artefak ignored: build `frontend/dist/` dan screenshot `scratch/proof_smoke_m7_spritesheet.png` diperbarui.
 - Git awal bersih. Tidak staging/commit atau memeriksa Git ulang setelah edit; daftar di atas berdasarkan operasi sesi.
-- Tidak ada perubahan dependensi, backend, model atau keputusan arsitektur; DECISIONS tidak diubah.
+- Tidak ada perubahan dependensi, backend, model atau arsitektur service. D-044 diperbarui sesuai mekanisme kuas yang diperbaiki.
 
 ## Tests / checks performed
 
 - **PASS:** `git status --short; git diff --stat; git diff; git diff --cached --stat` sebelum edit.
-- **PASS:** `npm run build --prefix frontend && node scratch/smoke_browser_m7.mjs` sebelum pemindahan harness. Build tujuh modul dalam 188 ms; regresi penghapus dan spritesheet/reset lulus.
-- **PASS:** `node scripts/smoke_browser_m7.mjs` setelah pemindahan dan mkdir output (4,99 s). Log: `PASS: eraser click radius, Undo, drag, and persisted PNG alpha.`
-- Screenshot harness tersedia di `scratch/proof_smoke_m7_spritesheet.png`; bukti mask berupa piksel Canvas dan PNG dari server, bukan hanya screenshot.
-- **NOT RUN:** kuas Pulihkan, SCHP/SD15 nyata, kamera, suite backend/Python; tidak diperlukan untuk perubahan lokal penghapus.
-- Harness menutup server/browser dan membersihkan direktori temporary di finally; storage pengguna tidak disentuh.
+- **FAIL / repro:** `node scripts/smoke_browser_m7.mjs` sebelum perbaikan: klik restore tetap RGBA nol.
+- **PASS build:** `npm run build --prefix frontend` (126 ms). Run browser sesudahnya mencapai probe crop, lalu **ERROR harness**: probe y=100 di luar crop tinggi 100; diperbaiki ke y=95 yang valid dan tetap di luar kuas.
+- **PASS final:** `node scripts/smoke_browser_m7.mjs` (5,98 s). Log: `PASS: Restore click/drag, source RGBA, bounds, Undo, repeated alpha, bbox and saved PNG.` Penghapus/spritesheet/reset juga lulus.
+- **NOT RUN:** SCHP/SD15 nyata, kamera dan suite backend/Python. Perubahan lokal frontend; AI mock tidak diklaim sebagai AI nyata.
+- **PASS cleanup:** socket checks memastikan semua enam port server dari tiga run tertutup. Harness memakai temporary storage; storage pengguna tidak disentuh. Screenshot generated ada di scratch; bukti mask utama adalah piksel Canvas/PNG.
 
 ## Current errors / limitations
 
-- **RESOLVED:** klik tunggal penghapus tidak lagi memakai stroke panjang nol; radius, Undo, drag dan PNG tersimpan terbukti.
-- Kuas Pulihkan tidak diubah atau diuji. Jangan menganggap pengujian penghapus membuktikan restore.
+- **RESOLVED:** penghapus klik dan kuas Pulihkan. RGB/alpha, area kuas, Undo, crop serta PNG tersimpan lulus regresi terarah.
+- Batas Canvas: normalisasi premultiplied-alpha dapat membulatkan RGB parsial dan tepi kuas memakai antialiasing; pengujian membandingkan dengan foto sumber yang dirender Canvas.
 - Fixture sintetis/AI mock bukan bukti kualitas foto nyata. SD15 tetap memiliki risiko memori/latensi historis; tidak dimuat.
 - Retensi otomatis belum tersedia. Beberapa narasi historis README/ARCHITECTURE merujuk tahap lama; gunakan bukti terbaru.
 
 ## Next action (only one)
 
-Verifikasi kuas Pulihkan: setelah penghapusan area, klik dan drag harus mengembalikan RGB/alpha foto sumber hanya pada area brush. Periksa Undo dan PNG unduhan setelah save. Gunakan `scripts/smoke_browser_m7.mjs`/fixture lokal tanpa SD15. Bila gagal, catat piksel dan penyebab sebelum memperbaiki.
+Selaraskan README dan ARCHITECTURE dengan status implementasi/penerimaan terbaru. Hapus narasi fitur yang sudah tersedia sebagai belum tersedia, pertahankan batas SD15/retensi/kualitas foto nyata, dan bedakan AI mock dari inferensi nyata. Gunakan bukti PROGRESS/HANDOFF; tidak perlu suite luas atau memuat model.
 
 ## Handoff rules
 

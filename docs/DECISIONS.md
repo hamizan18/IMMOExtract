@@ -722,7 +722,7 @@ vae/config.json
        - Tombol **Undo** (riwayat kanvas berbasis stack `ImageData` hingga 20 langkah).
        - Tombol **Reset** (mengembalikan kanvas ke siluet awal saat dialog dibuka).
        - Tombol **Batal** dan **Simpan Koreksi**.
-     - **Mekanisme Kuas Pulihkan (Restore Brush):** Memanfaatkan `#preview-image` (foto asli) yang di-crop sesuai bounding box objek `object.bbox` ke kanvas offscreen. Saat kuas digerakkan, path kuas di-`clip()` pada canvas 2D dan foto crop di-render via `drawImage()`, menghasilkan restorasi piksel asli 100% instan tanpa beban model AI tambahan.
+     - **Mekanisme Kuas Pulihkan (Restore Brush), diperbaiki 2026-11-22:** Foto sumber di-crop menurut `object.bbox` ke kanvas offscreen. Klik menggunakan path lingkaran, drag menggunakan kapsul berujung bulat; path tertutup menjadi `clip()`. `drawImage()` dengan `globalCompositeOperation = 'copy'` mengganti RGB/alpha sumber hanya di dalam kuas, tanpa stroke hitam atau penumpukan alpha. Undo/save dan kontrak API tetap. RGB pada transparansi parsial mengikuti normalisasi premultiplied-alpha browser; tepi kuas mengikuti antialiasing Canvas.
   2. **Endpoint Backend & Validasi Defensif (`PUT /api/jobs/:id/objects/:objectId`):**
      - Menerima raw binary PNG (`application/octet-stream`, `image/png`, limit 10 MB) via `manager.updateObject(jobId, objectId, buffer)`.
      - Job harus berstatus `completed` (HTTP 409 jika belum).
@@ -740,6 +740,7 @@ vae/config.json
   - `node --test backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js`: **PASS** (111/111 tests PASS dalam 7.8s).
   - `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v`: **PASS** (14/14 tests PASS dalam 9.2s).
   - `smoke_browser_m6.mjs` (Headless Chrome CDP): **PASS 100%** (13 stages), termasuk interaksi modal editor mask, sapuan kuas penghapus, tombol undo, penyimpanan ke backend via PUT, pembaruan DOM live, dan stylize AI pada objek terkoreksi.
+  - Pembuktian ulang Pulihkan (2026-11-22): `node scripts/smoke_browser_m7.mjs` awal **FAIL** pada klik (RGBA tetap nol). Setelah perbaikan, build frontend **PASS** (126 ms), regresi akhir **PASS** (5,98 s): klik/drag horizontal/diagonal, sumber RGB/alpha, area luar kuas, Undo, alpha parsial/berulang, sumber transparan, offset bbox dan PNG unduhan. AI mock + browser/backend nyata; bukan bukti inferensi AI. Satu probe tes di luar kanvas diperbaiki dari y=100 menjadi y=95 pada crop tinggi 100.
 - **Konsekuensi:**
   - Milestone M6 (AI Stylization dan Mask Correction FR-12) kini **SELESAI (COMPLETE)** dan terverifikasi penuh di Windows lokal.
   - Proyek siap melangkah ke Milestone M7 (Selective ZIP hardening, spritesheet generator statis, pembersihan, dan dokumentasi release).
