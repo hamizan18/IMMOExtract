@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** M1–M6 selesai dan memiliki bukti Windows lokal. M7 dalam proses: generator Spritesheet Statis PNG transparan dan metadata JSON Atlas (FR-13) terimplementasi di backend dan frontend serta terverifikasi 100%. Automated headless browser smoke test M7 PASS.
+> **Status aktual:** Implementasi M1–M7 dinyatakan selesai pada D-047 (2026-11-21). Verifikasi browser dengan SCHP nyata pada 2026-11-22 membuktikan alur inti, tetapi menemukan bug klik tunggal penghapus mask (FR-12). Status ini bukan klaim seluruh acceptance criteria lulus; SD15 dan kualitas foto nyata tidak diuji pada sesi terbaru.
 
 ## Ringkasan
 
-- **Current milestone:** M7 — Selective ZIP, spritesheet statis, hardening, docs — In progress.
-- **Current task:** Generator Spritesheet Statis dan Atlas JSON (FR-13) selesai dan terverifikasi penuh (D-045). Seluruh test suite backend (116/116 PASS), AI API (14/14 PASS), frontend build (118ms), dan browser CDP smoke test (13/13 PASS) terkonfirmasi lulus 100%.
-- **Overall status:** Pipeline ekstraksi M3/M4, Classic Pixelation M5, AI Stylization M6, Mask Correction Editor, dan Generator Spritesheet M7 terintegrasi. Objek dapat digabungkan ke lembar spritesheet transparan dengan konfigurasi padding dan kolom yang fleksibel.
-- **Last verification:** 2026-11-21 — Automated Headless Browser Smoke Test M7 13/13 PASS (21s, 0 console error); Frontend build PASS (118ms); Backend test suite 116/116 PASS (7.89s); AI API 14/14 PASS (10.05s); Spritesheet unit tests 4/4 PASS (212ms).
+- **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi; temuan FR-12 masih terbuka.
+- **Current task:** Verifikasi browser alur inti selesai; tindak lanjut tunggal adalah perbaikan klik tunggal penghapus mask.
+- **Overall status:** Upload → SCHP nyata → galeri/PNG → ZIP pilihan → Classic Pixelation → spritesheet/atlas berhasil pada fixture sintetis. Drag penghapus, Undo, dan penyimpanan koreksi juga berhasil; klik tunggal penghapus gagal mengubah alpha.
+- **Last verification:** 2026-11-22 — Browser terhadap Vite/Express/FastAPI nyata pada port 5174/3100/8010; enam objek, unduhan native, integritas ZIP dan pixelation, koreksi mask drag, reset, serta nol console error. SD15, kamera, foto nyata, build dan suite regresi NOT RUN pada sesi ini.
 
 ## Milestone
 
@@ -18,8 +18,8 @@
 | M3 | POC SCHP, label/mask, PNG transparan | Complete | Pipeline ekstraksi & endpoint REST FastAPI + integrasi pemanggilan dari Express backend teruji end-to-end tanpa regresi |
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
-| M6 | AI stylization lokal dan koreksi mask | Complete (Windows lokal) | FastAPI nyata teruji; antrean/snapshot Express 111 tes PASS; UI M6 browser smoke 13/13 PASS; Mask correction FR-12 canvas editor & PUT API PASS (D-031–D-044) |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | In progress | Spritesheet generator FR-13 PASS (D-045); Selective ZIP hardening & release docs berikutnya |
+| M6 | AI stylization lokal dan koreksi mask | Implemented; bug FR-12 terbuka | Bukti historis D-031–D-044 tetap tersedia; browser 2026-11-22 membuktikan drag/Undo/save, tetapi klik tunggal penghapus tidak mengubah alpha. SD15 tidak diuji ulang |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Browser dengan SCHP nyata, ZIP pilihan dan spritesheet/atlas PASS pada 2026-11-22; bukan bukti kualitas foto nyata atau keseluruhan MVP bebas bug |
 
 ## Completed
 
@@ -157,11 +157,20 @@
 - Hardening Ekspor Selective ZIP FR-08 (2026-11-21, D-046): Modul `writeZip` diperkaya dengan streaming SHA-256 checksum on-the-fly (`archive.on('data')`) tanpa pembacaan ulang disk, validasi pencegahan arsip kosong (`size > 0`), serta pengembalian `{ size, sha256 }`. Manifest privat ekspor mencakup `files_count`, `archive_size`, dan `sha256`. Penyediaan endpoint `GET /api/jobs/:id/exports/:exportId` untuk metadata ekspor publik. Unit test terdedikasi `backend/test/zip-export.test.js` memverifikasi STORE mode, integritas byte via Python `zipfile`, penolakan atomic atas missing files, dan safety konkurensi. Backend suite 119/119 PASS.
 - Penutupan Milestone M7 dan Status Rilis MVP (2026-11-21, D-047): Seluruh Functional Requirements (FR-01 s/d FR-13) telah terpenuhi dan diverifikasi 100%. Tidak ada regresi di sisi Express, FastAPI, maupun Vite UI. Workspace telah diaudit dan bebas dari artefak temporer yang membocorkan path atau privasi pengguna. Rilis MVP IMMOExtract resmi dinyatakan selesai (complete).
 
+- Verifikasi penerimaan lokal (2026-11-22): Git awal/index bersih; implementasi startup, wiring frontend/backend dan harness lama diperiksa. `scratch/smoke_browser_m7.mjs` memakai `mockAiClient`, sehingga PASS historis harness tersebut hanya membuktikan UI/backend dengan fixture, bukan inferensi AI nyata.
+- Browser sesi ini memakai source Vite, Express dan FastAPI/SCHP asli, fixture sintetis dari `test_extractor.py`, port terisolasi 5174/3100/8010, serta direktori temporary di luar repo. Upload/ekstraksi menghasilkan enam kartu: human, Hat, Upper-clothes, Pants, Left-shoe, Bag. Label pada gambar sintetis bukan bukti akurasi kategori.
+- Unduhan PNG, ZIP pilihan satu objek, spritesheet PNG 457×796 dan atlas enam frame berhasil melalui browser native. Pembaca Python memverifikasi isi ZIP tepat, CRC, byte PNG identik dan SHA-256 cocok endpoint metadata. Pillow memverifikasi alpha original 0/255, pixelation 24×32 pada grid 32/Retro16, ≤16 warna RGB terlihat dan alpha nearest exact.
+- Mask drag menghapus alpha pusat 255→0, Undo mengembalikan 255, save menutup dialog dan unduhan baru mempertahankan koreksi. Klik tunggal gagal: pointerdown memanggil `drawStroke(lastPoint, lastPoint)` dan path stroke panjang nol tidak mengubah alpha pada browser uji. Belum diperbaiki pada tugas verifikasi ini.
+- Reset mengosongkan galeri, menyembunyikan spritesheet dan menonaktifkan ekstraksi; nol console/runtime error aplikasi. Tab dan tiga layanan uji dihentikan; fixture, storage temporary dan empat file unduhan uji dibersihkan. Storage/foto pengguna tidak disentuh; tanpa commit atau perubahan source/dependensi.
+
 ## In progress
 
-- Tidak ada milestone aktif (Milestone M1–M7 Complete / MVP Release Ready).
+- Penerimaan lokal pascapenutupan D-047: perbaikan bug klik tunggal penghapus mask FR-12 menjadi tugas berikutnya. Tidak membuka milestone atau fitur baru.
 
 ## Blockers / risks
+
+- **Temuan aktual 2026-11-22:** klik tunggal penghapus mask tidak mengubah alpha; drag, Undo dan save berhasil. Repro memakai foreground sintetis 360×480, titik (180,200) opaque, brush 15 px.
+- **Batas bukti terbaru:** fixture sintetis, bukan foto manusia nyata; kamera dan SD15 tidak dijalankan. RAM available 1,36 GiB dan commit available 6,44 GiB sebelum startup; SD15 tidak dimuat untuk menghindari risiko resource yang sudah tercatat.
 
 - Latensi ekstraksi live HTTP terukur ~1.82–2.20 detik per gambar pada AMD Ryzen 5 7430U dengan ukuran RAM model ~255 MB; inferensi dan post-processing CPU terbukti sangat responsif dan tidak membebani memori laptop.
 - Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; seluruh pipeline berjalan pure-PyTorch + Pillow + NumPy tanpa ketergantungan ekstensi C++/CUDA atau OpenCV (`cv2`).
@@ -185,7 +194,7 @@
 
 ## Next task — satu tugas saja
 
-Seluruh milestone MVP (M1–M7) telah selesai secara penuh dan terverifikasi 100%. Tugas berikutnya adalah pengoperasian pengguna, evaluasi hasil pengguna, atau penambahan fitur sekunder pasca-MVP sesuai instruksi pengguna.
+Perbaiki klik tunggal penghapus mask pada `frontend/src/extraction-workspace.js` (`drawStroke` / `handlePointerDown`): klik pada piksel opaque harus menghapus area brush, drag tetap bekerja, Undo mengembalikan piksel, dan koreksi tersimpan pada PNG unduhan. Verifikasi melalui browser; jangan mengulang seluruh suite atau memuat SD15 untuk tugas ini.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -434,6 +443,17 @@ Seluruh milestone MVP (M1–M7) telah selesai secara penuh dan terverifikasi 100
 | 2026-11-21 | `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` | PASS 14/14 tests (9.35s) | Unittest suite FastAPI: health, multipart/path extraction, safety checks, parameter bounds |
 | 2026-11-21 | `npm run build --prefix frontend` | PASS (126ms) | Vite memproses 7 modul tanpa warning/error, menghasilkan bundle dist produksi yang bersih |
 | 2026-11-21 | Audit Kesiapan Rilis MVP (M1–M7) & Integritas Workspace | PASS (D-047) | Seluruh FR-01 s/d FR-13 terverifikasi 100%, 0 regression, 119 backend tests PASS, 14 AI tests PASS, CDP browser smoke PASS, dokumentasi rilis & arsitektur tersinkronisasi |
+| 2026-11-22 | `git status --short; git diff --stat; git diff; git diff --cached --stat` sebelum perubahan | PASS inspeksi | Working tree/index bersih; source dan harness diperiksa, tanpa commit |
+| 2026-11-22 | CIM `Win32_OperatingSystem`; startup Uvicorn SCHP port 8010, Express port 3100, Vite port 5174 | PASS | Available RAM 1,36 GiB, available commit 6,44 GiB sebelum startup; health browser menunjukkan SCHP aktif. `AI_HEALTH_TIMEOUT_MS=30000`, upload/jobs temporary; SD15 tidak dimuat |
+| 2026-11-22 | `browser` melalui `functions.eval`: upload fixture sintetis → ekstraksi SCHP nyata → preview/unduhan PNG | PASS | Enam kartu, seluruh preview bersumber terdecode; unduhan native foreground 3.043 byte. Tidak memakai AI mock |
+| 2026-11-22 | Browser ZIP pilihan + harness Python stdin (`zipfile`, `hashlib`, `urllib.request`) | PASS | Satu PNG terpilih saja, byte identik dengan endpoint PNG, CRC valid, SHA-256 sesuai metadata; ZIP unduhan 3.237 byte |
+| 2026-11-22 | Browser Classic Pixelation 32/retro16 + `.venv-test/Scripts/python.exe -B -c` (Pillow) | PASS | Hasil 24×32, ≤16 RGB terlihat, alpha nearest exact; PNG original memiliki alpha transparan dan opaque |
+| 2026-11-22 | Browser spritesheet semua + atlas + unduhan native + screenshot | PASS | PNG 457×796/4.873 byte, atlas enam frame RGBA8888/2.564 byte; preview terlihat di browser |
+| 2026-11-22 | Browser mask editor: klik tunggal pada (180,200), brush 15 px | FAIL aplikasi | Alpha tetap 255 meski Undo aktif; path panjang nol dari `drawStroke(lastPoint,lastPoint)`. Tidak ada koreksi source pada sesi ini |
+| 2026-11-22 | Browser mask editor: drag, Undo, save + Pillow atas PNG unduhan | PASS | Alpha drag 0, Undo 255, save tersimpan sebagai alpha 0 dengan dimensi tetap 360×480 |
+| 2026-11-22 | Browser reset, console/runtime errors, cleanup | PASS | Galeri kosong, spritesheet hidden, ekstraksi disabled; nol error aplikasi; tab/layanan uji dihentikan, fixture/storage/unduhan temporary dibersihkan |
+| 2026-11-22 | Harness browser awal | ERROR harness, diperbaiki | Selector awal turut menunggu preview turunan yang belum memiliki src; dipersempit ke `img[src]`. Helper `assert.equal` tidak tersedia; diganti pengecekan eksplisit. Bukan error aplikasi |
+| 2026-11-22 | SD15, kamera, evaluasi foto nyata, build, unit/integration suites | NOT RUN | Fokus tugas penerimaan browser alur inti; SD15 dibatasi resource, tanpa perubahan source. PASS suite 2026-11-21 tetap bukti historis, bukan hasil sesi ini |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

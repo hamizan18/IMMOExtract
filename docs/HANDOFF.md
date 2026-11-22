@@ -1,84 +1,78 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** baca `AGENTS.md`, `PROJECT_SPEC.md`, `ARCHITECTURE.md`, `PROGRESS.md`, lalu periksa keadaan repo. Proyek ini telah menyelesaikan seluruh Milestone MVP (M1–M7).
+> **Untuk agent berikutnya:** ikuti konteks `AGENTS.md` dan dokumen proyek. D-047 menutup implementasi M1–M7, tetapi verifikasi browser terbaru menemukan bug FR-12; jangan menyatakan semua acceptance criteria lulus.
 
 ## Last agent
 
-Antigravity CLI — penyelesaian finalisasi Milestone M7 dan penutupan rilis MVP (sinkronisasi tabel REST API `docs/ARCHITECTURE.md`, pembaruan panduan komprehensif `README.md`, pencatatan keputusan arsitektural D-047 di `docs/DECISIONS.md`, dan audit status pengujian menyeluruh), 2026-11-21.
+OMP — verifikasi penerimaan alur inti melalui browser dengan SCHP nyata, 2026-11-22.
 
 ## Current milestone
 
-**Milestone M1–M7 Selesai (MVP Release Ready).** Seluruh persyaratan fungsional wajib dan tahap lanjut (FR-01 hingga FR-13) telah terpenuhi dan terverifikasi penuh di lingkungan lokal Windows.
+M7 — penerimaan lokal setelah penutupan implementasi D-047. Tidak menambah fitur atau milestone baru. Satu temuan koreksi mask FR-12 masih terbuka.
 
 ## Last completed task
 
-- **Penutupan Milestone M7 & Audit Kesiapan Rilis MVP (D-047):**
-  - **Audit Fungsional (FR-01 s/d FR-13):**
-    - Input gambar & kamera browser (FR-01, FR-02).
-    - Validasi defensif ukuran/dimensi/format (FR-03).
-    - Parsing manusia SCHP ATR-18 CPU lokal & crop PNG transparan (FR-04, FR-05).
-    - Polling async job manifest & galeri objek interaktif (FR-06).
-    - Unduhan satuan PNG asli & ekspor selective ZIP hardened dengan streaming SHA-256 (FR-07, FR-08).
-    - Classic Pixelation Studio dengan 4 ukuran & palet Retro 16 warna (FR-09, FR-10).
-    - AI Pixel Art Stylization lokal SD15 CPU FP32 + exact alpha restoration (FR-11).
-    - Mask Correction Tool Canvas 2D kuas/penghapus/pulihkan foto asli + endpoint revisi `PUT` (FR-12).
-    - Generator Spritesheet Statis & Atlas JSON PixiJS/Phaser standard (FR-13).
-  - **Sinkronisasi Dokumentasi:**
-    - `docs/ARCHITECTURE.md`: Tabel REST API diperbarui dengan rute `PUT /api/jobs/:id/objects/:objectId`, `GET /api/jobs/:id/exports/:exportId`, dan seluruh endpoint spritesheet/atlas.
-    - `README.md`: Panduan diperbarui mencakup status rilis MVP, cara menjalankan ketiga terminal, Mask Correction Tool, Spritesheet Generator, dan Selective ZIP Hardening.
-    - `docs/DECISIONS.md`: Keputusan D-047 dicatat.
-    - `docs/PROGRESS.md` & `docs/HANDOFF.md`: Status proyek disinkronkan ke status rilis MVP ready.
+- Git awal/index bersih; source startup, wiring Express/frontend dan harness browser lama diperiksa. LSP tidak dikonfigurasi.
+- Harness `scratch/smoke_browser_m7.mjs` menggunakan `mockAiClient`: hasil historisnya bukan bukti inferensi AI nyata.
+- Uji terbaru memakai Vite source → Express → FastAPI/SCHP asli pada port 5174/3100/8010, gambar sintetis dari fungsi fixture `ai-service/test_extractor.py`, storage temporary di luar repo, dan browser headless.
+- Upload/ekstraksi menghasilkan enam kartu: human, Hat, Upper-clothes, Pants, Left-shoe, Bag. Seluruh preview sumber terdecode. Ini bukti alur teknis, bukan kualitas segmentasi foto nyata.
+- Unduhan PNG asli, ZIP pilihan, pixelation grid 32/Retro16, spritesheet semua dan atlas berhasil. Integritas ZIP dan piksel diuji secara independen dengan Python/Pillow.
+- Mask drag, Undo, save dan PNG unduhan terkoreksi berhasil. Klik tunggal penghapus gagal mengubah alpha.
+- Reset dan pemeriksaan console/runtime browser berhasil. Tab dan ketiga layanan dihentikan; fixture/storage temporary serta empat unduhan uji dibersihkan. Tidak menyentuh storage/foto pengguna.
 
 ## Current task
 
-Fase MVP telah selesai secara penuh. Menunggu instruksi pengguna untuk pengoperasian, evaluasi hasil, atau penambahan fitur sekunder pasca-MVP.
+Verifikasi browser selesai dengan temuan terbuka. Tugas berikutnya hanya memperbaiki klik tunggal penghapus mask, bukan mengulang implementasi MVP.
 
-## Working components
+## Working components — bukti sesi ini
 
-- **Input & Kamera (M2):** Upload multipart, drag-and-drop, capture webcam lokal via browser dengan stream safety.
-- **Ekstraksi Objek SCHP (M3/M4):** Inferensi model SCHP ATR-18 CPU FP32 lokal, crop bounding box, PNG transparan RGBA.
-- **Galeri & Polling Async (M4):** Antrean FIFO Express, polling serial 1 detik, kartu objek responsif di UI dark futuristic.
-- **Hardened Selective ZIP (M4/M7):** STORE mode tanpa kompresi ulang, streaming SHA-256 integrity hash on-the-fly, dan endpoint metadata `GET /api/jobs/:id/exports/:exportId`.
-- **Classic Pixelation Studio (M5):** Resize nearest-neighbour 16/32/64/128 px, kuantisasi palet Retro 16 warna, preservasi alpha exact.
-- **AI Pixel Art Stylization (M6):** SD15 CPU FP32 pipeline, UNet memory-cloned offload loader, preset prompt, letterbox & 100% exact alpha restore, FIFO orchestrator, dan antarmuka UI.
-- **Mask Correction Tool (M6):** Dialog interaktif Canvas 2D, penghapus transparan, kuas pemulih foto asli, slider brush 2–60 px, undo stack, dan revisi backend via `PUT`.
-- **Generator Spritesheet Statis & Atlas JSON (M7):** Komposisi komposit Sharp transparan, pengaturan grid padding/kolom, ekspor lembar sprite, dan atlas JSON standar TexturePacker / PixiJS / Phaser.
-- **Automated Headless Browser Smoke Test Runner:** Pengujian CDP Chrome otomatis untuk M6 dan M7 (`scratch/smoke_browser_m7.mjs`).
+- Upload/health/polling/ekstraksi SCHP nyata dan galeri enam objek.
+- Unduhan native PNG foreground 360×480, 3.043 byte, memiliki alpha 0 dan 255.
+- ZIP satu objek: 3.237 byte; isi tepat, CRC valid, byte PNG identik dan SHA-256 cocok endpoint metadata.
+- Classic Pixelation: grid 32/Retro16 → 24×32, maksimal 16 RGB terlihat, alpha nearest exact.
+- Spritesheet semua: 457×796, 4.873 byte; atlas enam frame RGBA8888, 2.564 byte; keduanya diunduh melalui browser native dan preview diperiksa visual.
+- Koreksi mask dengan drag/Undo/save: alpha pusat 255→0→255; setelah drag kedua dan save, PNG unduhan memiliki alpha 0.
+- Reset: galeri kosong, spritesheet tersembunyi, tombol ekstraksi nonaktif; nol console/runtime error aplikasi.
 
 ## Modified files
 
-- `docs/ARCHITECTURE.md` — Pembaruan tabel kontrak REST API dengan endpoint M6 & M7.
-- `README.md` — Pembaruan status rilis MVP, panduan Mask Correction, Spritesheet, dan Selective ZIP.
-- `docs/DECISIONS.md` — Pencatatan keputusan arsitektural D-047.
-- `docs/PROGRESS.md` — Pembaruan status milestone dan penutupan rilis MVP.
-- `docs/HANDOFF.md` — Status handoff disinkronkan ke kondisi rilis MVP.
+- `docs/PROGRESS.md` — status aktual, cakupan bukti, log pemeriksaan, temuan mask dan satu tugas berikutnya.
+- `docs/HANDOFF.md` — handoff sesi ini.
+- Tidak ada perubahan source, dependensi, konfigurasi permanen atau keputusan arsitektur. Tidak ada script uji permanen baru.
 
 ## Uncommitted changes / Git status
 
-- Working tree memuat modifikasi pada file-file dokumentasi di atas.
-- Tidak ada commit otomatis (sesuai aturan `AGENTS.md`). Menunggu instruksi commit dari pengguna.
+- Sebelum tugas, `git status --short`, `git diff`, dan staged diff kosong.
+- Sesi ini mengubah dua dokumen di atas; tidak melakukan staging atau commit.
+- Tidak menjalankan ulang Git setelah edit; daftar perubahan sesi berdasarkan operasi edit, bukan audit Git akhir.
 
 ## Current errors / limitations
 
-- Batas Commit Limit OS saat ini (14.81 GiB) dengan commit dasar OS/aplikasi (~5.5–6.0 GiB) menyisakan CommitAvail ~8.8–9.3 GiB saat idle; untuk inferensi SD15 CPU kontinu, penambahan Virtual Memory Windows (+4–8 GB Paging File di Drive D:) tetap disarankan guna menjaga headroom aman saat load ganda.
-- Model SD15 CPU FP32 membutuhkan waktu inferensi ~20 detik per langkah denoising pada AMD Ryzen 5 7430U (total ~50–60 detik untuk 2 langkah); ini merupakan trade-off local-first CPU tanpa GPU diskret.
+- **FAIL aktual — klik tunggal penghapus:** foreground 360×480, titik opaque (180,200), brush 15 px. Setelah klik, Undo aktif tetapi alpha tetap 255. `handlePointerDown()` memanggil `drawStroke(lastPoint,lastPoint)`; implementasi stroke panjang nol tidak menghapus piksel pada browser uji. Drag menghapus dan Undo/save bekerja. Belum diperbaiki.
+- RAM available sebelum startup 1,36 GiB; available commit 6,44 GiB. SD15 tidak dimuat. Risiko memori dan latensi SD15 dari sesi sebelumnya tetap berlaku; jangan menjalankan load ganda tanpa memeriksa resource.
+- SD15, kamera, akurasi foto nyata/occlusion, mobile, dan deployment publik tidak diuji pada sesi ini. Label Hat/Bag pada gambar sintetis tidak membuktikan akurasi kategori.
+- Retensi otomatis belum tersedia; reset UI bukan penghapusan data server.
+- Sebagian narasi lama di README/ARCHITECTURE masih merujuk tahap implementasi sebelumnya; gunakan bukti bertanggal terbaru, jangan menganggap klaim “100%” historis sebagai jaminan bebas bug.
 
 ## Tests / checks performed
 
-- **PASS:** `node --test backend/test/spritesheet.test.js backend/test/zip-export.test.js backend/test/ai-client.test.js backend/test/stylizations.test.js backend/test/jobs.test.js backend/test/extractions.test.js backend/test/pixelation.test.js` — 119/119 tests PASS dalam 8.24s (0 fail, 0 skip).
-- **PASS:** `ai-service\.venv-test\Scripts\python.exe -u -B -m unittest discover -s ai-service -p test_api.py -v` — 14/14 tests PASS dalam 9.35s.
-- **PASS:** `npm run build --prefix frontend` — Vite build PASS (7 modul dalam 126ms).
-- **PASS:** Automated Headless Browser Smoke Test M7 (`scratch/smoke_browser_m7.mjs`) — 13/13 stages PASS dalam 18 detik (0 console error).
+- **PASS:** inspeksi awal `git status --short; git diff --stat; git diff; git diff --cached --stat`.
+- **PASS:** `OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 ai-service/.venv-test/Scripts/python.exe -B -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8010 --workers 1`; backend `node backend/src/server.js` dengan port/storage/timeout terisolasi; frontend `npm run dev -- --port 5174` dengan proxy port 3100.
+- **PASS:** `browser` melalui `functions.eval` — upload → SCHP nyata → galeri/PNG → ZIP pilihan → pixelation → spritesheet/atlas → mask drag/Undo/save → reset; rincian hasil di atas.
+- **PASS:** harness Python stdin (`zipfile`, `hashlib`, `urllib.request`) dan `.venv-test/Scripts/python.exe -B -c` dengan Pillow untuk integritas ZIP, alpha/palet/pixelation dan koreksi mask yang tersimpan.
+- **FAIL:** klik tunggal penghapus mask pada browser; bukti dan lokasi penyebab di bagian errors.
+- **ERROR harness, diperbaiki:** selector preview awal mencakup img turunan tanpa src sehingga timeout; diganti `img[src]`. Helper `assert.equal` tidak tersedia; pemeriksaan eksplisit menyelesaikan verifikasi atlas. Keduanya bukan error aplikasi.
+- **NOT RUN:** build frontend, suite backend/Python, SD15, kamera dan foto nyata. Tidak ada perubahan perilaku aplikasi pada sesi ini. Angka 119 backend/14 AI/13 tahap browser dari 2026-11-21 adalah bukti historis, tidak dijalankan ulang.
+- **PASS cleanup:** tab/layanan uji dihentikan; fixture, storage dan unduhan milik uji dihapus. Screenshot visual ada pada artefak browser sesi, bukan berkas source baru.
 
 ## Next action (only one)
 
-Fase MVP telah selesai secara penuh (M1–M7). Aplikasi siap dijalankan dan diuji oleh pengguna secara end-to-end melalui browser.
+Perbaiki klik tunggal penghapus mask di `frontend/src/extraction-workspace.js` (`drawStroke` / `handlePointerDown`). Klik pada piksel opaque harus menghapus area brush; drag, Undo dan save tetap berfungsi. Verifikasi browser dan piksel PNG unduhan. Tidak perlu SD15 atau mengulang suite luas.
 
 ## Handoff rules
 
-1. Jangan langsung membuat ulang folder/berkas yang ternyata sudah ada; inspeksi dulu.
-2. Jangan menghapus perubahan agent sebelumnya atau melakukan reset destruktif.
-3. Ubah file sesedikit mungkin dan kerjakan satu milestone pada satu waktu.
-4. Tulis semua hasil tes yang benar-benar dieksekusi.
-5. Sebelum berpindah AI, perbarui bagian ini dengan **status terkini**, file berubah, test, error, dan next action.
-6. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
+1. Periksa keadaan repo sebelum edit; jangan menimpa perubahan pengguna.
+2. Satu tugas kecil, tanpa commit otomatis atau perubahan stack.
+3. Catat hasil aktual PASS/FAIL/NOT RUN; jangan menyamakan dokumentasi dengan bukti runtime.
+4. Perbarui PROGRESS dan HANDOFF setelah tugas; keputusan arsitektur baru harus dicatat di DECISIONS.
+5. Jika agent baru adalah Claude Website (tidak punya filesystem lokal), berikan dokumen dan source code relevan, bukan foto pribadi / `.env` / checkpoint.
