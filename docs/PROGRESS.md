@@ -1,13 +1,14 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047. Klik penghapus dan kuas Pulihkan kini diperbaiki serta terverifikasi melalui browser. Penerimaan tetap terbatas: fixture sintetis/AI mock pada regresi mask bukan bukti kualitas foto nyata atau SD15.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. README/ARCHITECTURE kini membedakan fitur tersedia, bukti runtime dan batas penerimaan. Sinkronisasi dokumentasi bukan pengujian ulang aplikasi; kualitas ekstraksi pada foto manusia nyata masih perlu dievaluasi.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Perbaikan kuas Pulihkan selesai; berikutnya selaraskan README/ARCHITECTURE dengan status dan batas bukti aktual.
-- **Overall status:** Penghapus dan Pulihkan memiliki regresi klik/drag/Undo/save. Pulihkan memakai clip lingkaran/kapsul dan komposisi `copy` agar RGB/alpha sumber menggantikan piksel hanya pada area kuas, tanpa stroke hitam atau penumpukan alpha.
-- **Last verification:** 2026-11-22 — reproduksi Pulihkan FAIL sebelum perbaikan; build frontend PASS (126 ms); `node scripts/smoke_browser_m7.mjs` final PASS (5,98 s). Harness memakai AI mock, browser dan backend nyata.
+- **Current task:** Sinkronisasi README/ARCHITECTURE selesai; berikutnya evaluasi ekstraksi SCHP pada satu foto uji manusia berizin, bukan fixture sintetis.
+- **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor dan UI generatif tersedia. Startup SD15 tetap terpisah/opsional; retensi, antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
+- **Last runtime verification:** 2026-11-22 — regresi mask terakhir PASS dengan AI mock + browser/backend nyata; build 126 ms dan smoke 5,98 s. Tidak dijalankan ulang pada sesi dokumentasi.
+- **Last documentation check:** 2026-11-22 — source/konfigurasi/routes dibandingkan dengan narasi; pemeriksaan statis dua dokumen PASS (enam tautan lokal, tiga referensi script, blok kode seimbang).
 
 ## Milestone
 
@@ -19,7 +20,7 @@
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | Implemented; bug penghapus/Pulihkan diperbaiki | Regresi browser 2026-11-22 membuktikan klik, drag horizontal/diagonal, Undo, sumber RGB/alpha, offset crop dan PNG tersimpan. SD15 tidak diuji ulang |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Harness mask + spritesheet/reset PASS dengan AI mock; narasi README/ARCHITECTURE perlu diselaraskan dengan bukti terkini |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Regresi mask/spritesheet PASS historis; README/ARCHITECTURE tersinkronisasi dengan batas bukti. Evaluasi foto nyata berikutnya |
 
 ## Completed
 
@@ -167,10 +168,14 @@
 - Perbaikan kuas Pulihkan (2026-11-22, sesi lanjutan): regresi baru membuktikan klik tidak memulihkan piksel (actual `[0,0,0,0]`, sumber `[100,150,240,255]`). Implementasi lama memanggil stroke lalu clip pada garis terbuka; clip memakai area isi path, bukan lebar stroke.
 - Pulihkan kini membentuk clip lingkaran untuk klik dan kapsul untuk drag, lalu menggambar crop sumber dengan komposisi `copy`. Tidak menggambar stroke berwarna; alpha sumber diganti, bukan ditumpuk. Kontrak bbox, Undo dan endpoint save tetap sama. D-044 diperjelas, tanpa arsitektur/dependensi baru.
 - Regresi fixture gradien/alpha parsial membuktikan RGB/alpha sumber, batas kuas, Undo, drag horizontal/diagonal, alpha tidak menumpuk pada sapuan ulang, sumber transparan tidak menjadi hitam, offset bbox objek crop serta hasil PNG tersimpan. Piksel acuan dinormalisasi lewat Canvas karena premultiplied-alpha dapat membulatkan RGB transparansi parsial; bukan klaim byte RGB asli selalu identik.
+- Sinkronisasi dokumentasi (2026-11-22): working tree/index awal bersih. README/ARCHITECTURE dibandingkan dengan package scripts, startup/backend proxy, router jobs, extractor/stylizer, health FastAPI, parameter UI generatif, source mask dan log runtime terdahulu. Tidak mengubah source atau keputusan arsitektur.
+- README kini menjelaskan stack aktual tanpa OpenCV wajib, jalur startup ekstraksi vs SD15, readiness model, parameter UI generatif dan batas resource, snapshot hasil koreksi mask, lokasi harness permanen, serta perbedaan AI mock/inferensi nyata. Panduan Linux/macOS tidak lagi menyiratkan venv kosong cukup.
+- ARCHITECTURE kini mencantumkan UI/mask/spritesheet aktual, jalur `/extract-path`, kontrak health/readiness, model SD15 lokal dan batas lifecycle. Route draft GET `/api/jobs/:id/objects` dihapus dari tabel aktual karena router hanya menyediakan objek dalam polling job dan route objek individual.
+- Pemeriksaan statis dokumentasi lewat Python inline PASS: dua dokumen, enam tautan lokal, tiga referensi script dan blok kode berpasangan. Tidak ada runtime/build/suite/model baru; bukti PASS sebelumnya tetap historis.
 
 ## In progress
 
-- Selaraskan narasi README/ARCHITECTURE dengan implementasi dan batas pengujian aktual; kedua bug mask yang ditemukan telah diperbaiki. Tidak membuka milestone atau fitur baru.
+- Penerimaan kualitas ekstraksi pada foto manusia nyata berizin belum ditutup. Dokumentasi utama telah diselaraskan; tidak membuka fitur atau milestone baru.
 
 ## Blockers / risks
 
@@ -199,7 +204,7 @@
 
 ## Next task — satu tugas saja
 
-Selaraskan README dan ARCHITECTURE dengan status implementasi/penerimaan aktual: hapus pernyataan fitur yang sudah ada sebagai belum tersedia, pertahankan batas resource SD15/retensi/kualitas foto nyata, dan bedakan tes AI mock dari inferensi nyata. Gunakan bukti PROGRESS/HANDOFF tanpa mengulang suite luas.
+Evaluasi ekstraksi SCHP pada satu foto uji manusia nonpribadi berizin, bukan fixture sintetis: periksa kategori, mask/alpha dan bagian tertutup/aksesori yang benar-benar terlihat; catat hasil serta keterbatasan tanpa mengklaim generalisasi. Gunakan file lokal yang diizinkan; bila belum tersedia, minta foto uji/persetujuan pengguna. Jangan memakai foto pribadi tanpa izin, mengunggahnya ke cloud atau memuat SD15 untuk tugas ini.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -469,6 +474,10 @@ Selaraskan README dan ARCHITECTURE dengan status implementasi/penerimaan aktual:
 | 2026-11-22 | `node scripts/smoke_browser_m7.mjs` dengan koordinat tes terkoreksi | PASS | 5,98 s; Pulihkan klik/drag horizontal/diagonal, RGB/alpha sumber, bounds, Undo, alpha berulang, bbox dan PNG save; penghapus dan spritesheet/reset existing tetap lulus |
 | 2026-11-22 | Python socket `connect_ex` pada enam port kedua server dari tiga run | PASS cleanup | Semua listener uji sudah tertutup |
 | 2026-11-22 | SCHP/SD15 nyata, kamera, suite backend/Python | NOT RUN | Perubahan terbatas frontend mask dan regresi browser dengan AI mock; tidak ada perubahan backend/model |
+| 2026-11-22 | Sesi dokumentasi: `git status --short; git diff --stat; git diff; git diff --cached --stat` | PASS inspeksi | Working tree/index awal bersih; tanpa staging/commit |
+| 2026-11-22 | Inspeksi source/package/routes/health/UI dan bukti PROGRESS untuk README/ARCHITECTURE | PASS inspeksi statis | Kontrak aktual dibandingkan dengan narasi; bukan tes runtime |
+| 2026-11-22 | Python inline: target tautan Markdown lokal, referensi script dan pasangan code fence README/ARCHITECTURE | PASS | Dua dokumen, enam tautan lokal, tiga referensi script; seluruh target ada dan code fence seimbang |
+| 2026-11-22 | Build, browser, suite backend/Python, SCHP/SD15 nyata | NOT RUN | Perubahan dokumentasi saja; tidak ada perubahan perilaku aplikasi |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

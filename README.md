@@ -2,15 +2,15 @@
 
 **Extract. Transform. Create.**
 
-IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan manusia beserta pakaian/aksesori dari foto menjadi PNG transparan, lalu (secara opsional) mengolahnya menjadi aset **Classic Pixelation** atau **AI Pixel Art Stylization** untuk game development.
+IMMOExtract adalah aplikasi web **local-first** untuk mengekstrak manusia beserta kategori pakaian/aksesori yang dikenali menjadi PNG transparan, lalu secara opsional mengolahnya melalui **Classic Pixelation** atau **AI Pixel Art Stylization** lokal.
 
-> **Status proyek:** Seluruh milestone MVP (M1–M7) selesai pada jalur Windows lokal yang teruji dan terverifikasi penuh. Meliputi ekstraksi objek SCHP lokal (M3/M4), galeri & ekspor ZIP selektif hardened (M4/M7), Classic Pixelation deterministik (M5), AI Pixel Art Stylization lokal SD15 (M6), Mask Correction Tool interaktif (M6), serta Generator Spritesheet Statis & Atlas JSON (M7). Bukti pengujian nyata dicatat di `docs/PROGRESS.md`; catatan arsitektur dan keputusan di `docs/DECISIONS.md`.
+> **Status proyek:** Implementasi M1–M7 ditutup pada D-047; penerimaan Windows lokal memiliki bukti dan batas yang dicatat di `docs/PROGRESS.md`. Ekstraksi, unduhan, pixelation, mask editor dan spritesheet tersedia; SD15 memerlukan runtime/model serta memori yang memadai. Dua bug kuas mask diperbaiki dan diuji pada 2026-11-22. Status implementasi bukan jaminan seluruh foto, konfigurasi AI atau deployment publik sudah teruji.
 
 ## Gambaran fitur
 
 - Input foto dari galeri atau kamera browser (M2).
 - Human parsing lokal (SCHP ATR-18) untuk manusia, pakaian, dan aksesori (M3/M4).
-- PNG transparan per objek yang terdeteksi dengan crop bounding box presisi.
+- PNG transparan per kategori yang terdeteksi dengan crop bounding box; hasil mengikuti kualitas segmentasi, bukan jaminan tiap instance terpisah.
 - Mask Correction Tool: kuas penghapus dan kuas pemulih foto asli interaktif berbasis Canvas 2D (FR-12, M6).
 - Preview galeri objek, unduh satu PNG, unduh ZIP pilihan atau semua objek dengan integritas SHA-256 (FR-08, M4/M7).
 - Classic Pixelation deterministik dengan 4 grid ukuran (16/32/64/128) dan palet Retro 16 warna opsional (FR-09/FR-10, M5).
@@ -19,17 +19,17 @@ IMMOExtract direncanakan sebagai aplikasi web **local-first** untuk memisahkan m
 
 **Batasan:** Satu orang utama pada MVP; tidak otomatis membuat sprite animasi runtime, objek 3D, atau melengkapi bagian tubuh/pakaian yang tertutup penuh (occlusion).
 
-## Tech stack rencana
+## Tech stack aktual
 
 | Bagian | Teknologi |
 | --- | --- |
 | Frontend | Vite, HTML/CSS, Vanilla JavaScript, Tailwind CSS |
 | Backend | Node.js, Express.js, Multer, Sharp, Archiver |
-| Local AI | Python, FastAPI, PyTorch, SCHP ATR-18 (kandidat uji), Pillow, OpenCV |
+| Local AI | Python, FastAPI, PyTorch CPU, SCHP ATR-18, Pillow, NumPy; ekstraksi tidak memerlukan OpenCV |
 | Storage | Filesystem lokal; tanpa DB pada MVP |
-| Generative mode | Engine image-to-image lokal yang dipilih di M6 |
+| Generative mode | SD15 lokal via Diffusers/Accelerate, CPU FP32 dan UNet disk-offload |
 
-## Struktur awal
+## Struktur proyek
 
 ```text
 IMMOExtract/
@@ -37,6 +37,7 @@ IMMOExtract/
 ├── backend/
 ├── ai-service/
 ├── storage/
+├── scripts/          # health/integration/browser smoke
 ├── docs/
 │   ├── PROJECT_SPEC.md
 │   ├── ARCHITECTURE.md
@@ -48,7 +49,7 @@ IMMOExtract/
 └── .gitignore
 ```
 
-`frontend/`, `backend/`, dan `ai-service/` berisi fondasi M1. `storage/` privat dan diabaikan Git; upload disimpan di `storage/uploads/<uuid>/`, bukan folder statis publik.
+`frontend/`, `backend/`, dan `ai-service/` berisi implementasi aplikasi. `storage/` privat dan diabaikan Git: upload di `storage/uploads/<uuid>/`, job/hasil di `storage/jobs/<uuid>/`, bukan folder statis publik. Dependensi, checkpoint dan environment Python harus sudah disiapkan lokal; repo bukan paket model siap unduh.
 
 ## Preview dan upload lokal (M2)
 
@@ -125,15 +126,15 @@ Helper SD15 CPU FP32 memakai UNet disk-offload bermitigasi dan safety checker lo
 - Kedua endpoint menerima `preset` (`pixel-art`, `retro-rpg`, `game-boy`), `prompt`/`negative_prompt` opsional, `target_size` (kelipatan 8, 64–512; default 256), `num_inference_steps` (2–50; default 20), `strength` ((0,1], minimal satu langkah efektif; default 0.5), `guidance_scale` (0–20; default 7.5), `seed` (0 hingga 2^63−1; default 0).
 - `output_path` menyimpan PNG; `save_generated_path` opsional menyimpan RGB square dan memerlukan `output_path`. Input/output tidak boleh menunjuk file yang sama, termasuk hardlink. `include_base64` default true pada multipart, false pada JSON.
 - Gambar statis JPG/PNG/WebP, maksimum 10 MiB, sisi 8192, 24 megapiksel. Decode dinormalisasi RGBA, termasuk transparansi palet. Parameter/gambar invalid → 400, tipe/field invalid → 422, file hilang → 404, byte berlebih → 413. Request stylization kedua saat pipeline sibuk → 409, tanpa antrean/retry otomatis; kegagalan inferensi/penyimpanan → 500 JSON aman.
-- Jalankan satu worker di loopback saja. **Path hanya untuk caller lokal tepercaya**, bukan sandbox filesystem atau API publik; jangan meneruskan path browser. Express nantinya harus memilih objek dan tujuan dari storage/manifest privat.
-- Inferensi CPU memerlukan waktu dan headroom memori; batas 512 bukan bukti benchmark 512. Untuk pengujian stylization terisolasi, jangan memuat SCHP sekaligus. Contoh PowerShell pada terminal khusus:
+- Jalankan satu worker di loopback saja. **Path hanya untuk caller lokal tepercaya**, bukan sandbox filesystem atau API publik; jangan meneruskan path browser. Express memilih objek dan tujuan dari storage/manifest privat.
+- Inferensi CPU memerlukan waktu dan headroom RAM/commit; batas 512 bukan bukti benchmark 512. Pada mesin dengan memori terbatas, selesaikan ekstraksi lalu hentikan service SCHP sebelum menjalankan SD15. Periksa resource dahulu; aplikasi tidak mengganti/unload kedua model secara otomatis. Contoh PowerShell pada terminal khusus SD15:
 
 ```powershell
 $env:SCHP_CHECKPOINT_PATH = 'disabled-for-stylization'
 .\ai-service\.venv-stylization-poc\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8001 --workers 1
 ```
 
-Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` harus false. Jangan menimpa konfigurasi terminal ekstraksi. UI tetap menyatakan AI Stylization belum tersedia sampai integrasi browser diuji. Classic Pixelation tetap mode terpisah.
+Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` pada service SD15 harus false. UI Stylization sudah tersedia: preset, ukuran 128/256, polling, preview dan unduhan. Browser mengirim dua langkah nominal dengan strength 0.5; ini bukan jaminan kualitas atau waktu proses tetap. Hubungkan backend ke port 8001 sesuai konfigurasi di bawah. Startup tiga terminal pada bagian utama hanya menyiapkan jalur ekstraksi; tidak otomatis mengaktifkan SD15. Classic Pixelation tetap mode terpisah.
 
 ### API backend stylization
 
@@ -144,19 +145,19 @@ Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` 
 - PNG sementara dan manifest ada di `<job>/stylizations/<uuid>/`; backend memeriksa canonical regular file, decode PNG, dimensi, metadata serta **alpha exact terhadap sumber** sebelum mempublikasikan `image.png` dan manifest completed. Manifest job utama, original, ZIP dan pixelation tidak diubah.
 - `AI_STYLIZATION_TIMEOUT_MS` mencakup request dan body JSON (1..2147483647 ms, default 900000). `AI_STYLIZATION_SERVICE_URL` opsional menunjuk service SD15 terpisah, default `AI_SERVICE_URL`. Untuk contoh port 8001 di atas, set `AI_STYLIZATION_SERVICE_URL=http://127.0.0.1:8001` pada backend lalu restart.
 - **Batas resource:** Antrean menyerialkan request, bukan lifecycle model. Menjalankan dua service sekaligus tetap dapat mempertahankan SCHP+SD15 dalam memori. Smoke menggunakan ekstraksi dahulu, menghentikan service SCHP, baru memulai SD15; aplikasi belum mengotomatiskan pergantian ini. HTTP timeout tidak membatalkan inferensi di server; hasil terlambat tetap staging privat dan tidak dipublikasikan. Tidak ada cleanup/retensi otomatis.
-- Verifikasi D-041: empat file tes backend **103/103 PASS** dengan fixture kontrak. Smoke model nyata berhasil ekstraksi tiga objek, tetapi SD15 dihentikan pengawas saat sisa commit <1 GiB; **penerimaan end-to-end backend belum lulus**. Pengguna menunda pengulangan. Lihat HANDOFF sebelum menjalankan inferensi lagi.
+- **Batas bukti:** smoke D-041 pernah dihentikan guard memori. Log 2026-11-21 berikutnya mencatat generasi SD15 melalui Express mencapai completed (72,2 s), tetapi run lain kembali dihentikan guard. Itu bukan jaminan SCHP+SD15 resident bersamaan, kualitas foto nyata atau semua parameter. Bukti browser dengan AI mock harus dibaca terpisah dari inferensi nyata; lihat ringkasan pengujian di bawah dan HANDOFF sebelum memuat model.
 
 ## Koreksi Mask Manual (Mask Correction Tool — FR-12)
 
 - Tombol **Koreksi Mask** pada setiap kartu objek membuka dialog interaktif HTML5 (`#mask-editor-dialog`).
 - Kanvas interaktif 2D memungkinkan pengguna merapikan siluet objek secara manual:
-  - **Penghapus (Transparan):** menghapus piksel yang bocor di luar batas pakaian/aksesori dengan `destination-out`.
-  - **Kuas Pulihkan:** mengembalikan piksel asli dari foto input menggunakan clipping path canvas dan crop gambar sumber secara instan, tanpa inferensi AI tambahan.
+  - **Penghapus (Transparan):** klik menghapus disk sesuai radius kuas; drag menghapus sepanjang stroke dengan `destination-out`.
+  - **Kuas Pulihkan:** klik/drag memakai clip lingkaran/kapsul dan komposisi `copy` untuk mengembalikan RGB/alpha crop foto sumber tanpa penumpukan alpha atau inferensi baru. Transparansi parsial mengikuti pembulatan premultiplied-alpha Canvas dan tepi kuas memakai antialiasing, bukan jaminan semua byte RGB file asli identik.
   - **Slider Brush Size:** mengatur diameter kuas/penghapus antara 2 hingga 60 piksel dengan preview angka.
   - **Undo Stack & Reset:** riwayat modifikasi hingga 20 langkah `ImageData` dan tombol reset ke kondisi awal siluet.
 - **Simpan Koreksi:** mengirim binary PNG RGBA ke endpoint `PUT /api/jobs/:id/objects/:objectId`.
 - Backend memvalidasi integritas dimensi exact, saluran 4 channel RGBA, dekompresi piksel penuh, menulis file kanonikal secara atomik, dan memperbarui `pixel_count` serta timestamp pada manifest.
-- Hasil koreksi otomatis diumpankan ke operasi turunan (Classic Pixelation M5, AI Stylization M6, Spritesheet M7, dan ekspor ZIP) tanpa mutasi berlebih.
+- Operasi turunan **baru** membaca objek yang sudah dikoreksi. Snapshot ZIP/pixelation/stylization/spritesheet yang sudah dibuat tidak dibuat ulang otomatis. Reset editor mengembalikan kondisi saat editor dibuka, bukan arsip permanen mask sebelum semua revisi.
 
 ## Generator Spritesheet Statis & Atlas JSON (FR-13)
 
@@ -176,17 +177,19 @@ Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` 
   - `GET /api/jobs/:id/spritesheets/:spritesheetId` & `.../download`: menyajikan PNG inline atau attachment download.
   - `GET /api/jobs/:id/spritesheets/:spritesheetId/atlas` & `.../download`: menyajikan file JSON atlas inline atau attachment download.
 
-## Menjalankan Aplikasi (M1–M7 / Full MVP)
+## Menjalankan jalur ekstraksi, mask, pixelation dan ekspor
 
-Runtime setup: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3** dengan PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`).
+Runtime yang tercatat pada setup Windows lokal: Node.js **22.12.0**, npm **10.9.0**, Python **3.14.3**, PyTorch CPU (`torch 2.15.0+cpu`, `torchvision 0.29.2+cpu`). Angka ini catatan setup, bukan pemeriksaan versi ulang.
 
-Jalankan 3 terminal dari root proyek (`IMMOExtract`):
+Dengan dependensi, `.venv-test` dan checkpoint SCHP lokal yang sudah tersedia, jalankan tiga terminal dari root proyek. Untuk SD15 gunakan runtime/config terpisah pada bagian AI Stylization; jangan menganggap tiga terminal ini mengaktifkan generasi AI.
 
 ```powershell
 # Terminal 1 — AI Service (FastAPI + Model SCHP ATR-18 CPU)
 .\ai-service\.venv-test\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8000
 
 # Terminal 2 — Backend (Express.js)
+# Timeout ekstraksi/health; smoke lokal memakai 30000 ms, default backend 3000 ms.
+$env:AI_HEALTH_TIMEOUT_MS = '30000'
 npm start --prefix backend
 
 # Terminal 3 — Frontend (Vite)
@@ -195,16 +198,16 @@ npm run dev --prefix frontend
 
 Buka **http://127.0.0.1:5173** di browser Anda. Hentikan masing-masing proses dengan `Ctrl+C`.
 
-Linux/macOS: gunakan `python3 -m venv ai-service/.venv` dan `ai-service/.venv/bin/python` sebagai pengganti executable Python Windows. Perintah npm sama; platform tersebut belum diuji.
+Linux/macOS belum diuji. Jangan menganggap membuat venv kosong atau mengganti path executable Python cukup untuk mereproduksi environment/model Windows yang sudah disiapkan.
 
-Konfigurasi bawaan langsung bekerja tanpa `.env`. Bila perlu, salin `backend/.env.example` ke `backend/.env` dan `frontend/.env.example` ke `frontend/.env`; restart layanan setelah perubahan. Express memakai `PORT`, `AI_SERVICE_URL`, `AI_HEALTH_TIMEOUT_MS`, `UPLOAD_DIR`, dan `MAX_UPLOAD_BYTES`. Batas byte frontend tetap 10 MiB; batas server yang lebih kecil menghasilkan pesan penolakan. Vite memakai `BACKEND_URL` untuk proxy `/api`; browser tidak mengakses FastAPI langsung. Port FastAPI diatur lewat argumen Uvicorn.
+Konfigurasi port bawaan tidak memerlukan `.env`; dependensi dan model tetap prasyarat. Bila perlu, salin `backend/.env.example` ke `backend/.env` dan `frontend/.env.example` ke `frontend/.env`, lalu restart layanan. Express membaca `PORT`, `AI_SERVICE_URL`, `AI_HEALTH_TIMEOUT_MS`, `AI_STYLIZATION_SERVICE_URL`, `AI_STYLIZATION_TIMEOUT_MS`, `UPLOAD_DIR` dan `MAX_UPLOAD_BYTES`. Batas byte frontend tetap 10 MiB; batas server yang lebih kecil menghasilkan penolakan. Vite memakai `BACKEND_URL` untuk proxy `/api`; browser tidak mengakses FastAPI langsung. Port FastAPI diatur melalui argumen Uvicorn.
 
 ### Health checks dan smoke test
 
 | Endpoint | Arti |
 | --- | --- |
 | `http://127.0.0.1:3000/api/health` | Express hidup, independen dari FastAPI |
-| `http://127.0.0.1:8000/health` | FastAPI hidup; `model_loaded: false` |
+| `http://127.0.0.1:8000/health` | FastAPI hidup; `model_loaded` true hanya bila SCHP berhasil dimuat. Health juga memuat `stylizer_available` dan `stylizer_loaded` |
 | `http://127.0.0.1:3000/api/health/ai` | Express benar-benar memanggil FastAPI; HTTP 503 jika gagal/tidak tersedia |
 
 Dengan ketiga layanan aktif, jalankan dari root:
@@ -217,6 +220,25 @@ npm run build --prefix frontend
 Untuk jalur kegagalan, hentikan **hanya FastAPI**, jalankan `node scripts/smoke.mjs --ai-unavailable`, lalu klik **Periksa ulang** di browser. Express harus tetap sehat, sementara koneksi FastAPI gagal dengan jelas. Jalankan kembali FastAPI dan periksa ulang untuk pemulihan.
 
 Build frontend tersimpan di `frontend/dist/`. `npm run preview --prefix frontend` menyajikannya pada port 4173 dengan proxy lokal yang sama; ini bukan konfigurasi deployment produksi.
+
+### Bukti dan batas pengujian
+
+| Jalur | Bukti tercatat | Batas |
+| --- | --- | --- |
+| Browser → Express → SCHP nyata | 2026-11-22: upload sintetis menghasilkan enam objek; PNG/ZIP, pixelation dan spritesheet/atlas berhasil | Bukan evaluasi kualitas pada foto manusia nyata/occlusion |
+| Mask editor + ekspor pada browser | 2026-11-22: regresi penghapus/Pulihkan, RGB/alpha, bbox, Undo, PNG tersimpan, spritesheet dan reset PASS | AI mock; frontend produksi dan backend nyata. Bukan tes inferensi model |
+| SD15 nyata | Log 2026-11-21 memuat inferensi sukses dan run yang dihentikan guard | Resource, latensi dan kualitas tetap perlu evaluasi; tidak diulang pada sesi mask/dokumentasi |
+
+Untuk regresi UI/backend yang tidak memuat model, jalankan dari root setelah dependensi web terpasang:
+
+```powershell
+npm run build --prefix frontend
+node scripts/smoke_browser_m7.mjs
+```
+
+Harness saat ini mencari executable Chrome/Brave/Edge pada lokasi Windows yang tercantum dalam script, membuka browser headless dan server/storage temporary, lalu melakukan cleanup. Screenshot disimpan di `scratch/` (ignored). Ini terpisah dari `scripts/smoke.mjs`, yang hanya memeriksa health layanan yang sudah berjalan dan tidak membuktikan kualitas inferensi. Tes backend/Python historis tetap ada di PROGRESS; jangan mengklaim dijalankan ulang karena dokumen diperbarui.
+
+**Belum tercakup oleh bukti di atas:** kualitas dataset foto nyata/occlusion, deployment publik, Linux/macOS dan kamera mobile. Retensi otomatis, antrean berbatas dan lifecycle pergantian model belum diimplementasikan. Model/checkpoint tidak boleh didistribusikan tanpa memastikan lisensinya.
 
 ### Git dan privasi
 
@@ -255,7 +277,7 @@ Laporkan file diubah, tes nyata, error, dan satu next task.
 ## Referensi internal
 
 - [`docs/PROJECT_SPEC.md`](docs/PROJECT_SPEC.md) — spesifikasi produk dan acceptance criteria.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — desain service, pipeline AI, API awal.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — desain service, kontrak API aktual dan batas lifecycle.
 - [`docs/PROGRESS.md`](docs/PROGRESS.md) — status dan pengujian yang sebenarnya.
 - [`docs/HANDOFF.md`](docs/HANDOFF.md) — instruksi perpindahan agent.
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — keputusan dan pertanyaan terbuka.

@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** M1–M5 teruji pada Windows lokal. M6 memiliki helper/API SD15 dan antrean Express dengan snapshot privat; UI generatif, koreksi mask dan retensi belum tersedia. Bukti aktual ada di `PROGRESS.md`.
+> **Status:** Implementasi M1–M7 ditutup D-047; frontend ekstraksi, pixelation, stylization, koreksi mask dan spritesheet tersedia. Bukti penerimaan bersifat terarah pada Windows lokal, bukan jaminan semua fitur/parameter/foto telah lulus. Perbaikan kedua kuas mask teruji pada 2026-11-22 dengan AI mock. Retensi dan pergantian lifecycle model otomatis belum tersedia; lihat `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -16,12 +16,12 @@
 [FastAPI — local AI worker]    [storage/jobs/<job-id>/]
        |
        v
-[SCHP human parsing candidate + Pillow/OpenCV masks]
+[SCHP ATR-18 CPU + Pillow/NumPy masks]
        |
        v
 [PNG transparan / metadata kembali ke Express]
 
-Mode lanjutan: Express -> local image-to-image service (mis. ComfyUI)
+Stylization: Express -> FastAPI /stylize-path -> SD15 lokal CPU FP32 (service terpisah opsional)
 ```
 
 Frontend tidak mengakses FastAPI atau filesystem lokal secara langsung. Browser hanya berbicara dengan Express. FastAPI hanya bind pada `127.0.0.1` saat semua komponen berada di mesin sama.
@@ -36,21 +36,21 @@ Frontend tidak mengakses FastAPI atau filesystem lokal secara langsung. Browser 
 | `storage/` | File sementara input/mask/hasil per job | Direktori statis publik |
 | `docs/` | Kebutuhan, keputusan, status, handoff | Menjadi pengganti pengujian |
 
-## 3. Teknologi awal
+## 3. Teknologi aktual
 
 - Frontend: **Vite + Vanilla JavaScript + Tailwind CSS**.
 - API: **Node.js + Express.js**.
-- Upload: **Multer** versi terpelihara/aman (pilih dan catat versi ketika instalasi).
+- Upload: **Multer 2.5.0**, sesuai package/lockfile backend; klaim keamanan tidak hanya bergantung pada versi library.
 - Image processing umum dan classic pixelation: **Sharp**.
-- Export: **Archiver** untuk ZIP.
+- Export: **Archiver** untuk ZIP; **Sharp** untuk spritesheet PNG + atlas JSON.
 - AI service: **Python + FastAPI + PyTorch**.
-- Mask/extraction: **Pillow + OpenCV**.
-- Model awal yang akan **diuji**, bukan dijamin akurat: **SCHP ATR-18 Human Parsing**.
-- Opsi optimasi setelah pembuktian: ONNX Runtime CPU jika ekspor model sesuai.
-- Opsi stylization masa depan: ComfyUI atau engine lokal lain yang telah diuji di hardware pengguna.
+- Mask/extraction: **Pillow + NumPy**, tanpa kebutuhan OpenCV pada pipeline aktual.
+- Parsing: **SCHP ATR-18 Human Parsing**, adaptasi pure-PyTorch CPU.
+- ONNX Runtime belum diimplementasikan; bukan jalur inferensi aplikasi saat ini.
+- Stylization: **SD15 lokal via Diffusers/Accelerate**, CPU FP32 dengan UNet disk-offload dan mitigasi loader Windows (D-037–D-039); bukan integrasi ComfyUI.
 - Database: tidak ada pada MVP; metadata job file JSON lokal. SQLite hanya jika kebutuhan persisten muncul.
 
-Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lock npm dan pin dependensi langsung Python. Dependensi pemrosesan gambar/model baru dipilih pada milestone terkait.
+Versi dan keputusan runtime dicatat di `DECISIONS.md`; dependensi web memakai package-lock npm. Environment Python ekstraksi `.venv-test` dan stylization `.venv-stylization-poc` terpisah. Checkpoint disimpan lokal dan diabaikan Git; ketersediaan folder model tidak membuktikan keberhasilan inferensi.
 
 ## 4. Pemrosesan dan status job
 
@@ -70,27 +70,30 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 
 **Snapshot dan UI Pixelation:** Manager memilih objek completed melalui resolusi manifest privat, menulis PNG dan manifest terpisah di `<job>/pixelations/<uuid>/`, publikasi manifest terakhir tanpa memutasi original/job/ZIP. POST menerima palette opsional original/retro16; respons dan snapshot baru mencatat palette. GET tetap menyajikan snapshot lama tanpa field tersebut, bukan mengkuantisasi ulang. UI per kartu memiliki pemilih ukuran/palet, status, preview tajam dan link native. Kedua pemilih dikunci selama request; AbortController mengikuti lifecycle upload/reset dan respons harus cocok dengan job/objek/ukuran/palet/URL yang diminta.
 
+**Koreksi mask aktual (D-044, perbaikan 2026-11-22):** Editor Canvas mengambil foto sumber sesuai bbox. Penghapus menggunakan disk/stroke `destination-out`; Pulihkan memakai clip lingkaran/kapsul dan komposisi `copy` agar RGB/alpha sumber menggantikan area kuas. Undo menyimpan hingga 20 ImageData; Reset mengembalikan kondisi saat dialog dibuka. PUT memvalidasi PNG RGBA/dimensi dan memperbarui objek/manifest; operasi turunan baru membaca revisi tersebut, snapshot turunan lama tetap terpisah. Canvas dapat membulatkan RGB beralpha parsial dan mengantialias tepi kuas.
 
-**Alur lengkap yang dituju (retensi belum tersedia):**
+**UI generatif dan spritesheet aktual:** Kartu objek menyediakan preset/ukuran stylization, POST, polling, preview dan unduhan. Browser mengirim dua langkah nominal, strength 0.5 dan ukuran 128/256; API internal menerima parameter lebih luas, bukan bukti semua konfigurasi diuji. Spritesheet menyusun objek manifest pilihan/semua menjadi PNG bergrid dengan padding/kolom dan atlas JSON; bukan sprite animasi.
 
-1. `POST /api/jobs`: upload satu gambar valid; Express buat `job_id` acak, simpan input, metadata status `queued`.
-2. Worker mengambil pekerjaan; ubah ke `processing`.
-3. Express mengirim gambar ke FastAPI melalui localhost HTTP (mis. multipart). Batasi ukuran; jangan pernah mempercayai path dari input pengguna.
-4. FastAPI menjalankan human parsing dan mengembalikan label/mask atau menulis hasil ke direktori job yang dikonfigurasi secara aman.
-5. Post-processing: pilih kategori valid, buat alpha mask, crop bounding box, beri padding, ekspor PNG transparan; simpan manifest `objects`.
+
+**Alur pemrosesan aktual (retensi belum tersedia):**
+
+1. `POST /api/jobs`: multipart gambar valid atau JSON `upload_id`; Express membuat job ID acak dan manifest queued privat.
+2. Worker FIFO mengambil pekerjaan dan mengubah status ke processing.
+3. Express memanggil FastAPI `/extract-path` melalui loopback dengan path internal yang dipilih backend, bukan path browser.
+4. FastAPI menjalankan SCHP lokal, menghasilkan class map dan PNG foreground/kategori pada tujuan yang ditentukan backend.
+5. Backend memvalidasi hasil, bbox/dimensi, nama/lokasi file dan metadata sebelum mempublikasikan inventaris objek.
 6. Express tandai `completed` atau `failed` dengan error yang aman ditampilkan; UI polling `GET /api/jobs/:id`.
 7. Unduhan `GET`/ZIP memilih file berdasarkan manifest object ID yang sah, **bukan path arbitrer dari client**.
-8. Cleanup job lama menggunakan aturan retensi yang bisa dikonfigurasi.
+8. Penghapusan file lama/retensi otomatis belum tersedia; hapus pilihan di browser bukan penghapusan data server.
 
-**Catatan:** untuk MVP pilih satu mekanisme transfer output FastAPI↔Express secara konsisten. Jika shared storage dipakai, path harus divalidasi dan hanya internal. Tidak boleh expose filesystem mentah kepada client.
+Path filesystem FastAPI hanya untuk caller lokal tepercaya; API internal bukan sandbox filesystem publik. Browser mengakses Express dan hanya mengirim ID objek/job yang terdaftar.
 
-## 5. Draft kontrak REST API (rencana)
+## 5. Kontrak REST API aktual
 
 | Method | Path | Keterangan |
 | --- | --- | --- |
 | POST | `/api/jobs` | Tersedia: multipart image atau JSON upload_id, HTTP 202 + Location |
 | GET | `/api/jobs/:id` | Tersedia: status, progress tahap, timestamp, objek tanpa path, error aman |
-| GET | `/api/jobs/:id/objects` | Manifest objek hasil ekstraksi |
 | GET | `/api/jobs/:id/objects/:objectId` | Tersedia: preview PNG, hanya objek manifest job completed |
 | GET | `/api/jobs/:id/objects/:objectId/download` | Tersedia: attachment PNG asli dengan nama UUID objek |
 | PUT | `/api/jobs/:id/objects/:objectId` | Tersedia: revisi mask manual objek (payload PNG RGBA exact, D-044) |
@@ -112,7 +115,7 @@ Versi runtime/dependensi M1 dicatat di `DECISIONS.md` (D-010), dengan package-lo
 | GET | `/api/health` | Health Express (tersedia M1) |
 | GET | `/api/health/ai` | Express memanggil health FastAPI (tersedia M1) |
 
-Internal AI service: `GET /health` tersedia pada M1, mengembalikan `{"status":"ok","service":"ai-service","model_loaded":false}`. Express `/api/health` mengembalikan `{"status":"ok","service":"backend"}`. `/api/health/ai` memanggil FastAPI dengan timeout bawaan 3 detik; berhasil mengembalikan kontrak health AI yang sama, gagal mengembalikan HTTP 503 dengan pesan aman. Health Express tetap independen. `POST /parse` belum tersedia; kontrak inferensi diputuskan di M3.
+Internal FastAPI: `GET /health` mengembalikan status service, `model_loaded` (SCHP), `stylizer_available` dan `stylizer_loaded`. SCHP dimuat saat startup bila checkpoint tersedia; kegagalan load masih memungkinkan health-only, sehingga HTTP 200 bukan jaminan model siap. Express `/api/health` independen; `/api/health/ai` mem-proxy status SCHP dengan timeout default 3 detik dan mengembalikan 503 bila service tidak terjangkau. Proxy tersebut bukan readiness probe SD15 terpisah. Ekstraksi internal tersedia melalui `POST /extract` dan `/extract-path`; tidak ada endpoint `/parse`.
 
 **Stylization internal (D-040/D-041):** FastAPI menyediakan `POST /stylize` (multipart file) dan `/stylize-path` (JSON path tepercaya). Pipeline SD15 lazy-loaded; lock per proses menolak generasi bersamaan dengan 409. Handler sinkron memakai threadpool. Health internal menambahkan `stylizer_available` (konfigurasi ditemukan, bukan bukti load) dan `stylizer_loaded`; health proxy Express tetap untuk service ekstraksi.
 
@@ -120,7 +123,7 @@ Internal AI service: `GET /health` tersedia pada M1, mengembalikan `{"status":"o
 
 **Batas lifecycle:** FIFO tidak unload SCHP/SD15 atau membatalkan inferensi remote saat HTTP timeout. Late writes tetap staging privat; snapshot failed tidak dapat diunduh. Retensi belum ada. Service SD15 opsional dapat dipisahkan lewat `AI_STYLIZATION_SERVICE_URL`, tetapi resource kedua proses tetap harus dikelola; smoke menghentikan SCHP sebelum memulai SD15. Endpoint ekstraksi sinkron M3 tetap di luar FIFO.
 
-Pada development, Vite `127.0.0.1:5173` mem-proxy `/api` ke Express `127.0.0.1:3000`; Express mengakses FastAPI `127.0.0.1:8000`. Tidak ada static serving `storage/`, akses FastAPI langsung dari browser, atau CORS terbuka. Halaman M1 hanya status layanan, bukan UI produk penuh.
+Pada development, Vite `127.0.0.1:5173` mem-proxy `/api` ke Express `127.0.0.1:3000`; Express memakai FastAPI `127.0.0.1:8000` secara default. Tidak ada static serving storage, akses FastAPI langsung dari browser atau CORS terbuka. Halaman sekarang mencakup upload/kamera, workspace objek, mask editor, kedua mode pixelation/stylization dan ekspor; bukan hanya layar health M1.
 
 ## 6. Contoh metadata job
 
@@ -138,7 +141,7 @@ Pada development, Vite `127.0.0.1:5173` mem-proxy `/api` ke Express `127.0.0.1:3
 
 Contoh skema, **bukan output aplikasi yang telah diuji**.
 
-## 7. Struktur direktori rencana
+## 7. Direktori dan penyimpanan
 
 ```text
 IMMOExtract/
@@ -157,7 +160,7 @@ IMMOExtract/
 └── .gitignore       # wajib dibuat sebelum memproses foto atau model
 ```
 
-Source subfolder seperti `src/routes`, `src/services`, `inference`, dan `processing` dibuat **bertahap** sesuai milestone, bukan semuanya sekaligus tanpa kebutuhan.
+Direktori service di atas berisi implementasi, bukan scaffold kosong. `scripts/` berisi smoke health/integration/browser; `storage/uploads/` dan `storage/jobs/` privat, tidak statis dan tidak masuk Git. Environment, dependensi, model, build dan artefak scratch tidak dibundel sebagai source.
 
 ## 8. Segmentasi: keterbatasan dan fallback
 
@@ -165,7 +168,7 @@ Source subfolder seperti `src/routes`, `src/services`, `inference`, dan `process
 - Untuk dua sepatu atau objek saling menempel, connected components boleh diuji tetapi tidak dianggap solusi sempurna.
 - Input resolusi besar harus dibatasi/di-resize sebelum inferensi; pemetaan mask kembali ke resolusi asli harus ditangani benar.
 - Input yang tidak menampilkan orang atau hasil tanpa kategori valid harus menghasilkan pesan yang jujur.
-- Koreksi mask interaktif merupakan milestone lanjut.
+- Koreksi mask interaktif sudah tersedia; tidak merekonstruksi bagian objek yang tidak ada pada foto sumber.
 - Pemisahan background transparan tidak otomatis melengkapi bagian objek yang tidak terlihat.
 
 ## 9. Keamanan dan privasi
@@ -174,7 +177,7 @@ Source subfolder seperti `src/routes`, `src/services`, `inference`, dan `process
 - Gunakan random ID untuk job dan object; hindari direct static serving dari `storage`.
 - Jangan taruh secret, API token, foto pengguna, mask/hasil, checkpoint, `.venv`, atau `node_modules` di Git.
 - Simpan model checkpoint lokal; unduhan ukuran besar butuh persetujuan pengguna.
-- Rate/size limits dan cleanup job untuk menghindari penyalahgunaan/kehabisan disk.
+- Validasi ukuran sudah tersedia, tetapi antrean berbatas dan cleanup retensi belum tersedia. Jangan menyamakan batas upload/UUID acak dengan kesiapan deployment publik atau kontrol akses multi-user.
 - Saat memakai Claude Website, kirim hanya file source yang relevan; jangan upload foto asli pribadi atau secrets.
 
 ## 10. Observability dan pengujian
@@ -183,14 +186,16 @@ Source subfolder seperti `src/routes`, `src/services`, `inference`, dan `process
 - Catat status job; hasil benchmark hanya setelah benar-benar diukur.
 - Uji backend dengan file valid, corrupt, masqueraded MIME, file besar, ID tak dikenal.
 - Uji pixel alpha dan resolusi; uji AI pada berbagai kondisi cahaya/occlusion.
+- Pisahkan bukti model nyata dari fixture: `scripts/smoke_browser_m7.mjs` memakai AI mock + browser/backend nyata untuk regresi UI/PNG; bukan tes SCHP/SD15. Log 2026-11-22 juga memiliki sesi SCHP nyata dengan gambar sintetis, bukan evaluasi dataset foto manusia.
+- SD15 memiliki bukti inferensi sukses dan penghentian guard pada log 2026-11-21; antrean tidak menjamin dua model resident aman. Build/tes lama tidak dijalankan ulang pada tugas dokumentasi.
 - Jalankan minimal smoke test sebelum commit milestone.
 
-## 11. Yang belum diputuskan
+## 11. Batas dan pekerjaan yang belum ditutup
 
-- Versi library AI dan kompatibilitas runtime M3 (runtime web/health M1 sudah dipilih).
-- Checkpoint SCHP dan evaluasi kualitas pada data uji.
-- Format kontrak pasti FastAPI-Express untuk mask/output.
-- Pilihan model generatif, lisensi, kapasitas GPU/RAM.
-- Masa retensi file sementara dan batas resource final setelah benchmark.
+- Evaluasi kualitas segmentasi/stylization pada foto nyata, aksesori dan occlusion; alpha exact tidak menjamin kualitas visual.
+- Lisensi distribusi checkpoint/model dan kode proyek sebelum publikasi/redistribusi.
+- Resource SD15: headroom RAM/commit, latensi, konfigurasi di luar smoke dan lifecycle pergantian model.
+- Retensi file, batas antrean/ekspor dan keamanan deployment multi-user; belum menjadi fitur operasional.
+- Portabilitas Linux/macOS dan penerimaan kamera mobile; belum terbukti pada bukti Windows lokal.
 
 Catat keputusan setelah diuji ke `docs/DECISIONS.md`.

@@ -1,59 +1,59 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** ikuti konteks AGENTS dan dokumen proyek. Implementasi M1–M7 ditutup D-047; kedua temuan mask (klik penghapus dan kuas Pulihkan) kini diperbaiki. Regresi mask dengan AI mock bukan bukti seluruh MVP bebas bug.
+> **Untuk agent berikutnya:** implementasi M1–M7 ditutup D-047; kedua bug mask telah diperbaiki dan dokumentasi utama sudah diselaraskan. Bukti AI mock, inferensi nyata, pemeriksaan dokumen dan penerimaan kualitas foto harus tetap dibedakan.
 
 ## Last agent
 
-OMP — verifikasi dan perbaikan kuas Pulihkan, 2026-11-22.
+OMP — sinkronisasi README/ARCHITECTURE dengan implementasi dan batas bukti, 2026-11-22.
 
 ## Current milestone / task
 
-M7 — penerimaan lokal pascapenutupan implementasi. Perbaikan Pulihkan selesai; berikutnya sinkronisasi status README/ARCHITECTURE. Tidak ada fitur/milestone baru.
+M7 — penerimaan lokal pascapenutupan implementasi. Sinkronisasi dokumentasi selesai; berikutnya evaluasi ekstraksi SCHP pada satu foto manusia berizin. Tidak ada fitur/milestone baru.
 
 ## Last completed task
 
-- Git awal/index bersih; kontrak D-044 dan source mask diperiksa. LSP tidak dikonfigurasi.
-- Regresi baru membuktikan kegagalan klik restore: piksel tetap `[0,0,0,0]`, bukan RGBA sumber `[100,150,240,255]`.
-- Penyebab: `clip()` memakai area isi path, bukan outline `stroke()` pada garis terbuka. Pulihkan kini membentuk lingkaran saat klik/kapsul saat drag, lalu menyalin crop sumber dengan komposisi `copy`.
-- Komposisi tersebut mengganti alpha sumber, termasuk transparan/parsial, tanpa stroke hitam atau alpha menumpuk pada sapuan ulang. Bbox, Undo, save dan backend tidak diubah.
-- Regresi memakai event mouse CDP, Canvas nyata, backend nyata dan decode PNG Sharp; AI mock dengan fixture gradien/alpha parsial, bukan inferensi SCHP/SD15.
+- Working tree/index awal bersih. Konteks proyek dan bukti sesi sebelumnya dipertahankan; tidak mengulang implementasi atau tes runtime.
+- README/ARCHITECTURE dicocokkan dengan package scripts, server/app/router backend, health FastAPI, extractor/stylizer, kontrol UI generatif dan implementasi mask.
+- Narasi scaffold/fitur belum tersedia yang sudah usang diganti dengan status aktual; klaim “terverifikasi penuh” dibatasi menurut bukti.
+- Dokumentasi startup membedakan jalur ekstraksi/classic/mask/ekspor dari runtime SD15 opsional, kebutuhan checkpoint/dependensi, timeout dan resource. Tidak mengubah konfigurasi aplikasi.
+- Pemeriksaan statis tautan lokal/referensi script/code fence PASS. Tidak ada source, dependensi, model atau keputusan arsitektur yang diubah.
 
-## Verified behavior
+## Dokumentasi yang diselaraskan
 
-- Klik Pulihkan mengembalikan RGB/alpha foto sumber, sementara area luar radius tetap terhapus. Undo mengembalikan mask sebelumnya.
-- Drag horizontal/diagonal memulihkan area kuas saja; alpha parsial tetap sama pada sapuan ulang dan sumber transparan tidak menjadi hitam.
-- Objek crop memakai offset bbox yang benar. PNG foreground dan crop yang diunduh setelah save sesuai piksel hasil koreksi; area luar kuas tetap utuh.
-- Acuan RGBA berasal dari Canvas foto sumber: transparansi parsial dapat membulatkan RGB akibat premultiplied-alpha. Tepi kuas mengikuti antialiasing; tidak mengklaim seluruh byte RGB file asli identik.
-- Regresi penghapus serta alur spritesheet semua/pilihan, atlas, unduhan HTTP, reset dan pemeriksaan console existing tetap PASS.
+- Stack aktual SCHP/Pillow/NumPy dan SD15/Diffusers/Accelerate; OpenCV bukan kebutuhan pipeline ekstraksi.
+- Mask editor, UI generatif dan spritesheet tersedia; parameter UI generatif, compositing Pulihkan dan batas Canvas dijelaskan.
+- Health HTTP 200 bukan jaminan model siap; startup tiga terminal tidak otomatis menyediakan SD15. Antrean tidak mengelola lifecycle dua model.
+- Kontrak REST menghapus route draft GET `/api/jobs/:id/objects` yang tidak tersedia; objek ada pada polling job dan endpoint individual.
+- Bukti mask/browser AI mock dipisahkan dari SCHP nyata pada gambar sintetis dan riwayat SD15 nyata. Kualitas foto nyata, resource, retensi, portabilitas serta deployment publik tetap dibatasi.
 
 ## Modified files / uncommitted changes
 
-- `frontend/src/extraction-workspace.js` — clip lingkaran/kapsul dan komposisi copy untuk Pulihkan.
-- `scripts/smoke_browser_m7.mjs` — fixture gradien/alpha parsial dan regresi Pulihkan/crop/PNG tersimpan.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md`, `docs/DECISIONS.md` — bukti aktual, tugas berikutnya dan klarifikasi mekanisme D-044.
-- Artefak ignored: build `frontend/dist/` dan screenshot `scratch/proof_smoke_m7_spritesheet.png` diperbarui.
+- `README.md` — status, stack, startup, readiness, mask, harness dan batas bukti.
+- `docs/ARCHITECTURE.md` — implementasi/route aktual, lifecycle, pengujian dan pekerjaan terbuka.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — pemeriksaan aktual dan satu tugas berikutnya.
+- Tidak ada perubahan source, build, screenshot, model, dependensi atau konfigurasi permanen pada sesi ini.
 - Git awal bersih. Tidak staging/commit atau memeriksa Git ulang setelah edit; daftar di atas berdasarkan operasi sesi.
-- Tidak ada perubahan dependensi, backend, model atau arsitektur service. D-044 diperbarui sesuai mekanisme kuas yang diperbaiki.
+- DECISIONS tidak diubah: sinkronisasi ini mendokumentasikan implementasi/keputusan existing, bukan keputusan arsitektur baru.
 
 ## Tests / checks performed
 
 - **PASS:** `git status --short; git diff --stat; git diff; git diff --cached --stat` sebelum edit.
-- **FAIL / repro:** `node scripts/smoke_browser_m7.mjs` sebelum perbaikan: klik restore tetap RGBA nol.
-- **PASS build:** `npm run build --prefix frontend` (126 ms). Run browser sesudahnya mencapai probe crop, lalu **ERROR harness**: probe y=100 di luar crop tinggi 100; diperbaiki ke y=95 yang valid dan tetap di luar kuas.
-- **PASS final:** `node scripts/smoke_browser_m7.mjs` (5,98 s). Log: `PASS: Restore click/drag, source RGBA, bounds, Undo, repeated alpha, bbox and saved PNG.` Penghapus/spritesheet/reset juga lulus.
-- **NOT RUN:** SCHP/SD15 nyata, kamera dan suite backend/Python. Perubahan lokal frontend; AI mock tidak diklaim sebagai AI nyata.
-- **PASS cleanup:** socket checks memastikan semua enam port server dari tiga run tertutup. Harness memakai temporary storage; storage pengguna tidak disentuh. Screenshot generated ada di scratch; bukti mask utama adalah piksel Canvas/PNG.
+- **PASS inspeksi statis:** kontrak source, startup/config, routes dan bukti runtime historis dibandingkan dengan README/ARCHITECTURE.
+- **PASS:** Python inline memeriksa dua dokumen, enam tautan Markdown lokal, tiga referensi script dan pasangan code fence; seluruh target ada dan blok kode seimbang.
+- **NOT RUN:** build, browser, suite backend/Python, SCHP/SD15. Hanya dokumentasi berubah; tidak ada perilaku baru yang perlu smoke runtime.
+- Bukti runtime terakhir tetap dari sesi mask sebelumnya: build 126 ms dan browser 5,98 s PASS dengan AI mock. Jangan menyatakan tes tersebut dijalankan pada sesi dokumentasi.
+- Tidak menjalankan server/model atau membuat script/fixture sementara. Tanpa staging/commit.
 
 ## Current errors / limitations
 
-- **RESOLVED:** penghapus klik dan kuas Pulihkan. RGB/alpha, area kuas, Undo, crop serta PNG tersimpan lulus regresi terarah.
-- Batas Canvas: normalisasi premultiplied-alpha dapat membulatkan RGB parsial dan tepi kuas memakai antialiasing; pengujian membandingkan dengan foto sumber yang dirender Canvas.
-- Fixture sintetis/AI mock bukan bukti kualitas foto nyata. SD15 tetap memiliki risiko memori/latensi historis; tidak dimuat.
-- Retensi otomatis belum tersedia. Beberapa narasi historis README/ARCHITECTURE merujuk tahap lama; gunakan bukti terbaru.
+- Bug penghapus/Pulihkan yang ditemukan sebelumnya sudah diperbaiki; tidak menemukan bug runtime baru lewat tugas dokumentasi.
+- Kualitas ekstraksi pada foto manusia nyata/occlusion belum dibuktikan oleh fixture sintetis. Jangan mengklaim semua label akurat atau setiap instance terpisah.
+- SD15 memiliki risiko RAM/commit/latensi dan riwayat guard; retensi, antrean berbatas dan lifecycle pergantian model otomatis belum tersedia.
+- Linux/macOS, kamera mobile dan deployment publik belum tercakup oleh bukti lokal. Lisensi model/kode perlu dipastikan sebelum distribusi.
 
 ## Next action (only one)
 
-Selaraskan README dan ARCHITECTURE dengan status implementasi/penerimaan terbaru. Hapus narasi fitur yang sudah tersedia sebagai belum tersedia, pertahankan batas SD15/retensi/kualitas foto nyata, dan bedakan AI mock dari inferensi nyata. Gunakan bukti PROGRESS/HANDOFF; tidak perlu suite luas atau memuat model.
+Evaluasi SCHP pada satu foto uji manusia nonpribadi berizin, bukan fixture sintetis. Periksa kategori, mask/alpha dan aksesori/occlusion yang terlihat; catat hasil tanpa generalisasi. Gunakan file lokal yang diizinkan; bila belum tersedia, minta foto uji/persetujuan pengguna. Jangan memakai foto pribadi tanpa izin, mengunggah ke cloud atau memuat SD15.
 
 ## Handoff rules
 
