@@ -619,7 +619,13 @@ function drawStroke(p1, p2) {
 
   if (tool === 'eraser') {
     maskCtx.globalCompositeOperation = 'destination-out';
-    maskCtx.stroke();
+    if (p1.x === p2.x && p1.y === p2.y) {
+      maskCtx.beginPath();
+      maskCtx.arc(p1.x, p1.y, radius, 0, Math.PI * 2);
+      maskCtx.fill();
+    } else {
+      maskCtx.stroke();
+    }
   } else if (tool === 'restore' && sourceCropCanvas) {
     maskCtx.stroke();
     maskCtx.clip();
