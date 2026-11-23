@@ -1,59 +1,58 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** koreksi foreground foto astronaut melalui UI nyata dan unduhan PNG/ZIP PASS. Segmentasi otomatis masih memiliki salah label/kebocoran; koreksi area terpilih bukan penerimaan kualitas umum.
+> **Untuk agent berikutnya:** evaluasi satu foto full-body berizin selesai. SCHP menghasilkan dua sepatu dan sembilan kategori; kontrak piksel PASS, kualitas kategori belum bersih. Berikutnya koreksi crop Pants melalui UI, bukan tuning model.
 
 ## Last agent
 
-OMP — penerimaan koreksi foto nyata melalui browser/Express/SCHP dan verifikasi PNG/ZIP, 2026-11-23.
+OMP — evaluasi SCHP lokal satu foto full-body berizin, 2026-11-23.
 
 ## Current milestone / task
 
-M7 — penerimaan lokal pascapenutupan implementasi D-047. Koreksi mask foto astronaut selesai tanpa perubahan source; berikutnya evaluasi satu foto full-body berizin.
+M7 — penerimaan lokal pascapenutupan implementasi D-047. Evaluasi full-body selesai tanpa perubahan source; penerimaan kualitas umum tetap terbatas.
 
 ## Last completed task
 
-- Git awal hanya PROGRESS/HANDOFF modified dari evaluasi sebelumnya; index kosong. Perubahan dipertahankan; tidak staging/commit.
-- Foto NASA Eileen Collins existing dipakai ulang (`scratch/schp-photo-20261123/input.png`), [public domain menurut scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut). Tidak mengunduh foto/model baru atau membaca storage pengguna.
-- Vite source 5176 → Express 3113 → FastAPI/SCHP 8013, storage temporary terisolasi, CPU dua thread. Upload/ekstraksi melalui browser menghasilkan tujuh kartu; inferensi 3,6253 s. SCHP loaded true; stylizer available/loaded false.
-- Mouse/keyboard native pada editor human: hapus fragmen bendera, Undo mengembalikan piksel, ulang penghapusan lalu Pulihkan lubang helm. Probe bendera `(2,25)`/`(8,450)` alpha 255→0; helm `(420,450)`/`(420,465)`/`(365,365)` 0→255 dengan RGB source exact; wajah `(220,130)` tidak berubah.
-- Save menutup dialog dan memperbarui preview/link. PNG native 337.748 byte identik dengan `Canvas.toBlob`; ZIP pilihan human 337.942 byte berisi hanya PNG tersebut, byte-identical, CRC/STORE/metadata checksum benar. Enam PNG kategori unchanged.
-- Reset mengosongkan galeri dan menonaktifkan ekstraksi/ekspor pilihan. Tab dan ketiga service ditutup, port terverifikasi tertutup, storage temporary milik sesi dihapus.
+- Git awal PROGRESS/HANDOFF modified, index kosong; perubahan sebelumnya dipertahankan. Tidak staging/commit atau memeriksa Git ulang setelah edit.
+- Inventaris lokal tidak menemukan foto full-body dengan bukti izin; foto storage pengguna tidak dibuka/digunakan. Pengguna mengizinkan satu unduhan baru untuk evaluasi lokal.
+- Foto [Man Standing — Visitor7](https://commons.wikimedia.org/w/index.php?title=File:Man_Standing.jpg&oldid=1257378181), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), JPEG 762×952, 589.317 byte. SHA-1 cocok metadata Commons; input tidak dimodifikasi. Atribusi/lisensi dan perubahan turunan dicatat dalam provenance.
+- `HumanExtractor` dan `save_category_objects` existing, CPU dua thread: load 1,3351 s, satu inferensi 3,7067 s. Foreground 138.055 piksel (19,0309%); sembilan crop tersimpan. Tidak memuat SD15 atau mengubah model/threshold.
+- Semua piksel RGB/alpha, mask PNG, bbox/count/dimensi crop, non-overlap dan input unchanged PASS. Review visual tetap menemukan salah label/mask; jumlah piksel bukan confidence/akurasi.
 
 ## Artefak dan batas visual
 
-- Bukti ignored: `scratch/mask-real-downloads-20261123/` — `before.png`, PNG revisi UUID human, `expected-canvas.png` (`toDataURL`), `expected-blob.png` (`toBlob`), ZIP UUID ekspor, `corrected-card.webp`, `verification.json`.
-- Job uji `e7a401b4-a469-4efe-8c62-7ffe338b968d`; human `2729d158-7277-4bb4-b6a9-1ca6ddc2962e`; ekspor `996f8f70-ef11-4c25-ad07-838f3f6cee86`. Storage job sudah dihapus; ID bukan link server aktif.
-- Alpha berubah pada 3.726 piksel; hasil memiliki 162 piksel alpha parsial (tepi kuas). Semua RGB piksel opaque exact dengan sumber; tidak menjamin hidden RGB/alpha parsial identik.
-- Screenshot modal/kartu diperiksa: area sasaran berubah sesuai sapuan, bukan klaim setiap batas bersih. Helm masih terpecah beberapa kategori; kaki/sepatu tidak terlihat. Tanpa ground-truth mask/skor akurasi.
-- Artefak evaluasi awal di `scratch/schp-photo-20261123/` tetap utuh; SHA-256 input `88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5`, 791.555 byte, 512×512.
+- Bukti ignored baru: `scratch/schp-fullbody-20261123/` — `input.jpg`, `provenance.json`, `report.json`, `human.png`, `mask.png`, `classes.png`, `classes-color.png`, `objects/` (sembilan PNG), `review.png`, `categories-review.png`.
+- SHA-256 input `034e369c0de1578fbcc0eb12e524d546405ca46ae45f340280971eb2577dfd98`; source JPEG utuh, RGB acuan adalah hasil decode Pillow. Turunan lokal mengikuti atribusi/lisensi CC BY-SA 3.0; tidak dibundel ke source proyek.
+- Prediksi: Hair 1.622; Upper-clothes 63.077; Pants 54.260; Belt 2.182; Left-shoe 1.816; Right-shoe 2.710; Face 7.393; Left-arm 2.784; Right-arm 2.211 piksel.
+- Siluet utama dan dua sepatu terpisah dari background. Fragmen celana tungkai bawah sisi kiri gambar salah masuk Upper-clothes, meninggalkan lubang pada Pants. Kacamata tetap di Face, tidak menghasilkan Sunglasses. Crop tangan menyertakan fragmen sabuk/pakaian di sela jari; batas halus belum bersih.
+- Pants bbox `[404,467,590,879]`, 186×412; Upper-clothes bbox `[330,201,683,806]` meluas akibat fragmen jauh di tungkai. Koordinat right/bottom eksklusif; crop tidak boleh dianggap full-frame.
+- Kaki/lengan tertutup pakaian, tangan menutupi pinggang; tidak dapat menilai bagian tersembunyi. Tanpa ground-truth mask/IoU atau klaim penerimaan umum. Artefak astronaut dari dua sesi sebelumnya tetap utuh.
 
 ## Modified files / uncommitted changes
 
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — diperbarui di atas perubahan belum commit dari sesi sebelumnya.
-- Folder bukti ignored baru tercantum di atas; tidak ada source, test permanen, script sementara, dependensi, checkpoint atau konfigurasi yang diubah.
-- Git awal dua dokumen modified; tidak staging/commit atau memeriksa Git ulang setelah edit.
-- DECISIONS tidak diubah: penerimaan menguji D-044 existing, bukan keputusan arsitektur baru.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — diperbarui di atas perubahan belum commit sebelumnya.
+- Folder bukti ignored baru tercantum di atas. Tidak ada source, test permanen, script sementara di disk, dependensi, checkpoint atau konfigurasi yang diubah.
+- Git awal dua dokumen modified; index kosong. Tidak staging/commit.
+- DECISIONS tidak diubah: evaluasi pipeline existing, bukan keputusan arsitektur baru.
 
 ## Tests / checks performed
 
-- **PASS inspeksi:** Git status/diff/index; PowerShell CIM: RAM bebas 2.374.820 KiB/sisa virtual 7.838.696 KiB, tidak menemukan Python/Uvicorn sebelum startup.
-- **PASS UI nyata:** browser desktop 1365×1000, upload → SCHP → tujuh kartu → Penghapus/Pulihkan/Undo/save → native PNG dan ZIP pilihan. Tidak mock; SD15 tidak dimuat.
-- **FAIL harness awal:** `ai-service/.venv-test/Scripts/python.exe -` membandingkan unduhan terhadap `toDataURL`; 12 piksel alpha parsial berbeda RGB maksimum 1, alpha seluruh piksel identik. Backend menulis buffer save langsung tanpa re-encode.
-- **PASS diagnosis/verifikasi lanjutan:** capture `toBlob` dari canvas yang sama byte-identical dengan unduhan. Python NumPy/Pillow/zipfile memeriksa seluruh PNG, probe target, RGB opaque exact, preview, ZIP satu entry/CRC/STORE/size/count/SHA-256, enam kategori unchanged, health SCHP true/SD15 false.
-- **ERROR harness terselesaikan:** downloads pada `browser.open` awal boolean, harus path; `tab.waitFor` diberi ekspresi JS padahal selector, menyebabkan satu pageerror. Pengamatan save dilanjutkan dengan `page.waitForFunction`, bukan save/inferensi ulang. Nol console error aplikasi.
-- **PASS cleanup:** reset UI; tab/service ditutup; Python `shutil.rmtree` menghapus hanya `C:/Users/Hype/AppData/Local/Temp/immo-mask-real-dJrRPi`; socket memastikan 8013/3113/5176 tertutup. Bukti ignored dipertahankan.
-- **NOT RUN:** build, suite backend/Python, SD15, kamera, viewport mobile; tidak ada perubahan perilaku aplikasi.
+- **PASS inspeksi:** Git status/diff/index, inventaris foto lokal dan source extractor; LSP tidak dikonfigurasi.
+- **PASS resource:** PowerShell CIM sebelum inferensi: RAM bebas 3.441.252 KiB/sisa virtual 9.520.064 KiB. Query berjalan bersama unduhan dan mencatat dua proses Python launcher/child; bukan klaim nol proses Python atau benchmark peak memory.
+- **PASS unduhan:** `ai-service/.venv-test/Scripts/python.exe -` — satu JPEG setelah izin, ukuran/SHA-1 cocok metadata Commons, decode 762×952, provenance tersimpan.
+- **PASS kontrak piksel:** `ai-service/.venv-test/Scripts/python.exe -` — satu inferensi SCHP 3,7067 s; RGB foreground/sembilan crop exact, alpha biner/class map, mask file, bbox padding/clipping, dimensi/count, non-overlap, hash input unchanged.
+- **FAIL kualitas kategori bersih tanpa koreksi:** inspeksi source, `review.png` dan `categories-review.png` menemukan salah label celana, kacamata terlewat serta kontaminasi sela jari. Dua sepatu terpisah secara visual, bukan bukti akurasi universal.
+- **NOT RUN:** browser/API, build, suite backend/Python, SD15, kamera/mobile; tidak ada perubahan perilaku aplikasi. Tidak menjalankan layanan atau membuat storage job, sehingga tidak ada layanan/storage uji untuk dibersihkan.
 
 ## Current errors / limitations
 
-- Tidak menemukan bug aplikasi baru pada skenario ini. Perbedaan `toDataURL`/`toBlob` adalah batas pembanding teramati; jangan mengklaim semua encoder PNG menghasilkan RGB parsial identik.
-- Koreksi foreground tidak mengubah class map/enam kategori; label helm salah dan kualitas batas yang belum disapu tetap keterbatasan.
-- Foto full-body/kaki/sepatu belum dievaluasi. Izin unduhan sebelumnya hanya satu foto astronaut; perlu persetujuan baru bila foto berikutnya diunduh.
+- Tidak menemukan error eksekusi pada evaluasi ini. Keterbatasan kualitas di atas belum diperbaiki; jangan mengubah model/threshold hanya berdasarkan satu sampel.
+- Koreksi mask satu objek tidak memperbaiki class map atau objek kategori lain. Revisi Pants nantinya tidak otomatis menghapus fragmen salah dalam Upper-clothes.
+- Izin unduhan sesi ini hanya satu foto yang sudah digunakan; jangan mengunduh tambahan tanpa persetujuan baru. Foto existing cukup untuk next action.
 - Risiko existing: resource SD15, retensi/batas antrean/lifecycle otomatis, portabilitas/mobile/deployment publik serta lisensi redistribusi model belum ditutup.
 
 ## Next action (only one)
 
-Evaluasi satu foto manusia full-body nonpribadi berizin dengan pakaian dan sepatu terlihat. Cari file lokal berizin dahulu; minta persetujuan baru sebelum mengunduh foto tambahan. Jalankan SCHP lokal, periksa kategori/mask dan bagian tertutup, catat false positive/negative tanpa generalisasi atau tuning model berdasarkan satu sampel. Jangan memuat SD15.
+Koreksi objek Pants pada foto full-body existing `scratch/schp-fullbody-20261123/input.jpg` melalui UI nyata: pulihkan area celana yang salah masuk Upper-clothes, uji Undo/save serta PNG dan ZIP pilihan sesuai Canvas `toBlob`. Periksa offset bbox crop dan jangan mengklaim revisi Pants otomatis memperbaiki kategori Upper-clothes. Gunakan storage uji terisolasi, tanpa unduhan baru atau SD15.
 
 ## Handoff rules
 

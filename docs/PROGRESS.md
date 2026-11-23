@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. Koreksi foreground satu foto nyata melalui UI serta unduhan PNG/ZIP PASS. Segmentasi otomatis masih memiliki salah label/kebocoran; bukan bukti penerimaan kualitas umum.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. Koreksi astronaut UI→PNG/ZIP PASS historis. Evaluasi satu foto full-body SCHP PASS kontrak piksel, tetapi kategori masih memerlukan koreksi; bukan penerimaan kualitas umum.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Koreksi foto astronaut melalui UI nyata serta verifikasi PNG/ZIP selesai; berikutnya evaluasi satu foto full-body berizin untuk cakupan kaki/sepatu.
+- **Current task:** Evaluasi satu foto full-body berizin selesai; berikutnya koreksi objek Pants foto tersebut melalui UI dan verifikasi PNG/ZIP.
 - **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor dan UI generatif tersedia. Startup SD15 tetap terpisah/opsional; retensi, antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
-- **Last runtime verification:** 2026-11-23 — browser → Vite → Express → SCHP nyata, inferensi 3,6253 s; Penghapus/Pulihkan/Undo/save dan PNG/ZIP pilihan PASS. Unduhan identik dengan Canvas `toBlob`; SD15 tidak dimuat.
+- **Last runtime verification:** 2026-11-23 — `HumanExtractor` SCHP CPU dua thread, satu foto full-body 762×952, inferensi 3,7067 s; RGB/alpha/mask dan sembilan crop PASS. Review visual menemukan salah kategori celana dan kacamata terlewat; SD15 tidak dimuat.
 - **Last documentation check:** 2026-11-22 — source/konfigurasi/routes dibandingkan dengan narasi; pemeriksaan statis dua dokumen PASS (enam tautan lokal, tiga referensi script, blok kode seimbang).
 
 ## Milestone
@@ -20,7 +20,7 @@
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | Implemented; bug penghapus/Pulihkan diperbaiki | Regresi browser 2026-11-22 membuktikan klik, drag horizontal/diagonal, Undo, sumber RGB/alpha, offset crop dan PNG tersimpan. SD15 tidak diuji ulang |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Satu foto nyata: ekstraksi dan koreksi UI→PNG/ZIP PASS secara teknis; kualitas kategori otomatis masih bermasalah |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Astronaut: koreksi UI→PNG/ZIP PASS; full-body: kontrak piksel/sembilan crop PASS, kualitas kategori belum bersih |
 
 ## Completed
 
@@ -186,15 +186,23 @@
 - Pembanding awal FAIL: `toDataURL` berbeda dari encoder save `toBlob` pada 12 piksel alpha parsial, maksimum 1 tingkat RGB, alpha seluruh piksel identik. Backend menulis buffer langsung tanpa re-encode. Capture `toBlob` dari canvas yang sama cocok byte-identical dengan unduhan; tidak mengubah aplikasi atau melonggarkan pembanding akhir.
 - Error harness diselesaikan: `browser.open` membutuhkan path downloads, bukan boolean; `tab.waitFor` menerima selector, bukan ekspresi JS (satu pageerror harness). Pengamatan save dilanjutkan dengan `page.waitForFunction`, tanpa save/inferensi ulang. Nol console error aplikasi.
 - Reset mengosongkan galeri dan menonaktifkan ekstraksi/ekspor pilihan. Tab/service ditutup; port 8013/3113/5176 terverifikasi tertutup; storage temporary milik sesi dihapus. PNG sebelum/sesudah, kedua encoder canvas, ZIP, screenshot kartu dan `verification.json` dipertahankan ignored di `scratch/mask-real-downloads-20261123/`. Tanpa script sementara, staging atau commit.
+- Evaluasi full-body (2026-11-23, sesi lanjutan): Git awal PROGRESS/HANDOFF modified, index kosong; seluruh perubahan dipertahankan. Inventaris file lokal tidak menemukan kandidat full-body dengan bukti izin; foto storage pengguna tidak dibuka/dipakai. Pengguna kemudian mengizinkan satu unduhan tambahan.
+- Sumber: [Man Standing — Visitor7](https://commons.wikimedia.org/w/index.php?title=File:Man_Standing.jpg&oldid=1257378181), [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), JPEG 762×952, 589.317 byte. SHA-1 cocok metadata Commons; SHA-256 lokal `034e369c0de1578fbcc0eb12e524d546405ca46ae45f340280971eb2577dfd98`. Atribusi, lisensi dan perubahan turunan dicatat di `scratch/schp-fullbody-20261123/provenance.json`; tidak dibundel ke source.
+- Pipeline existing `HumanExtractor`/`save_category_objects` dipakai tanpa perubahan. CPU dua thread: load 1,3351 s, satu ekstraksi 3,7067 s; foreground 138.055 piksel (19,0309%). Sembilan kategori: Hair 1.622, Upper-clothes 63.077, Pants 54.260, Belt 2.182, Left-shoe 1.816, Right-shoe 2.710, Face 7.393, Left-arm 2.784, Right-arm 2.211. Angka adalah jumlah prediksi, bukan confidence/akurasi.
+- Assertion semua piksel PASS: RGB foreground/crop exact terhadap JPEG terdecode, alpha biner sesuai class map, mask file, bbox padding/clipping/dimensi/pixel_count setiap crop, non-overlap kategori dan hash input unchanged.
+- Review visual source/foreground/class map/sembilan crop: siluet utama full-body serta dua sepatu terpisah dari background. Fragmen celana di tungkai bawah sisi kiri gambar masuk Upper-clothes sehingga Pants berlubang; kacamata terlihat tetapi tidak ada kategori Sunglasses, tetap menyatu ke Face. Crop tangan menyertakan fragmen sabuk/pakaian di sela jari; batas halus belum bersih. **FAIL kualitas kategori bersih tanpa koreksi** pada sampel ini, bukan kegagalan kontrak ekspor.
+- Kaki tertutup celana, lengan tertutup kemeja, tangan menutupi pinggang; anatomi/objek di balik penutup tidak dapat dinilai atau direkonstruksi. Tanpa ground truth/IoU, tuning model/threshold atau generalisasi satu sampel.
+- Input, human/mask/class map, sembilan PNG crop, dua review dan report disimpan ignored di `scratch/schp-fullbody-20261123/`. Tidak menjalankan server/browser/SD15, memasang dependensi, mengubah source/keputusan, membuat script permanen, staging atau commit. Hanya PROGRESS/HANDOFF diperbarui; LSP tidak tersedia.
 
 ## In progress
 
-- Koreksi manual foreground satu foto nyata beserta unduhan PNG/ZIP selesai. Kualitas kategori otomatis dan cakupan foto full-body/kaki/sepatu belum diterima secara umum.
+- Evaluasi full-body/kedua sepatu selesai pada satu foto; koreksi objek Pants lewat UI belum dilakukan. Kualitas kategori otomatis belum diterima secara umum.
 
 ## Blockers / risks
 
 - **Temuan mask 2026-11-22 — RESOLVED:** klik penghapus dan kuas Pulihkan kini lulus regresi browser terarah. Batas bukti: fixture sintetis, pixel probes interior/luar brush, crop dan PNG tersimpan; tepi kuas mengikuti antialiasing Canvas.
 - **Batas bukti terbaru:** satu foto NASA setengah badan; koreksi area yang disapu tidak memperbaiki label kategori atau semua batas objek. Canvas memiliki alpha parsial/rounding RGB pada tepi; tanpa ground truth mask. RAM sebelum service 2.374.820 KiB bebas/sisa virtual 7.838.696 KiB; SD15 tidak dimuat.
+- **Batas bukti full-body:** satu foto publik CC BY-SA 3.0; kedua sepatu mendapat label terpisah tetapi celana/kacamata/tangan masih bermasalah. RAM sebelum inferensi 3.441.252 KiB bebas/sisa virtual 9.520.064 KiB; query bersamaan unduhan mencatat dua proses launcher/child Python tugas unduhan, bukan bukti sistem bebas Python. Bukan benchmark peak memory.
 
 - Latensi historis live HTTP ~1,82–2,20 detik per fixture; foto astronaut 4,3948 s melalui helper lalu 3,6253 s melalui service CPU dua thread. Bukan benchmark umum atau bukti kebutuhan memori puncak.
 - Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; seluruh pipeline berjalan pure-PyTorch + Pillow + NumPy tanpa ketergantungan ekstensi C++/CUDA atau OpenCV (`cv2`).
@@ -218,7 +226,7 @@
 
 ## Next task — satu tugas saja
 
-Evaluasi satu foto manusia full-body nonpribadi berizin dengan pakaian dan sepatu terlihat. Cari file lokal berizin dahulu; minta persetujuan baru sebelum unduh foto tambahan (izin sebelumnya hanya satu foto astronaut). Periksa kategori/mask serta bagian tertutup; catat false positive/negative tanpa generalisasi atau tuning model berdasarkan satu sampel. Jangan memuat SD15.
+Koreksi objek Pants pada foto full-body existing `scratch/schp-fullbody-20261123/input.jpg` melalui UI nyata: pulihkan area celana yang salah masuk Upper-clothes, uji Undo/save serta PNG dan ZIP pilihan sesuai Canvas `toBlob`. Periksa offset bbox crop dan jangan mengklaim revisi Pants otomatis memperbaiki kategori Upper-clothes. Gunakan storage uji terisolasi, tanpa unduhan baru atau SD15.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -503,6 +511,12 @@ Evaluasi satu foto manusia full-body nonpribadi berizin dengan pakaian dan sepat
 | 2026-11-23 | Python inline diagnosis encoder dan verifikasi lanjutan | PASS | `toBlob` byte-identical dengan unduhan; probe alpha/RGB, preview, ZIP satu entry/CRC/STORE/checksum dan enam kategori unchanged |
 | 2026-11-23 | Browser reset/console dan Python cleanup/socket | PASS dengan catatan harness | Galeri kosong/tombol disabled; nol console error aplikasi, satu pageerror selector harness; tab/service tertutup, storage temporary dihapus, bukti ignored dipertahankan |
 | 2026-11-23 | Build, suite backend/Python, SD15, kamera, viewport mobile | NOT RUN | Penerimaan desktop terarah; source tidak berubah |
+| 2026-11-23 | Sesi full-body: Git status/diff/index, inventaris gambar lokal, source extractor | PASS inspeksi | Dua dokumen modified dipertahankan, index kosong; foto storage tidak dibuka; LSP tidak tersedia |
+| 2026-11-23 | PowerShell CIM sebelum inferensi | PASS inspeksi | RAM bebas 3.441.252 KiB/sisa virtual 9.520.064 KiB; query berbarengan Python pengunduh, bukan klaim nol proses Python |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` — unduh satu foto berizin | PASS | Izin eksplisit; 589.317 byte, SHA-1 cocok metadata Commons, JPEG 762×952; provenance/lisensi tersimpan |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` — satu inferensi full-body dan assertion | PASS kontrak piksel | Load 1,3351 s, ekstraksi 3,7067 s; RGB/alpha/mask/bbox/count/dimensi/non-overlap sembilan crop, input unchanged |
+| 2026-11-23 | Inspeksi `review.png` dan `categories-review.png` full-body | FAIL kualitas kategori bersih tanpa koreksi | Dua sepatu terpisah; fragmen celana salah Upper-clothes, kacamata tidak terpisah, kontaminasi sela jari; tanpa ground truth |
+| 2026-11-23 | Browser/API, build, suite backend/Python, SD15, kamera | NOT RUN | Evaluasi helper/model existing saja; tidak mengubah perilaku aplikasi atau mengklaim E2E UI baru |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
