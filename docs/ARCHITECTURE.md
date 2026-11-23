@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Implementasi M1–M7 ditutup D-047; frontend ekstraksi, pixelation, stylization, koreksi mask dan spritesheet tersedia. Bukti penerimaan bersifat terarah pada Windows lokal, bukan jaminan semua fitur/parameter/foto telah lulus. Perbaikan kedua kuas mask teruji pada 2026-11-22 dengan AI mock. Retensi dan pergantian lifecycle model otomatis belum tersedia; lihat `PROGRESS.md`.
+> **Status:** Implementasi M1–M7 ditutup D-047. Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; retensi dan pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -68,12 +68,19 @@ Versi dan keputusan runtime dicatat di `DECISIONS.md`; dependensi web memakai pa
 
 **Pemrosesan Classic Pixelation aktual (D-027/D-028/D-029/D-030):** `pixelatePng(Buffer, size, palette = 'original')` menerima PNG objek RGBA8 statis tervalidasi. Sharp decode/encode dengan batas 24 megapiksel/8192 per sisi. Sisi terpanjang 16/32/64/128, sisi lain round/minimum 1; tanpa crop/padding. Sampling pusat nearest menyalin RGBA tanpa premultiplication. Mode `retro16` sesudah sampling memetakan RGB terlihat ke palet tetap 16 warna melalui jarak kuadrat RGB; alpha dan RGB transparan tetap exact. Helper hanya buffer-to-buffer.
 
+Preservasi alpha berlaku pada koordinat yang tersampel, bukan seluruh piksel sumber. Pada PNG Pants revisi berisi 55 piksel alpha parsial, grid32 menghasilkan 14×32 tanpa menyampel alpha parsial; oracle seluruh channel PASS dan dua tes Retro16 existing menguji alpha parsial secara terpisah. Ini bukti helper, bukan pengulangan UI/API pixelation.
+
 **Snapshot dan UI Pixelation:** Manager memilih objek completed melalui resolusi manifest privat, menulis PNG dan manifest terpisah di `<job>/pixelations/<uuid>/`, publikasi manifest terakhir tanpa memutasi original/job/ZIP. POST menerima palette opsional original/retro16; respons dan snapshot baru mencatat palette. GET tetap menyajikan snapshot lama tanpa field tersebut, bukan mengkuantisasi ulang. UI per kartu memiliki pemilih ukuran/palet, status, preview tajam dan link native. Kedua pemilih dikunci selama request; AbortController mengikuti lifecycle upload/reset dan respons harus cocok dengan job/objek/ukuran/palet/URL yang diminta.
 
 **Koreksi mask aktual (D-044, perbaikan 2026-11-22):** Editor Canvas mengambil foto sumber sesuai bbox. Penghapus menggunakan disk/stroke `destination-out`; Pulihkan memakai clip lingkaran/kapsul dan komposisi `copy` agar RGB/alpha sumber menggantikan area kuas. Undo menyimpan hingga 20 ImageData; Reset mengembalikan kondisi saat dialog dibuka. PUT memvalidasi PNG RGBA/dimensi dan memperbarui objek/manifest; operasi turunan baru membaca revisi tersebut, snapshot turunan lama tetap terpisah. Canvas dapat membulatkan RGB beralpha parsial dan mengantialias tepi kuas.
 
+Revisi hanya memperbarui PNG/metadata objek yang dipilih, bukan class map atau PNG kategori lain; bbox tetap. Pants yang dipulihkan tidak otomatis menghapus salah label dari Upper-clothes. Sumber Pulihkan adalah decode foto browser: crop JPEG teruji berbeda maksimum satu tingkat RGB dari Pillow, termasuk opaque. Penerimaan save membandingkan dengan `Canvas.toBlob`; batas dekoder/encoder tidak boleh disamakan dengan mutasi oleh backend.
+
 **UI generatif dan spritesheet aktual:** Kartu objek menyediakan preset/ukuran stylization, POST, polling, preview dan unduhan. Browser mengirim dua langkah nominal, strength 0.5 dan ukuran 128/256; API internal menerima parameter lebih luas, bukan bukti semua konfigurasi diuji. Spritesheet menyusun objek manifest pilihan/semua menjadi PNG bergrid dengan padding/kolom dan atlas JSON; bukan sprite animasi.
 
+**Batas komposisi spritesheet (D-045):** Helper Sharp menyusun frame tanpa resize/trim/rotasi; tinggi baris mengikuti objek tertinggi, sehingga ada ruang kosong. PNG lossless tidak menjanjikan RGBA sumber exact selama compositing. Pada Pants revisi + dua sepatu, helper dan ekspor UI/API mempertahankan seluruh alpha termasuk 55 parsial serta RGB opaque; tujuh piksel RGB parsial berubah maksimum satu tingkat, RGB tersembunyi kedua sepatu juga berubah. PNG/ZIP sumber tidak dimutasi. Atlas berisi koordinat/ukuran/kategori frame; impor game engine belum diuji.
+
+**Preview vs file:** `#spritesheet-preview-img` berada dalam container `max-h-64 overflow-auto` (256 px pada penerimaan). Wheel native menampilkan baris bawah; batas viewport tidak memotong PNG/atlas unduhan. Penerimaan memeriksa byte native vs endpoint inline dan koordinat setiap frame, bukan hanya screenshot.
 
 **Alur pemrosesan aktual (retensi belum tersedia):**
 
@@ -103,8 +110,8 @@ Path filesystem FastAPI hanya untuk caller lokal tepercaya; API internal bukan s
 | POST | `/api/jobs/:id/spritesheet` | Tersedia: JSON all/object_ids, padding, columns; HTTP 201 + Location (D-045) |
 | GET | `/api/jobs/:id/spritesheets/:spritesheetId` | Tersedia: inline PNG komposit spritesheet transparan (D-045) |
 | GET | `/api/jobs/:id/spritesheets/:spritesheetId/download` | Tersedia: attachment PNG komposit spritesheet (D-045) |
-| GET | `/api/jobs/:id/spritesheets/:spritesheetId/atlas` | Tersedia: inline JSON atlas format TexturePacker / PixiJS (D-045) |
-| GET | `/api/jobs/:id/spritesheets/:spritesheetId/atlas/download` | Tersedia: attachment JSON atlas TexturePacker / PixiJS (D-045) |
+| GET | `/api/jobs/:id/spritesheets/:spritesheetId/atlas` | Tersedia: inline JSON atlas bergaya TexturePacker; impor engine belum diuji (D-045) |
+| GET | `/api/jobs/:id/spritesheets/:spritesheetId/atlas/download` | Tersedia: attachment JSON atlas bergaya TexturePacker (D-045) |
 | POST | `/api/jobs/:id/pixelate` | Tersedia: JSON object_id, size (16/32/64/128), palette opsional original/retro16; HTTP 201 + Location |
 | GET | `/api/jobs/:id/pixelations/:pixelationId` | Tersedia: inline PNG hasil pixelation deterministik |
 | GET | `/api/jobs/:id/pixelations/:pixelationId/download` | Tersedia: attachment PNG hasil pixelation |
@@ -187,12 +194,15 @@ Direktori service di atas berisi implementasi, bukan scaffold kosong. `scripts/`
 - Uji backend dengan file valid, corrupt, masqueraded MIME, file besar, ID tak dikenal.
 - Uji pixel alpha dan resolusi; uji AI pada berbagai kondisi cahaya/occlusion.
 - Pisahkan bukti model nyata dari fixture: `scripts/smoke_browser_m7.mjs` memakai AI mock + browser/backend nyata untuk regresi UI/PNG; bukan tes SCHP/SD15. Log 2026-11-22 juga memiliki sesi SCHP nyata dengan gambar sintetis, bukan evaluasi dataset foto manusia.
+- Bukti 2026-11-23 mencakup dua foto berizin: astronaut NASA public domain dan Man Standing karya Visitor7 (CC BY-SA 3.0; tautan sumber di README). SCHP mempertahankan kontrak crop/piksel tetapi masih salah label/kebocoran; tidak ada ground truth atau skor akurasi dataset.
+- Koreksi foreground astronaut dan crop Pants melalui Canvas→PNG/ZIP diuji nyata. Pixelation Pants grid32/Retro16 diperiksa melalui helper/oracle dan dua tes existing, bukan UI/API ulang. Spritesheet tiga objek diperiksa melalui helper lalu browser/API nyata; PNG revisi Pants diterapkan via PUT, bukan tes kuas ulang. Unduhan PNG/atlas cocok inline, ZIP/sumber unchanged, reset/cleanup PASS.
+- Bukti bersifat Windows/Chrome desktop lokal. Report/PNG/atlas/screenshot ignored di `scratch/` adalah artefak penerimaan, bukan fixture rilis; pemutakhiran dokumen tidak menjalankan ulang runtime. Lihat log PROGRESS untuk perintah dan pemisahan bukti model/mock/helper/browser.
 - SD15 memiliki bukti inferensi sukses dan penghentian guard pada log 2026-11-21; antrean tidak menjamin dua model resident aman. Build/tes lama tidak dijalankan ulang pada tugas dokumentasi.
 - Jalankan minimal smoke test sebelum commit milestone.
 
 ## 11. Batas dan pekerjaan yang belum ditutup
 
-- Evaluasi kualitas segmentasi/stylization pada foto nyata, aksesori dan occlusion; alpha exact tidak menjamin kualitas visual.
+- Kualitas segmentasi/stylization pada dataset foto nyata, aksesori dan occlusion: dua foto ekstraksi teruji belum memberi penerimaan umum. Alpha exact tidak menjamin kualitas visual; koreksi satu kategori tidak menyinkronkan kategori lain. Impor atlas ke game engine belum diuji.
 - Lisensi distribusi checkpoint/model dan kode proyek sebelum publikasi/redistribusi.
 - Resource SD15: headroom RAM/commit, latensi, konfigurasi di luar smoke dan lifecycle pergantian model.
 - Retensi file, batas antrean/ekspor dan keamanan deployment multi-user; belum menjadi fitur operasional.

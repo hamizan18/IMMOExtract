@@ -4,7 +4,7 @@
 
 IMMOExtract adalah aplikasi web **local-first** untuk mengekstrak manusia beserta kategori pakaian/aksesori yang dikenali menjadi PNG transparan, lalu secara opsional mengolahnya melalui **Classic Pixelation** atau **AI Pixel Art Stylization** lokal.
 
-> **Status proyek:** Implementasi M1–M7 ditutup pada D-047; penerimaan Windows lokal memiliki bukti dan batas yang dicatat di `docs/PROGRESS.md`. Ekstraksi, unduhan, pixelation, mask editor dan spritesheet tersedia; SD15 memerlukan runtime/model serta memori yang memadai. Dua bug kuas mask diperbaiki dan diuji pada 2026-11-22. Status implementasi bukan jaminan seluruh foto, konfigurasi AI atau deployment publik sudah teruji.
+> **Status proyek:** Implementasi M1–M7 ditutup D-047; bukti penerimaan Windows lokal dicatat di `docs/PROGRESS.md`. Pada 2026-11-23, dua foto berizin dievaluasi, koreksi mask dan unduhan PNG/ZIP diuji, serta spritesheet tiga objek nyata berhasil diunduh melalui UI/API. Segmentasi masih memiliki salah label/kebocoran; keberhasilan ekspor bukan penerimaan kualitas umum. SD15 tidak dimuat pada rangkaian penerimaan tersebut.
 
 ## Gambaran fitur
 
@@ -15,7 +15,7 @@ IMMOExtract adalah aplikasi web **local-first** untuk mengekstrak manusia besert
 - Preview galeri objek, unduh satu PNG, unduh ZIP pilihan atau semua objek dengan integritas SHA-256 (FR-08, M4/M7).
 - Classic Pixelation deterministik dengan 4 grid ukuran (16/32/64/128) dan palet Retro 16 warna opsional (FR-09/FR-10, M5).
 - AI Pixel Art Stylization lokal berbasis Stable Diffusion 15 CPU FP32 dengan preset, restorasi 100% exact alpha, dan UI studio terintegrasi (FR-11, M6).
-- Ekspor Spritesheet Statis komposit PNG transparan dan metadata Atlas JSON format TexturePacker / PixiJS / Phaser standar (FR-13, M7).
+- Ekspor Spritesheet Statis: komposit PNG transparan dan metadata Atlas JSON bergaya TexturePacker (FR-13, M7); impor ke PixiJS, Phaser atau game engine lain belum diuji.
 
 **Batasan:** Satu orang utama pada MVP; tidak otomatis membuat sprite animasi runtime, objek 3D, atau melengkapi bagian tubuh/pakaian yang tertutup penuh (occlusion).
 
@@ -116,6 +116,7 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
   - `GET /api/jobs/<job_id>/pixelations/<pixelation_id>/download`: menyajikan attachment PNG hasil pixelation.
 - Di kartu objek, pilih **Ukuran** dan **Palet**, lalu **Pixelate**. Default **Warna asli**; **Retro 16 warna** mengubah warna, bukan alpha. Preview, keterangan hasil dan link unduhan menyebut palet hasil tersebut. Ganti pilihan tidak mengubah snapshot sebelumnya sampai Pixelate ditekan. Ukuran/palet/tombol terkunci selama request; reset upload meng-abort pengamatan hasil usang.
 - Pengujian 2026-11-19: `node --test backend/test/pixelation.test.js backend/test/jobs.test.js` **64/64 PASS**; build frontend dan browser model asli empat grid Retro, kembali ke Warna asli, unduhan, alpha/RGB transparan, serta original/ZIP tetap identik **PASS**. Unduhan PNG/ZIP asli tetap independen.
+- Pada PNG Pants terkoreksi dari foto full-body (2026-11-23), helper grid32/Retro16 menghasilkan 14×32; seluruh piksel cocok oracle independen. Sumber memiliki 55 piksel alpha parsial, tetapi tidak satu pun tersampel pada grid ini. Alpha exact berarti mempertahankan **piksel yang dipilih nearest**, bukan semua detail/alpha sumber. Kontrak alpha parsial diperiksa terpisah lewat dua tes Retro16 existing; tugas ini tidak mengulang UI/API pixelation.
 
 ## AI Stylization — helper, API dan antrean M6
 
@@ -153,11 +154,13 @@ Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` 
 - Kanvas interaktif 2D memungkinkan pengguna merapikan siluet objek secara manual:
   - **Penghapus (Transparan):** klik menghapus disk sesuai radius kuas; drag menghapus sepanjang stroke dengan `destination-out`.
   - **Kuas Pulihkan:** klik/drag memakai clip lingkaran/kapsul dan komposisi `copy` untuk mengembalikan RGB/alpha crop foto sumber tanpa penumpukan alpha atau inferensi baru. Transparansi parsial mengikuti pembulatan premultiplied-alpha Canvas dan tepi kuas memakai antialiasing, bukan jaminan semua byte RGB file asli identik.
+  - Foto sumber Pulihkan adalah hasil decode browser. Pada crop JPEG yang diuji, RGB browser/Pillow berbeda maksimum satu tingkat, termasuk pada piksel opaque; ini batas teramati, bukan toleransi universal. Pembanding save memakai `Canvas.toBlob`, sesuai jalur aplikasi, bukan mengasumsikan semua encoder/dekoder identik.
   - **Slider Brush Size:** mengatur diameter kuas/penghapus antara 2 hingga 60 piksel dengan preview angka.
   - **Undo Stack & Reset:** riwayat modifikasi hingga 20 langkah `ImageData` dan tombol reset ke kondisi awal siluet.
 - **Simpan Koreksi:** mengirim binary PNG RGBA ke endpoint `PUT /api/jobs/:id/objects/:objectId`.
 - Backend memvalidasi integritas dimensi exact, saluran 4 channel RGBA, dekompresi piksel penuh, menulis file kanonikal secara atomik, dan memperbarui `pixel_count` serta timestamp pada manifest.
 - Operasi turunan **baru** membaca objek yang sudah dikoreksi. Snapshot ZIP/pixelation/stylization/spritesheet yang sudah dibuat tidak dibuat ulang otomatis. Reset editor mengembalikan kondisi saat editor dibuka, bukan arsip permanen mask sebelum semua revisi.
+- Koreksi berlaku **hanya pada objek yang disimpan**, bukan class map atau semua kategori. Memulihkan celana di objek Pants tidak otomatis menghapus fragmen celana yang salah masuk Upper-clothes. Tidak merekonstruksi bagian yang tertutup; bbox crop tetap membatasi area editor.
 
 ## Generator Spritesheet Statis & Atlas JSON (FR-13)
 
@@ -169,9 +172,10 @@ Nilai SCHP di atas sengaja menunjuk file yang tidak ada; `/health.model_loaded` 
   - **Spritesheet Pilihan:** menyusun hanya objek yang dicentang pada checkbox kartu.
   - **Spritesheet Semua:** menyusun seluruh objek yang terdeteksi pada job.
 - Penyajian & Format:
-  - Menghasilkan gambar komposit PNG RGBA transparan berkualitas tinggi (kompresi Sharp level 9).
-  - Menghasilkan metadata **Atlas JSON** format standar TexturePacker / PixiJS / Phaser yang memuat koordinat `frame: { x, y, w, h }` setiap objek untuk integrasi langsung ke game engine (Godot, Unity, Phaser, dsb.).
-  - UI menampilkan preview visual, informasi dimensi total dan jumlah sprite, serta tombol unduh langsung untuk file PNG spritesheet dan file JSON atlas.
+  - Menghasilkan komposit PNG RGBA dengan Sharp (kompresi PNG lossless level 9); kompresi lossless tidak berarti proses compositing mempertahankan setiap channel sumber.
+  - Atlas JSON bergaya TexturePacker memuat `frame: { x, y, w, h }`, ukuran sumber, kategori dan flag tanpa trim/rotasi. Penerimaan memeriksa koordinat/isi frame; impor ke Godot, Unity, PixiJS atau Phaser belum diuji.
+  - Preview, dimensi/jumlah objek dan tombol PNG/atlas tersedia. Container preview maksimal 256 px dengan scroll: gulir di dalam preview untuk melihat baris bawah. Batas tampilan ini tidak memotong PNG unduhan.
+- Pada sampel Pants terkoreksi + kedua sepatu, helper dan UI/API mempertahankan seluruh alpha (termasuk parsial), RGB opaque, serta PNG/ZIP sumber. Tujuh piksel RGB beralpha parsial berubah maksimum satu tingkat dan RGB tersembunyi sepatu berubah saat compositing. Ini batas sampel terukur, bukan jaminan semua RGBA exact seperti pixelation atau byte-identical seperti PNG asli/ZIP. Susunan baris dapat menyisakan ruang kosong; bukan packing paling padat atau sprite animasi.
 - Endpoint API:
   - `POST /api/jobs/:id/spritesheet`: menerima `{ all: true }` atau `{ object_ids: [...] }` dengan opsional `padding` dan `columns`, mengembalikan status 201 + Location snapshot.
   - `GET /api/jobs/:id/spritesheets/:spritesheetId` & `.../download`: menyajikan PNG inline atau attachment download.
@@ -228,6 +232,12 @@ Build frontend tersimpan di `frontend/dist/`. `npm run preview --prefix frontend
 | Browser → Express → SCHP nyata | 2026-11-22: upload sintetis menghasilkan enam objek; PNG/ZIP, pixelation dan spritesheet/atlas berhasil | Bukan evaluasi kualitas pada foto manusia nyata/occlusion |
 | Mask editor + ekspor pada browser | 2026-11-22: regresi penghapus/Pulihkan, RGB/alpha, bbox, Undo, PNG tersimpan, spritesheet dan reset PASS | AI mock; frontend produksi dan backend nyata. Bukan tes inferensi model |
 | SD15 nyata | Log 2026-11-21 memuat inferensi sukses dan run yang dihentikan guard | Resource, latensi dan kualitas tetap perlu evaluasi; tidak diulang pada sesi mask/dokumentasi |
+| Evaluasi SCHP dua foto berizin | 2026-11-23: astronaut setengah badan dan satu foto full-body; kontrak RGB/mask/crop PASS | Salah label/kebocoran ditemukan; tanpa ground-truth mask/IoU, bukan evaluasi dataset |
+| Koreksi mask foto nyata → PNG/ZIP | 2026-11-23: foreground astronaut dan crop Pants, Pulihkan/Penghapus sesuai skenario, Undo/save serta unduhan PASS | Koreksi area terarah; tidak memperbaiki class map/kategori lain. Decode JPEG/Canvas dapat mengubah RGB |
+| Pixelation PNG Pants terkoreksi | 2026-11-23: helper 32/Retro16 + oracle seluruh piksel PASS; dua tes Retro16 PASS | Bukan UI/API ulang; grid foto ini tidak menyampel alpha parsial |
+| Spritesheet tiga objek nyata → PNG/atlas/ZIP | 2026-11-23: helper, lalu Chrome → Express → SCHP; PNG Pants revisi diterapkan via PUT, pilihan tiga objek/preview/unduhan/reset PASS | Desktop lokal; bukan tes kuas ulang atau impor game engine. Alpha exact pada sampel, RGB parsial/tersembunyi tidak seluruhnya exact |
+
+Foto evaluasi: [astronaut NASA menurut scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut) (public domain) dan [Man Standing — Visitor7](https://commons.wikimedia.org/w/index.php?title=File:Man_Standing.jpg&oldid=1257378181) ([CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)). Provenance dan hasil lokal berada di `scratch/` yang diabaikan Git; bukan fixture yang dibundel ke repository. Rincian perintah, artefak dan keterbatasan ada di [PROGRESS](docs/PROGRESS.md). Bukti ini historis, tidak dijalankan ulang pada sinkronisasi dokumentasi.
 
 Untuk regresi UI/backend yang tidak memuat model, jalankan dari root setelah dependensi web terpasang:
 
@@ -238,7 +248,7 @@ node scripts/smoke_browser_m7.mjs
 
 Harness saat ini mencari executable Chrome/Brave/Edge pada lokasi Windows yang tercantum dalam script, membuka browser headless dan server/storage temporary, lalu melakukan cleanup. Screenshot disimpan di `scratch/` (ignored). Ini terpisah dari `scripts/smoke.mjs`, yang hanya memeriksa health layanan yang sudah berjalan dan tidak membuktikan kualitas inferensi. Tes backend/Python historis tetap ada di PROGRESS; jangan mengklaim dijalankan ulang karena dokumen diperbarui.
 
-**Belum tercakup oleh bukti di atas:** kualitas dataset foto nyata/occlusion, deployment publik, Linux/macOS dan kamera mobile. Retensi otomatis, antrean berbatas dan lifecycle pergantian model belum diimplementasikan. Model/checkpoint tidak boleh didistribusikan tanpa memastikan lisensinya.
+**Belum tercakup oleh bukti di atas:** penerimaan kualitas pada dataset beragam/occlusion, AI stylization foto-foto evaluasi tersebut, impor atlas ke game engine, deployment publik, Linux/macOS dan kamera mobile. Dua foto tidak membuktikan akurasi umum. Retensi otomatis, antrean berbatas dan lifecycle pergantian model belum diimplementasikan. Model/checkpoint tidak boleh didistribusikan tanpa memastikan lisensinya.
 
 ### Git dan privasi
 

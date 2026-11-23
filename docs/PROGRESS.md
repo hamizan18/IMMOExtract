@@ -1,14 +1,14 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047. Ekspor spritesheet Pants terkoreksi + kedua sepatu melalui UI/API nyata PASS: PNG/atlas native sesuai preview, alpha exact dan sumber unchanged. RGB parsial/tersembunyi dapat berubah saat compositing; kualitas kategori otomatis tetap terbatas.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047. Penerimaan lokal 2026-11-23 (dua foto berizin, koreksi mask, pixelation helper, spritesheet UI/API) kini dirangkum di README/ARCHITECTURE. RGB parsial/tersembunyi spritesheet dapat berubah saat compositing; kualitas kategori otomatis tetap terbatas.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Penerimaan spritesheet UI/API tiga objek selesai; berikutnya sinkronisasi README/ARCHITECTURE dengan bukti foto nyata dan batas compositing.
+- **Current task:** Sinkronisasi README/ARCHITECTURE dengan bukti foto nyata dan batas compositing selesai (belum commit); menunggu tinjauan pengguna.
 - **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor dan UI generatif tersedia. Startup SD15 tetap terpisah/opsional; retensi, antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
 - **Last runtime verification:** 2026-11-23 — Chrome→Vite→Express→SCHP, inferensi 4,4882 s; PNG Pants revisi via PUT, pilihan tiga objek, ZIP/spritesheet/atlas native PASS. PNG 255×469 identik hasil helper; reset/cleanup PASS, SD15 tidak dimuat.
-- **Last documentation check:** 2026-11-22 — source/konfigurasi/routes dibandingkan dengan narasi; pemeriksaan statis dua dokumen PASS (enam tautan lokal, tiga referensi script, blok kode seimbang).
+- **Last documentation check:** 2026-11-23 — klaim baru README/ARCHITECTURE dicocokkan dengan source (`index.html`, `spritesheet.js`, `extraction-workspace.js`) dan bukti `scratch/`; pemeriksaan statis PASS (tujuh tautan lokal README, referensi script ada, blok kode seimbang). `node --test` pixelation+spritesheet 11/11 PASS.
 
 ## Milestone
 
@@ -220,10 +220,13 @@
 - Preview dibatasi container tinggi 256 px dengan overflow auto; wheel native mencapai scrollTop 213 dan memperlihatkan sepatu pada baris bawah. Screenshot selector mengembalikan scroll ke atas; bukti bawah memakai raw viewport screenshot setelah wheel, tanpa mengubah state DOM. Bukan bug cropping output; PNG lengkap 469 px.
 - Reset mengosongkan galeri, menyembunyikan hasil, menonaktifkan ekstraksi/spritesheet pilihan dan menghapus href PNG/atlas. Nol console/pageerror aplikasi. Tab dan tiga service dihentikan; socket memastikan 8015/3115/5178 tertutup. Hanya storage sesi `C:/Users/Hype/AppData/Local/Temp/immo-sheet-real-S5gpUw` dihapus.
 - Bukti ignored di `scratch/spritesheet-ui-20261123/`: tiga sumber PNG, job/HTTP/UI/response/verification JSON, ZIP/PNG/atlas native, salinan endpoint inline dan screenshot atas/viewport bawah. Foto/turunan Visitor7 CC BY-SA 3.0; bukti sebelumnya tetap utuh. Tanpa source/dependensi/keputusan baru, script sementara di disk, staging atau commit.
+- Sinkronisasi README/ARCHITECTURE (2026-11-23, dilanjutkan Antigravity setelah sesi sebelumnya terhenti usage limit): Git awal hanya `README.md` dan `docs/ARCHITECTURE.md` modified (draft sesi terhenti), index kosong; PROGRESS/HANDOFF belum mencatat draft tersebut. Draft dipertahankan dan dilanjutkan, bukan ditulis ulang.
+- Draft diverifikasi terhadap source: container `max-h-64 overflow-auto` + `#spritesheet-preview-img` (`frontend/index.html`), `compressionLevel: 9`, tinggi baris = objek tertinggi, atlas `frame/rotated:false/trimmed:false/spriteSourceSize/sourceSize/category` (`backend/src/spritesheet.js`), slider kuas 2–60 dan Undo 20 (`extraction-workspace.js`/`index.html`). Angka draft cocok dengan `scratch/spritesheet-ui-20261123/verification.json` (55 alpha parsial, 7 RGB parsial berubah maks. 1, hidden RGB 805/1.475) dan `scratch/pixelation-pants-20261123/report.json` (14×32, 0 alpha parsial tersampel).
+- Penyelesaian sesi ini: sisa klaim berlebih "format TexturePacker / PixiJS / Phaser standar" di fitur README dan tabel route ARCHITECTURE diganti "bergaya TexturePacker; impor engine belum diuji"; baris kosong ganda draft di ARCHITECTURE dirapikan. Tidak mengubah source/test/dependensi/DECISIONS; tanpa runtime/browser/model.
 
 ## In progress
 
-- Penerimaan spritesheet UI/API tiga objek selesai. Dokumentasi utama belum merangkum bukti foto nyata terbaru dan batas RGB compositing; kualitas kategori umum tetap belum diterima.
+- Tidak ada implementasi berjalan. Perubahan README/ARCHITECTURE/PROGRESS/HANDOFF belum di-commit dan menunggu tinjauan pengguna; kualitas kategori umum tetap belum diterima.
 
 ## Blockers / risks
 
@@ -254,7 +257,7 @@
 
 ## Next task — satu tugas saja
 
-Sinkronkan README dan ARCHITECTURE dengan bukti penerimaan foto nyata terbaru: koreksi kategori tidak memperbaiki class map/objek lain, pixelation grid32 tidak menyampel alpha parsial, spritesheet mempertahankan alpha tetapi bukan seluruh RGB parsial/tersembunyi, serta preview spritesheet dapat digulir. Pisahkan bukti helper dari UI/API dan batas desktop lokal; jangan mengulang runtime atau mengubah source tanpa kebutuhan.
+Pengguna meninjau diff empat dokumen (README, ARCHITECTURE, PROGRESS, HANDOFF) lalu memutuskan commit. Sesudahnya pengguna memilih satu batas terbuka sebagai tugas berikut (kandidat: rancangan retensi `storage/jobs`, yang memerlukan keputusan baru di DECISIONS); agent tidak memulainya tanpa arahan.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -567,6 +570,11 @@ Sinkronkan README dan ARCHITECTURE dengan bukti penerimaan foto nyata terbaru: k
 | 2026-11-23 | Wheel native, raw viewport screenshot, reset/console | PASS | Preview bawah tampil pada scrollTop 213; reset menghapus hasil/link; nol console/pageerror aplikasi |
 | 2026-11-23 | Service kill dan Python socket/cleanup | PASS | Port 8015/3115/5178 tertutup; storage sesi dihapus; bukti ignored dipertahankan |
 | 2026-11-23 | Build, suite backend/Python, SD15, kuas mask ulang, kamera/mobile | NOT RUN | Penerimaan ekspor desktop terarah; PNG koreksi existing diterapkan via API |
+| 2026-11-23 | Sinkronisasi docs: `git status`, `git diff`, `git diff --cached --stat` | PASS inspeksi | README/ARCHITECTURE modified (draft sesi terhenti), index kosong; draft dipertahankan |
+| 2026-11-23 | `Select-String` klaim draft pada `frontend/index.html`, `backend/src/spritesheet.js`, `frontend/src/extraction-workspace.js`; baca `verification.json`/`report.json` scratch | PASS | Seluruh klaim/angka draft cocok source dan bukti; dua klaim format atlas berlebih ditemukan lalu dikoreksi |
+| 2026-11-23 | `node --test backend/test/pixelation.test.js backend/test/spritesheet.test.js` | PASS | 11/11 (7 pixelation termasuk dua Retro16 alpha parsial, 4 spritesheet); mendukung klaim helper di docs |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe <brain-scratch>/doccheck.py .` | PASS | README: 12 fence, 7 tautan lokal, 2 script ada; ARCHITECTURE: 6 fence, 1 script ada; tanpa baris kosong ganda |
+| 2026-11-23 | Build frontend, suite backend penuh, suite Python, browser/SCHP/SD15 | NOT RUN | Hanya dokumentasi berubah; source tidak disentuh |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
