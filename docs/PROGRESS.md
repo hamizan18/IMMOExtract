@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. Koreksi astronaut UI→PNG/ZIP PASS historis. Evaluasi satu foto full-body SCHP PASS kontrak piksel, tetapi kategori masih memerlukan koreksi; bukan penerimaan kualitas umum.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. Evaluasi full-body menemukan salah kategori. Koreksi crop Pants melalui UI→PNG/ZIP kini PASS; bukan penerimaan kualitas umum atau perbaikan otomatis kategori lain.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Evaluasi satu foto full-body berizin selesai; berikutnya koreksi objek Pants foto tersebut melalui UI dan verifikasi PNG/ZIP.
+- **Current task:** Koreksi crop Pants melalui UI dan verifikasi PNG/ZIP selesai; berikutnya verifikasi Classic Pixelation 32/Retro16 atas PNG koreksi existing.
 - **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor dan UI generatif tersedia. Startup SD15 tetap terpisah/opsional; retensi, antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
-- **Last runtime verification:** 2026-11-23 — `HumanExtractor` SCHP CPU dua thread, satu foto full-body 762×952, inferensi 3,7067 s; RGB/alpha/mask dan sembilan crop PASS. Review visual menemukan salah kategori celana dan kacamata terlewat; SD15 tidak dimuat.
+- **Last runtime verification:** 2026-11-23 — browser→Vite→Express→SCHP nyata, inferensi 3,692 s; Pulihkan/Undo/save crop Pants 186×412, PNG dan ZIP pilihan PASS. Offset bbox benar; sembilan objek lain unchanged; SD15 tidak dimuat.
 - **Last documentation check:** 2026-11-22 — source/konfigurasi/routes dibandingkan dengan narasi; pemeriksaan statis dua dokumen PASS (enam tautan lokal, tiga referensi script, blok kode seimbang).
 
 ## Milestone
@@ -20,7 +20,7 @@
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | Implemented; bug penghapus/Pulihkan diperbaiki | Regresi browser 2026-11-22 membuktikan klik, drag horizontal/diagonal, Undo, sumber RGB/alpha, offset crop dan PNG tersimpan. SD15 tidak diuji ulang |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Astronaut: koreksi UI→PNG/ZIP PASS; full-body: kontrak piksel/sembilan crop PASS, kualitas kategori belum bersih |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Astronaut dan crop Pants full-body: koreksi UI→PNG/ZIP PASS; kualitas kategori otomatis belum bersih |
 
 ## Completed
 
@@ -193,16 +193,25 @@
 - Review visual source/foreground/class map/sembilan crop: siluet utama full-body serta dua sepatu terpisah dari background. Fragmen celana di tungkai bawah sisi kiri gambar masuk Upper-clothes sehingga Pants berlubang; kacamata terlihat tetapi tidak ada kategori Sunglasses, tetap menyatu ke Face. Crop tangan menyertakan fragmen sabuk/pakaian di sela jari; batas halus belum bersih. **FAIL kualitas kategori bersih tanpa koreksi** pada sampel ini, bukan kegagalan kontrak ekspor.
 - Kaki tertutup celana, lengan tertutup kemeja, tangan menutupi pinggang; anatomi/objek di balik penutup tidak dapat dinilai atau direkonstruksi. Tanpa ground truth/IoU, tuning model/threshold atau generalisasi satu sampel.
 - Input, human/mask/class map, sembilan PNG crop, dua review dan report disimpan ignored di `scratch/schp-fullbody-20261123/`. Tidak menjalankan server/browser/SD15, memasang dependensi, mengubah source/keputusan, membuat script permanen, staging atau commit. Hanya PROGRESS/HANDOFF diperbarui; LSP tidak tersedia.
+- Penerimaan crop Pants (2026-11-23, sesi lanjutan): Git awal working tree/index bersih; pending docs sesi sebelumnya sudah tidak pending. Source editor crop, startup/proxy dan D-044 diperiksa. Foto Visitor7 existing dipakai ulang tanpa unduhan/model/dependensi baru atau perubahan source.
+- Browser desktop 1365×1000 → Vite 5177 → Express 3114 → SCHP 8014, CPU dua thread, storage temporary terisolasi. Inferensi 3,692 s menghasilkan human + sembilan kategori; health SCHP true, stylizer available/loaded false.
+- Editor Pants bbox `[404,467,590,879]`, kanvas 186×412. Input mouse/keyboard native memulihkan tiga area celana salah Upper-clothes; probe crop `(49,271)`, `(26,288)`, `(30,333)` alpha 0→255, RGB exact sumber browser pada offset global `(453,738)`, `(430,755)`, `(434,800)`. Undo mengembalikan seluruh Canvas `toBlob` byte-identical; kemudian koreksi diterapkan ulang dan disimpan.
+- Save memperbarui preview/link dan menutup modal. PNG native 135.326 byte identik Canvas `toBlob` serta preview; alpha berubah pada 373 piksel, 55 alpha parsial, pixel_count 54.260→54.633. Sebanyak 242 piksel yang semula dilabeli Upper-clothes dipulihkan opaque di Pants; bukan klaim seluruh batas diperbaiki. Sembilan objek lainnya, termasuk Upper-clothes/human, byte-identical sebelum/sesudah.
+- ZIP pilihan native 135.520 byte berisi satu PNG Pants: STORE, CRC valid, byte-identical serta size/count/SHA-256 metadata cocok. Semua RGBA di luar area kuas unchanged; piksel opaque yang berubah exact terhadap crop sumber browser. Screenshot modal/kartu diperiksa; revisi satu kategori tidak mengubah class map/kategori lain.
+- Pembanding awal **FAIL harness**: menyamakan alpha unchanged dengan seluruh RGBA unchanged. Sebelas piksel opaque yang disapu berganti RGB maksimum satu tingkat sesuai sumber browser. Diagnosis crop JPEG browser vs Pillow menemukan 5.410 piksel RGB berbeda maksimum satu tingkat. Oracle akhir membatasi perubahan ke area kuas dan membandingkan piksel dipulihkan dengan sumber browser, bukan mewajibkan decoder JPEG identik; PASS tanpa mengubah aplikasi.
+- Error helper awal `tab.press(selector,key)` diselesaikan dengan signature `tab.press(key,{selector})` sebelum sapuan; tidak mengulang upload/inferensi. Nol console/pageerror aplikasi. Reset mengosongkan galeri dan menonaktifkan ekstraksi/ZIP pilihan.
+- Tab dan tiga service ditutup; socket memastikan port 8014/3114/5177 tertutup. Hanya `C:/Users/Hype/AppData/Local/Temp/immo-pants-real-Xxr0YT` dihapus. Bukti before/after, crop sumber browser, JSON job/ekspor/verifikasi, PNG/ZIP native dan screenshot dipertahankan ignored di `scratch/pants-real-downloads-20261123/`. Tanpa script sementara di disk, staging atau commit.
 
 ## In progress
 
-- Evaluasi full-body/kedua sepatu selesai pada satu foto; koreksi objek Pants lewat UI belum dilakukan. Kualitas kategori otomatis belum diterima secara umum.
+- Koreksi crop Pants melalui UI→PNG/ZIP selesai. Verifikasi pixelation terhadap PNG koreksi beralpha parsial belum dilakukan pada sampel ini; kualitas kategori otomatis tetap terbatas.
 
 ## Blockers / risks
 
 - **Temuan mask 2026-11-22 — RESOLVED:** klik penghapus dan kuas Pulihkan kini lulus regresi browser terarah. Batas bukti: fixture sintetis, pixel probes interior/luar brush, crop dan PNG tersimpan; tepi kuas mengikuti antialiasing Canvas.
-- **Batas bukti terbaru:** satu foto NASA setengah badan; koreksi area yang disapu tidak memperbaiki label kategori atau semua batas objek. Canvas memiliki alpha parsial/rounding RGB pada tepi; tanpa ground truth mask. RAM sebelum service 2.374.820 KiB bebas/sisa virtual 7.838.696 KiB; SD15 tidak dimuat.
+- **Batas bukti astronaut:** koreksi area yang disapu tidak memperbaiki label kategori atau semua batas objek. Canvas memiliki alpha parsial/rounding RGB pada tepi; tanpa ground truth mask. RAM sebelum service sesi astronaut 2.374.820 KiB bebas/sisa virtual 7.838.696 KiB; SD15 tidak dimuat.
 - **Batas bukti full-body:** satu foto publik CC BY-SA 3.0; kedua sepatu mendapat label terpisah tetapi celana/kacamata/tangan masih bermasalah. RAM sebelum inferensi 3.441.252 KiB bebas/sisa virtual 9.520.064 KiB; query bersamaan unduhan mencatat dua proses launcher/child Python tugas unduhan, bukan bukti sistem bebas Python. Bukan benchmark peak memory.
+- **Batas koreksi Pants:** sapuan terarah, bukan seluruh kontur bersih; Upper-clothes masih menyimpan fragmen celana. Decode JPEG browser/Pillow berbeda maksimum satu tingkat RGB pada crop; Pulihkan memakai sumber browser. RAM sebelum startup 3.247.204 KiB bebas/sisa virtual 9.115.800 KiB, tidak menemukan Python/Uvicorn saat query; bukan benchmark peak.
 
 - Latensi historis live HTTP ~1,82–2,20 detik per fixture; foto astronaut 4,3948 s melalui helper lalu 3,6253 s melalui service CPU dua thread. Bukan benchmark umum atau bukti kebutuhan memori puncak.
 - Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; seluruh pipeline berjalan pure-PyTorch + Pillow + NumPy tanpa ketergantungan ekstensi C++/CUDA atau OpenCV (`cv2`).
@@ -226,7 +235,7 @@
 
 ## Next task — satu tugas saja
 
-Koreksi objek Pants pada foto full-body existing `scratch/schp-fullbody-20261123/input.jpg` melalui UI nyata: pulihkan area celana yang salah masuk Upper-clothes, uji Undo/save serta PNG dan ZIP pilihan sesuai Canvas `toBlob`. Periksa offset bbox crop dan jangan mengklaim revisi Pants otomatis memperbaiki kategori Upper-clothes. Gunakan storage uji terisolasi, tanpa unduhan baru atau SD15.
+Verifikasi Classic Pixelation ukuran 32/palet Retro16 atas PNG Pants terkoreksi existing `scratch/pants-real-downloads-20261123/bb5cf80f-cb26-436d-928c-0d331e59a99d.png`. Gunakan helper existing dan artefak temporary; periksa dimensi, nearest alpha termasuk parsial, palet serta original/ZIP unchanged. Tidak perlu inferensi, unduhan baru atau SD15.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -517,6 +526,12 @@ Koreksi objek Pants pada foto full-body existing `scratch/schp-fullbody-20261123
 | 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` — satu inferensi full-body dan assertion | PASS kontrak piksel | Load 1,3351 s, ekstraksi 3,7067 s; RGB/alpha/mask/bbox/count/dimensi/non-overlap sembilan crop, input unchanged |
 | 2026-11-23 | Inspeksi `review.png` dan `categories-review.png` full-body | FAIL kualitas kategori bersih tanpa koreksi | Dua sepatu terpisah; fragmen celana salah Upper-clothes, kacamata tidak terpisah, kontaminasi sela jari; tanpa ground truth |
 | 2026-11-23 | Browser/API, build, suite backend/Python, SD15, kamera | NOT RUN | Evaluasi helper/model existing saja; tidak mengubah perilaku aplikasi atau mengklaim E2E UI baru |
+| 2026-11-23 | Sesi Pants: Git status/diff/index, source crop/startup dan PowerShell CIM | PASS inspeksi | Working tree/index bersih; RAM bebas 3.247.204 KiB/sisa virtual 9.115.800 KiB; tidak menemukan Python/Uvicorn |
+| 2026-11-23 | Browser native → Vite 5177 → Express 3114 → SCHP 8014 | PASS | Inferensi 3,692 s, sepuluh kartu; Pulihkan/Undo/save crop 186×412, PNG/ZIP pilihan; SD15 false |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` — pembanding awal | FAIL harness | Sebelas piksel opaque yang disapu berubah RGB walau alpha tetap; asumsi pembanding salah |
+| 2026-11-23 | Python inline diagnosis JPEG dan verifikasi area kuas/PNG/ZIP | PASS | Decode sumber browser/Pillow berbeda maksimum satu RGB; offset/probe benar, luar kuas unchanged, PNG=toBlob=preview, ZIP CRC/STORE/checksum benar; sembilan objek lain unchanged via HTTP |
+| 2026-11-23 | Browser reset/console, service kill, Python socket/cleanup | PASS | Galeri kosong, tombol disabled; nol console/pageerror aplikasi; port 8014/3114/5177 tertutup, storage temporary sesi dihapus |
+| 2026-11-23 | Build, suite backend/Python, pixelation, SD15, kamera/mobile | NOT RUN | Penerimaan crop desktop terarah tanpa perubahan source; pixelation PNG revisi adalah next task |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
