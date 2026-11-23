@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047. Koreksi Pants UI→PNG/ZIP dan helper Classic Pixelation 32/Retro16 PNG revisi PASS. Kualitas kategori otomatis tetap terbatas; tes helper bukan bukti E2E browser baru.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047. Helper spritesheet Pants terkoreksi + kedua sepatu PASS untuk atlas/alpha/RGB opaque; RGB parsial/tersembunyi dapat berubah saat compositing. Kualitas kategori otomatis tetap terbatas; tes helper bukan bukti UI/API baru.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Verifikasi Classic Pixelation 32/Retro16 PNG Pants terkoreksi selesai; berikutnya verifikasi spritesheet statis Pants dan kedua sepatu existing.
+- **Current task:** Verifikasi helper spritesheet Pants dan kedua sepatu selesai; berikutnya penerimaan ekspor PNG/atlas tiga objek tersebut melalui UI/API terisolasi.
 - **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor dan UI generatif tersedia. Startup SD15 tetap terpisah/opsional; retensi, antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
-- **Last runtime verification:** 2026-11-23 — helper `pixelatePng` menghasilkan RGBA 14×32/289 byte; seluruh 448 piksel cocok oracle independen, PNG/ZIP sumber unchanged. Dua tes Retro16 existing PASS; tanpa browser/inferensi/SD15.
+- **Last runtime verification:** 2026-11-23 — `packSpritesheet` menghasilkan RGBA 255×469/155.399 byte, dua kolom/padding 4. Atlas, alpha termasuk parsial, RGB opaque dan integritas sumber PASS; tujuh piksel RGB parsial berbeda maksimum satu tingkat. Tanpa browser/inferensi/SD15.
 - **Last documentation check:** 2026-11-22 — source/konfigurasi/routes dibandingkan dengan narasi; pemeriksaan statis dua dokumen PASS (enam tautan lokal, tiga referensi script, blok kode seimbang).
 
 ## Milestone
@@ -20,7 +20,7 @@
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | Implemented; bug penghapus/Pulihkan diperbaiki | Regresi browser 2026-11-22 membuktikan klik, drag horizontal/diagonal, Undo, sumber RGB/alpha, offset crop dan PNG tersimpan. SD15 tidak diuji ulang |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Koreksi astronaut/Pants UI→PNG/ZIP PASS; pixelation helper PNG Pants revisi PASS; kualitas kategori otomatis belum bersih |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Koreksi UI→PNG/ZIP, pixelation helper dan spritesheet helper tiga objek nyata PASS terarah; RGB compositing tidak selalu exact |
 
 ## Completed
 
@@ -206,10 +206,16 @@
 - Output: 127 piksel transparan, 321 opaque; empat warna terlihat `000000`, `555555`, `AAAAAA`, `FFFFFF`. Sumber memiliki 55 piksel alpha parsial tetapi grid32 tidak menyampelnya. Dua tes Retro16 existing PASS mencakup alpha parsial 1/127/rentang 0–255, hidden RGB, tie-break, determinisme/palet; jangan mengklaim foto grid32 membuktikan alpha parsial.
 - Review visual `scratch/pixelation-pants-20261123/review.png`: bentuk celana terlihat, detail lipatan berkurang dan warna menjadi empat abu; bukan AI stylization atau perbaikan kategori. Report/review beratribusi Visitor7 CC BY-SA 3.0 dipertahankan ignored; PNG raw/direktori temporary dihapus otomatis dan ketiadaan direktori diperiksa.
 - Tanpa browser/service/model, script di disk, instalasi, staging/commit atau error runtime. Sesi hanya memperbarui PROGRESS/HANDOFF dan membuat bukti ignored.
+- Verifikasi spritesheet Pants/sepatu (2026-11-23, sesi lanjutan): Git awal working tree/index bersih; helper `packSpritesheet`, tes existing dan D-045 diperiksa. Tidak mengubah source/dependensi/keputusan; memakai PNG revisi Pants serta dua sepatu existing, tanpa inferensi/browser.
+- Python inline memanggil helper Node sekali dengan dua kolom/padding 4. Output RGBA 255×469, 155.399 byte, SHA-256 `fd6f1ef285eed653625fca7227e35b1ae4d7c20087ff0a3b0d56b2f67ec3287d`. Atlas sesuai oracle: Pants `(4,4,186,412)`, Left-shoe `(194,4,57,46)`, Right-shoe `(4,420,93,45)`; kategori/sourceSize/spriteSourceSize benar, tanpa rotasi/trim/overlap.
+- Seluruh alpha tiap frame exact, termasuk 55 piksel alpha parsial Pants; seluruh RGB opaque exact. Sebanyak 36.156 piksel di luar frame RGBA nol. Lima hash sumber (tiga PNG input, PNG Pants sebelum koreksi, ZIP pilihan) unchanged.
+- Batas compositing terukur: tujuh piksel RGB beralpha parsial Pants berubah maksimum satu tingkat; RGB tersembunyi berubah pada 805 piksel Left-shoe dan 1.475 Right-shoe. Alpha tetap exact. D-045 memakai komposisi Sharp, bukan kontrak RGBA-exact pixelation D-027; tidak menyamakan ekspor spritesheet dengan unduhan PNG asli byte-identical.
+- Review visual memperlihatkan tiga frame terpisah dan ruang kosong baris mengikuti tinggi celana; bukan sprite animasi atau packing paling padat. Report/atlas/review beratribusi Visitor7 CC BY-SA 3.0 disimpan ignored di `scratch/spritesheet-pants-20261123/`. PNG raw/direktori TemporaryDirectory dihapus otomatis dan ketiadaan direktori diperiksa.
+- Tidak ada error runtime atau script sementara di disk; tidak menjalankan build/suite/browser/API/SCHP/SD15. Sesi hanya memperbarui PROGRESS/HANDOFF dan membuat bukti ignored, tanpa staging/commit.
 
 ## In progress
 
-- Pixelation PNG Pants revisi selesai melalui helper dan tes Retro16 terarah. Spritesheet Pants terkoreksi bersama kedua sepatu belum diperiksa pada sampel ini; kualitas kategori otomatis tetap terbatas.
+- Verifikasi helper spritesheet tiga objek selesai. Ekspor PNG/atlas kombinasi Pants terkoreksi dan kedua sepatu melalui UI/API belum diverifikasi; batas kualitas segmentasi/compositing tetap dicatat.
 
 ## Blockers / risks
 
@@ -240,7 +246,7 @@
 
 ## Next task — satu tugas saja
 
-Verifikasi spritesheet statis menggunakan PNG Pants terkoreksi dan kedua sepatu existing di `scratch/pants-real-downloads-20261123/`. Gunakan helper existing dan artefak temporary; periksa posisi/dimensi atlas, isi tiap frame, transparansi termasuk alpha parsial serta sumber PNG/ZIP unchanged. Tanpa inferensi, unduhan baru atau SD15.
+Uji ekspor spritesheet Pants terkoreksi dan kedua sepatu melalui UI/API nyata dengan storage uji terisolasi: periksa pilihan tiga objek, preview, unduhan PNG/atlas native, koordinat frame/alpha serta sumber PNG/ZIP unchanged. Gunakan foto dan PNG revisi existing; tidak mengunduh baru atau memuat SD15. Bedakan normalisasi RGB compositing yang sudah terukur dari perubahan alpha atau sumber.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -542,6 +548,11 @@ Verifikasi spritesheet statis menggunakan PNG Pants terkoreksi dan kedua sepatu 
 | 2026-11-23 | `node --test --test-name-pattern="retro palette" backend/test/pixelation.test.js` | PASS 2/2 | Alpha parsial, hidden RGB, tie-break/palet/determinisme; foto grid32 tidak menyampel alpha parsial |
 | 2026-11-23 | Review visual dan Python TemporaryDirectory cleanup | PASS dengan batas visual | Detail lipatan berkurang/empat abu; output raw temporary dihapus, report/review ignored dipertahankan |
 | 2026-11-23 | Browser/API, build, full suite, SCHP/SD15, kamera/mobile | NOT RUN | Verifikasi helper terarah, bukan penerimaan UI baru |
+| 2026-11-23 | Sesi spritesheet: Git status/diff/index, helper/tes dan D-045 | PASS inspeksi | Working tree/index bersih; tanpa perubahan source |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` — helper Node inline + oracle NumPy/Pillow | PASS dengan batas RGB | Atlas 3 frame, PNG 255×469, alpha exact termasuk 55 parsial, opaque RGB exact, padding transparan; lima hash PNG/ZIP unchanged |
+| 2026-11-23 | Pengukuran RGB compositing pada seluruh frame | Batas teramati | Tujuh piksel RGB parsial berbeda maksimum satu; hidden RGB dua sepatu berubah 805/1.475 piksel; alpha tetap exact |
+| 2026-11-23 | Review visual dan cleanup TemporaryDirectory | PASS | Tiga frame terpisah; PNG raw/direktori uji dihapus, report/atlas/review ignored dipertahankan |
+| 2026-11-23 | Browser/API, build, suite backend/Python, SCHP/SD15, kamera/mobile | NOT RUN | Verifikasi helper existing terarah; tidak ada perubahan perilaku aplikasi |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 
