@@ -1,13 +1,13 @@
 # IMMOExtract — Progress Tracker
 
-> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. README/ARCHITECTURE kini membedakan fitur tersedia, bukti runtime dan batas penerimaan. Sinkronisasi dokumentasi bukan pengujian ulang aplikasi; kualitas ekstraksi pada foto manusia nyata masih perlu dievaluasi.
+> **Status aktual:** Implementasi M1–M7 ditutup D-047; kedua bug kuas mask sudah diperbaiki. Koreksi foreground satu foto nyata melalui UI serta unduhan PNG/ZIP PASS. Segmentasi otomatis masih memiliki salah label/kebocoran; bukan bukti penerimaan kualitas umum.
 
 ## Ringkasan
 
 - **Current milestone:** M7 — verifikasi penerimaan lokal setelah penutupan implementasi.
-- **Current task:** Sinkronisasi README/ARCHITECTURE selesai; berikutnya evaluasi ekstraksi SCHP pada satu foto uji manusia berizin, bukan fixture sintetis.
+- **Current task:** Koreksi foto astronaut melalui UI nyata serta verifikasi PNG/ZIP selesai; berikutnya evaluasi satu foto full-body berizin untuk cakupan kaki/sepatu.
 - **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor dan UI generatif tersedia. Startup SD15 tetap terpisah/opsional; retensi, antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
-- **Last runtime verification:** 2026-11-22 — regresi mask terakhir PASS dengan AI mock + browser/backend nyata; build 126 ms dan smoke 5,98 s. Tidak dijalankan ulang pada sesi dokumentasi.
+- **Last runtime verification:** 2026-11-23 — browser → Vite → Express → SCHP nyata, inferensi 3,6253 s; Penghapus/Pulihkan/Undo/save dan PNG/ZIP pilihan PASS. Unduhan identik dengan Canvas `toBlob`; SD15 tidak dimuat.
 - **Last documentation check:** 2026-11-22 — source/konfigurasi/routes dibandingkan dengan narasi; pemeriksaan statis dua dokumen PASS (enam tautan lokal, tiga referensi script, blok kode seimbang).
 
 ## Milestone
@@ -20,7 +20,7 @@
 | M4 | Job, object gallery, download individual/ZIP | Complete | Job/polling, PNG kategori, galeri, PNG individual serta UI/API ZIP pilihan/semua terverifikasi pada Windows lokal |
 | M5 | Classic Pixelation Studio | Complete (Windows lokal) | Helper/API/UI empat ukuran dan Retro 16 opsional teruji; alpha/hidden RGB serta original/ZIP tetap terjaga (D-027–D-030) |
 | M6 | AI stylization lokal dan koreksi mask | Implemented; bug penghapus/Pulihkan diperbaiki | Regresi browser 2026-11-22 membuktikan klik, drag horizontal/diagonal, Undo, sumber RGB/alpha, offset crop dan PNG tersimpan. SD15 tidak diuji ulang |
-| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Regresi mask/spritesheet PASS historis; README/ARCHITECTURE tersinkronisasi dengan batas bukti. Evaluasi foto nyata berikutnya |
+| M7 | Selective ZIP, spritesheet statis, hardening, docs | Implementasi ditutup D-047; penerimaan terbatas | Satu foto nyata: ekstraksi dan koreksi UI→PNG/ZIP PASS secara teknis; kualitas kategori otomatis masih bermasalah |
 
 ## Completed
 
@@ -172,17 +172,31 @@
 - README kini menjelaskan stack aktual tanpa OpenCV wajib, jalur startup ekstraksi vs SD15, readiness model, parameter UI generatif dan batas resource, snapshot hasil koreksi mask, lokasi harness permanen, serta perbedaan AI mock/inferensi nyata. Panduan Linux/macOS tidak lagi menyiratkan venv kosong cukup.
 - ARCHITECTURE kini mencantumkan UI/mask/spritesheet aktual, jalur `/extract-path`, kontrak health/readiness, model SD15 lokal dan batas lifecycle. Route draft GET `/api/jobs/:id/objects` dihapus dari tabel aktual karena router hanya menyediakan objek dalam polling job dan route objek individual.
 - Pemeriksaan statis dokumentasi lewat Python inline PASS: dua dokumen, enam tautan lokal, tiga referensi script dan blok kode berpasangan. Tidak ada runtime/build/suite/model baru; bukti PASS sebelumnya tetap historis.
+- Evaluasi foto nyata (2026-11-23): working tree/index awal bersih. Pengguna mengizinkan satu unduhan foto publik berlisensi jelas untuk inferensi lokal. Dipakai foto NASA Eileen Collins dari [scikit-image astronaut](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut), dinyatakan public domain; tanpa foto pribadi, upload cloud, instalasi atau SD15.
+- Berkas 791.555 byte, RGB 512×512; SHA-256 `88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5` cocok [registry v0.26.0](https://github.com/scikit-image/scikit-image/blob/v0.26.0/src/skimage/data/_registry.py). URL revision sumber tersimpan di `scratch/schp-photo-20261123/report.json`; seluruh artefak evaluasi ignored, bukan source rilis.
+- `.venv-test` menjalankan `HumanExtractor` CPU dua thread sekali, load 1,6902 s dan ekstraksi 4,3948 s. Foreground 138.838 piksel (52,962%); kategori Hat 7.427, Hair 10.055, Upper-clothes 106.159, Face 8.826, Left-arm 249, Bag 6.122 piksel. Ini jumlah prediksi, bukan confidence atau skor akurasi.
+- Assertion seluruh piksel PASS: RGB foreground/full-frame dan enam crop identik sumber; alpha biner sesuai class map; mask PNG sama dengan alpha; bbox padding/clipping, dimensi, pixel_count, tidak ada overlap kategori, serta hash input tidak berubah. Tidak ada ground-truth mask, sehingga tidak menghitung IoU/precision/recall.
+- Review visual `scratch/schp-photo-20261123/review.png`: wajah/rambut utama dan sebagian besar pakaian atas terpisah dari background, tetapi fragmen bendera di kiri ikut foreground/Upper-clothes. Helm di depan tubuh terpecah ke Hat, Upper-clothes, Bag, Hair dan fragmen Left-arm; pantulan terang pada helm menjadi lubang alpha. Bag/Left-arm bukan bukti tas/lengan terpisah yang benar; rambut juga mengandung fragmen jauh dari kepala.
+- Foto terpotong di badan bawah dan helm menutupi sebagian tubuh; kaki/sepatu serta detail yang tertutup tidak dapat dinilai atau direkonstruksi. Hasil belum memenuhi ekstraksi bersih tanpa koreksi manual pada foto ini. Tidak mengubah model/threshold/source untuk menyesuaikan satu sampel.
+- Sesi hanya mengubah PROGRESS/HANDOFF; artefak input, human/mask/classes PNG, enam crop, review dan report dipertahankan privat di folder scratch tersebut untuk tindak lanjut. Tidak ada script sementara/permanen baru, server yang dijalankan, staging atau commit.
+- Penerimaan koreksi foto nyata (2026-11-23, sesi lanjutan): Git awal hanya PROGRESS/HANDOFF modified, index kosong; perubahan dipertahankan. Foto astronaut existing dipakai ulang tanpa unduhan baru. Source mask/save dan D-044 diperiksa; LSP tidak tersedia; tidak ada source/dependensi/keputusan baru.
+- Browser desktop 1365×1000 memakai source Vite 5176 → Express 3113 → FastAPI/SCHP 8013 dengan storage temporary terisolasi. Inferensi CPU dua thread 3,6253 s menghasilkan human + enam kategori; SCHP loaded true, stylizer available/loaded false.
+- Mouse/keyboard native menghapus fragmen bendera, membuktikan Undo, lalu memulihkan lubang helm dari sumber. Probe `(2,25)`/`(8,450)` alpha 255→0; `(420,450)`/`(420,465)`/`(365,365)` 0→255 dengan RGB sumber exact; wajah `(220,130)` tidak berubah. Screenshot modal/kartu diperiksa; sapuan terarah, bukan klaim semua batas bersih.
+- Save menutup modal dan memperbarui preview/link. PNG native 337.748 byte identik dengan `Canvas.toBlob`; 3.726 piksel alpha berubah, 162 piksel alpha parsial di tepi kuas. Semua RGB piksel opaque exact dengan sumber. ZIP pilihan human 337.942 byte: satu entry, STORE, CRC valid, PNG byte-identical, ukuran/count/SHA-256 cocok metadata. Enam PNG kategori unchanged terhadap inferensi sebelumnya.
+- Pembanding awal FAIL: `toDataURL` berbeda dari encoder save `toBlob` pada 12 piksel alpha parsial, maksimum 1 tingkat RGB, alpha seluruh piksel identik. Backend menulis buffer langsung tanpa re-encode. Capture `toBlob` dari canvas yang sama cocok byte-identical dengan unduhan; tidak mengubah aplikasi atau melonggarkan pembanding akhir.
+- Error harness diselesaikan: `browser.open` membutuhkan path downloads, bukan boolean; `tab.waitFor` menerima selector, bukan ekspresi JS (satu pageerror harness). Pengamatan save dilanjutkan dengan `page.waitForFunction`, tanpa save/inferensi ulang. Nol console error aplikasi.
+- Reset mengosongkan galeri dan menonaktifkan ekstraksi/ekspor pilihan. Tab/service ditutup; port 8013/3113/5176 terverifikasi tertutup; storage temporary milik sesi dihapus. PNG sebelum/sesudah, kedua encoder canvas, ZIP, screenshot kartu dan `verification.json` dipertahankan ignored di `scratch/mask-real-downloads-20261123/`. Tanpa script sementara, staging atau commit.
 
 ## In progress
 
-- Penerimaan kualitas ekstraksi pada foto manusia nyata berizin belum ditutup. Dokumentasi utama telah diselaraskan; tidak membuka fitur atau milestone baru.
+- Koreksi manual foreground satu foto nyata beserta unduhan PNG/ZIP selesai. Kualitas kategori otomatis dan cakupan foto full-body/kaki/sepatu belum diterima secara umum.
 
 ## Blockers / risks
 
 - **Temuan mask 2026-11-22 — RESOLVED:** klik penghapus dan kuas Pulihkan kini lulus regresi browser terarah. Batas bukti: fixture sintetis, pixel probes interior/luar brush, crop dan PNG tersimpan; tepi kuas mengikuti antialiasing Canvas.
-- **Batas bukti terbaru:** fixture sintetis, bukan foto manusia nyata; kamera dan SD15 tidak dijalankan. RAM available 1,36 GiB dan commit available 6,44 GiB sebelum startup; SD15 tidak dimuat untuk menghindari risiko resource yang sudah tercatat.
+- **Batas bukti terbaru:** satu foto NASA setengah badan; koreksi area yang disapu tidak memperbaiki label kategori atau semua batas objek. Canvas memiliki alpha parsial/rounding RGB pada tepi; tanpa ground truth mask. RAM sebelum service 2.374.820 KiB bebas/sisa virtual 7.838.696 KiB; SD15 tidak dimuat.
 
-- Latensi ekstraksi live HTTP terukur ~1.82–2.20 detik per gambar pada AMD Ryzen 5 7430U dengan ukuran RAM model ~255 MB; inferensi dan post-processing CPU terbukti sangat responsif dan tidak membebani memori laptop.
+- Latensi historis live HTTP ~1,82–2,20 detik per fixture; foto astronaut 4,3948 s melalui helper lalu 3,6253 s melalui service CPU dua thread. Bukan benchmark umum atau bukti kebutuhan memori puncak.
 - Python 3.14.3 didukung penuh oleh PyTorch 2.15.0+cpu; seluruh pipeline berjalan pure-PyTorch + Pillow + NumPy tanpa ketergantungan ekstensi C++/CUDA atau OpenCV (`cv2`).
 - Checkpoint ATR resmi sudah diunduh dan diverifikasi hash-nya. Checkpoint disimpan di folder lokal yang diabaikan Git (`ai-service/models/`) dan tidak di-bundle ke repository.
 - Pengujian Windows lokal saja; Linux/macOS dan deployment produksi belum diuji.
@@ -204,7 +218,7 @@
 
 ## Next task — satu tugas saja
 
-Evaluasi ekstraksi SCHP pada satu foto uji manusia nonpribadi berizin, bukan fixture sintetis: periksa kategori, mask/alpha dan bagian tertutup/aksesori yang benar-benar terlihat; catat hasil serta keterbatasan tanpa mengklaim generalisasi. Gunakan file lokal yang diizinkan; bila belum tersedia, minta foto uji/persetujuan pengguna. Jangan memakai foto pribadi tanpa izin, mengunggahnya ke cloud atau memuat SD15 untuk tugas ini.
+Evaluasi satu foto manusia full-body nonpribadi berizin dengan pakaian dan sepatu terlihat. Cari file lokal berizin dahulu; minta persetujuan baru sebelum unduh foto tambahan (izin sebelumnya hanya satu foto astronaut). Periksa kategori/mask serta bagian tertutup; catat false positive/negative tanpa generalisasi atau tuning model berdasarkan satu sampel. Jangan memuat SD15.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -478,6 +492,17 @@ Evaluasi ekstraksi SCHP pada satu foto uji manusia nonpribadi berizin, bukan fix
 | 2026-11-22 | Inspeksi source/package/routes/health/UI dan bukti PROGRESS untuk README/ARCHITECTURE | PASS inspeksi statis | Kontrak aktual dibandingkan dengan narasi; bukan tes runtime |
 | 2026-11-22 | Python inline: target tautan Markdown lokal, referensi script dan pasangan code fence README/ARCHITECTURE | PASS | Dua dokumen, enam tautan lokal, tiga referensi script; seluruh target ada dan code fence seimbang |
 | 2026-11-22 | Build, browser, suite backend/Python, SCHP/SD15 nyata | NOT RUN | Perubahan dokumentasi saja; tidak ada perubahan perilaku aplikasi |
+| 2026-11-23 | `git status --short; git diff --stat; git diff; git diff --cached --stat` sebelum edit | PASS inspeksi | Working tree/index bersih; catatan pending handoff lama sudah kedaluwarsa |
+| 2026-11-23 | PowerShell CIM: memori dan proses Python/Uvicorn | PASS inspeksi | RAM bebas 2.329.852 KiB, sisa virtual 7.576.484 KiB; tidak menemukan proses Python/Uvicorn |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` — evaluasi inline satu foto astronaut, SCHP CPU dua thread | PASS kontrak piksel | Download/hash sumber, satu inferensi 4,3948 s, RGB/alpha/mask/bbox/dimensi/count enam crop, non-overlap dan input unchanged; report lokal ignored |
+| 2026-11-23 | Inspeksi visual source/foreground/class map/enam kategori di `scratch/schp-photo-20261123/review.png` | FAIL kualitas bersih tanpa koreksi | Fragmen bendera ikut foreground, helm terpecah beberapa label dan pantulan menjadi lubang; tanpa ground truth/skor akurasi |
+| 2026-11-23 | Browser/API, build, suite backend/Python, SD15, kamera | NOT RUN | Tugas evaluasi helper/model saja, tidak mengubah perilaku aplikasi; tidak mengklaim hasil helper membuktikan E2E UI |
+| 2026-11-23 | Sesi koreksi: Git status/diff/index dan PowerShell CIM | PASS inspeksi | Dua dokumen modified dipertahankan; index kosong; RAM bebas 2.374.820 KiB/sisa virtual 7.838.696 KiB; tidak menemukan Python/Uvicorn sebelum startup |
+| 2026-11-23 | Browser native → Vite 5176 → Express 3113 → SCHP 8013 | PASS | Upload/ekstraksi 3,6253 s, tujuh kartu, Penghapus/Pulihkan/Undo/save, native PNG/ZIP pilihan |
+| 2026-11-23 | `ai-service/.venv-test/Scripts/python.exe -` pembanding PNG awal | FAIL harness | `toDataURL` berbeda dari save `toBlob` pada 12 piksel alpha parsial, maksimum 1 tingkat RGB; alpha exact |
+| 2026-11-23 | Python inline diagnosis encoder dan verifikasi lanjutan | PASS | `toBlob` byte-identical dengan unduhan; probe alpha/RGB, preview, ZIP satu entry/CRC/STORE/checksum dan enam kategori unchanged |
+| 2026-11-23 | Browser reset/console dan Python cleanup/socket | PASS dengan catatan harness | Galeri kosong/tombol disabled; nol console error aplikasi, satu pageerror selector harness; tab/service tertutup, storage temporary dihapus, bukti ignored dipertahankan |
+| 2026-11-23 | Build, suite backend/Python, SD15, kamera, viewport mobile | NOT RUN | Penerimaan desktop terarah; source tidak berubah |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

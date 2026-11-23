@@ -1,59 +1,59 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** implementasi M1–M7 ditutup D-047; kedua bug mask telah diperbaiki dan dokumentasi utama sudah diselaraskan. Bukti AI mock, inferensi nyata, pemeriksaan dokumen dan penerimaan kualitas foto harus tetap dibedakan.
+> **Untuk agent berikutnya:** koreksi foreground foto astronaut melalui UI nyata dan unduhan PNG/ZIP PASS. Segmentasi otomatis masih memiliki salah label/kebocoran; koreksi area terpilih bukan penerimaan kualitas umum.
 
 ## Last agent
 
-OMP — sinkronisasi README/ARCHITECTURE dengan implementasi dan batas bukti, 2026-11-22.
+OMP — penerimaan koreksi foto nyata melalui browser/Express/SCHP dan verifikasi PNG/ZIP, 2026-11-23.
 
 ## Current milestone / task
 
-M7 — penerimaan lokal pascapenutupan implementasi. Sinkronisasi dokumentasi selesai; berikutnya evaluasi ekstraksi SCHP pada satu foto manusia berizin. Tidak ada fitur/milestone baru.
+M7 — penerimaan lokal pascapenutupan implementasi D-047. Koreksi mask foto astronaut selesai tanpa perubahan source; berikutnya evaluasi satu foto full-body berizin.
 
 ## Last completed task
 
-- Working tree/index awal bersih. Konteks proyek dan bukti sesi sebelumnya dipertahankan; tidak mengulang implementasi atau tes runtime.
-- README/ARCHITECTURE dicocokkan dengan package scripts, server/app/router backend, health FastAPI, extractor/stylizer, kontrol UI generatif dan implementasi mask.
-- Narasi scaffold/fitur belum tersedia yang sudah usang diganti dengan status aktual; klaim “terverifikasi penuh” dibatasi menurut bukti.
-- Dokumentasi startup membedakan jalur ekstraksi/classic/mask/ekspor dari runtime SD15 opsional, kebutuhan checkpoint/dependensi, timeout dan resource. Tidak mengubah konfigurasi aplikasi.
-- Pemeriksaan statis tautan lokal/referensi script/code fence PASS. Tidak ada source, dependensi, model atau keputusan arsitektur yang diubah.
+- Git awal hanya PROGRESS/HANDOFF modified dari evaluasi sebelumnya; index kosong. Perubahan dipertahankan; tidak staging/commit.
+- Foto NASA Eileen Collins existing dipakai ulang (`scratch/schp-photo-20261123/input.png`), [public domain menurut scikit-image](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut). Tidak mengunduh foto/model baru atau membaca storage pengguna.
+- Vite source 5176 → Express 3113 → FastAPI/SCHP 8013, storage temporary terisolasi, CPU dua thread. Upload/ekstraksi melalui browser menghasilkan tujuh kartu; inferensi 3,6253 s. SCHP loaded true; stylizer available/loaded false.
+- Mouse/keyboard native pada editor human: hapus fragmen bendera, Undo mengembalikan piksel, ulang penghapusan lalu Pulihkan lubang helm. Probe bendera `(2,25)`/`(8,450)` alpha 255→0; helm `(420,450)`/`(420,465)`/`(365,365)` 0→255 dengan RGB source exact; wajah `(220,130)` tidak berubah.
+- Save menutup dialog dan memperbarui preview/link. PNG native 337.748 byte identik dengan `Canvas.toBlob`; ZIP pilihan human 337.942 byte berisi hanya PNG tersebut, byte-identical, CRC/STORE/metadata checksum benar. Enam PNG kategori unchanged.
+- Reset mengosongkan galeri dan menonaktifkan ekstraksi/ekspor pilihan. Tab dan ketiga service ditutup, port terverifikasi tertutup, storage temporary milik sesi dihapus.
 
-## Dokumentasi yang diselaraskan
+## Artefak dan batas visual
 
-- Stack aktual SCHP/Pillow/NumPy dan SD15/Diffusers/Accelerate; OpenCV bukan kebutuhan pipeline ekstraksi.
-- Mask editor, UI generatif dan spritesheet tersedia; parameter UI generatif, compositing Pulihkan dan batas Canvas dijelaskan.
-- Health HTTP 200 bukan jaminan model siap; startup tiga terminal tidak otomatis menyediakan SD15. Antrean tidak mengelola lifecycle dua model.
-- Kontrak REST menghapus route draft GET `/api/jobs/:id/objects` yang tidak tersedia; objek ada pada polling job dan endpoint individual.
-- Bukti mask/browser AI mock dipisahkan dari SCHP nyata pada gambar sintetis dan riwayat SD15 nyata. Kualitas foto nyata, resource, retensi, portabilitas serta deployment publik tetap dibatasi.
+- Bukti ignored: `scratch/mask-real-downloads-20261123/` — `before.png`, PNG revisi UUID human, `expected-canvas.png` (`toDataURL`), `expected-blob.png` (`toBlob`), ZIP UUID ekspor, `corrected-card.webp`, `verification.json`.
+- Job uji `e7a401b4-a469-4efe-8c62-7ffe338b968d`; human `2729d158-7277-4bb4-b6a9-1ca6ddc2962e`; ekspor `996f8f70-ef11-4c25-ad07-838f3f6cee86`. Storage job sudah dihapus; ID bukan link server aktif.
+- Alpha berubah pada 3.726 piksel; hasil memiliki 162 piksel alpha parsial (tepi kuas). Semua RGB piksel opaque exact dengan sumber; tidak menjamin hidden RGB/alpha parsial identik.
+- Screenshot modal/kartu diperiksa: area sasaran berubah sesuai sapuan, bukan klaim setiap batas bersih. Helm masih terpecah beberapa kategori; kaki/sepatu tidak terlihat. Tanpa ground-truth mask/skor akurasi.
+- Artefak evaluasi awal di `scratch/schp-photo-20261123/` tetap utuh; SHA-256 input `88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5`, 791.555 byte, 512×512.
 
 ## Modified files / uncommitted changes
 
-- `README.md` — status, stack, startup, readiness, mask, harness dan batas bukti.
-- `docs/ARCHITECTURE.md` — implementasi/route aktual, lifecycle, pengujian dan pekerjaan terbuka.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — pemeriksaan aktual dan satu tugas berikutnya.
-- Tidak ada perubahan source, build, screenshot, model, dependensi atau konfigurasi permanen pada sesi ini.
-- Git awal bersih. Tidak staging/commit atau memeriksa Git ulang setelah edit; daftar di atas berdasarkan operasi sesi.
-- DECISIONS tidak diubah: sinkronisasi ini mendokumentasikan implementasi/keputusan existing, bukan keputusan arsitektur baru.
+- `docs/PROGRESS.md`, `docs/HANDOFF.md` — diperbarui di atas perubahan belum commit dari sesi sebelumnya.
+- Folder bukti ignored baru tercantum di atas; tidak ada source, test permanen, script sementara, dependensi, checkpoint atau konfigurasi yang diubah.
+- Git awal dua dokumen modified; tidak staging/commit atau memeriksa Git ulang setelah edit.
+- DECISIONS tidak diubah: penerimaan menguji D-044 existing, bukan keputusan arsitektur baru.
 
 ## Tests / checks performed
 
-- **PASS:** `git status --short; git diff --stat; git diff; git diff --cached --stat` sebelum edit.
-- **PASS inspeksi statis:** kontrak source, startup/config, routes dan bukti runtime historis dibandingkan dengan README/ARCHITECTURE.
-- **PASS:** Python inline memeriksa dua dokumen, enam tautan Markdown lokal, tiga referensi script dan pasangan code fence; seluruh target ada dan blok kode seimbang.
-- **NOT RUN:** build, browser, suite backend/Python, SCHP/SD15. Hanya dokumentasi berubah; tidak ada perilaku baru yang perlu smoke runtime.
-- Bukti runtime terakhir tetap dari sesi mask sebelumnya: build 126 ms dan browser 5,98 s PASS dengan AI mock. Jangan menyatakan tes tersebut dijalankan pada sesi dokumentasi.
-- Tidak menjalankan server/model atau membuat script/fixture sementara. Tanpa staging/commit.
+- **PASS inspeksi:** Git status/diff/index; PowerShell CIM: RAM bebas 2.374.820 KiB/sisa virtual 7.838.696 KiB, tidak menemukan Python/Uvicorn sebelum startup.
+- **PASS UI nyata:** browser desktop 1365×1000, upload → SCHP → tujuh kartu → Penghapus/Pulihkan/Undo/save → native PNG dan ZIP pilihan. Tidak mock; SD15 tidak dimuat.
+- **FAIL harness awal:** `ai-service/.venv-test/Scripts/python.exe -` membandingkan unduhan terhadap `toDataURL`; 12 piksel alpha parsial berbeda RGB maksimum 1, alpha seluruh piksel identik. Backend menulis buffer save langsung tanpa re-encode.
+- **PASS diagnosis/verifikasi lanjutan:** capture `toBlob` dari canvas yang sama byte-identical dengan unduhan. Python NumPy/Pillow/zipfile memeriksa seluruh PNG, probe target, RGB opaque exact, preview, ZIP satu entry/CRC/STORE/size/count/SHA-256, enam kategori unchanged, health SCHP true/SD15 false.
+- **ERROR harness terselesaikan:** downloads pada `browser.open` awal boolean, harus path; `tab.waitFor` diberi ekspresi JS padahal selector, menyebabkan satu pageerror. Pengamatan save dilanjutkan dengan `page.waitForFunction`, bukan save/inferensi ulang. Nol console error aplikasi.
+- **PASS cleanup:** reset UI; tab/service ditutup; Python `shutil.rmtree` menghapus hanya `C:/Users/Hype/AppData/Local/Temp/immo-mask-real-dJrRPi`; socket memastikan 8013/3113/5176 tertutup. Bukti ignored dipertahankan.
+- **NOT RUN:** build, suite backend/Python, SD15, kamera, viewport mobile; tidak ada perubahan perilaku aplikasi.
 
 ## Current errors / limitations
 
-- Bug penghapus/Pulihkan yang ditemukan sebelumnya sudah diperbaiki; tidak menemukan bug runtime baru lewat tugas dokumentasi.
-- Kualitas ekstraksi pada foto manusia nyata/occlusion belum dibuktikan oleh fixture sintetis. Jangan mengklaim semua label akurat atau setiap instance terpisah.
-- SD15 memiliki risiko RAM/commit/latensi dan riwayat guard; retensi, antrean berbatas dan lifecycle pergantian model otomatis belum tersedia.
-- Linux/macOS, kamera mobile dan deployment publik belum tercakup oleh bukti lokal. Lisensi model/kode perlu dipastikan sebelum distribusi.
+- Tidak menemukan bug aplikasi baru pada skenario ini. Perbedaan `toDataURL`/`toBlob` adalah batas pembanding teramati; jangan mengklaim semua encoder PNG menghasilkan RGB parsial identik.
+- Koreksi foreground tidak mengubah class map/enam kategori; label helm salah dan kualitas batas yang belum disapu tetap keterbatasan.
+- Foto full-body/kaki/sepatu belum dievaluasi. Izin unduhan sebelumnya hanya satu foto astronaut; perlu persetujuan baru bila foto berikutnya diunduh.
+- Risiko existing: resource SD15, retensi/batas antrean/lifecycle otomatis, portabilitas/mobile/deployment publik serta lisensi redistribusi model belum ditutup.
 
 ## Next action (only one)
 
-Evaluasi SCHP pada satu foto uji manusia nonpribadi berizin, bukan fixture sintetis. Periksa kategori, mask/alpha dan aksesori/occlusion yang terlihat; catat hasil tanpa generalisasi. Gunakan file lokal yang diizinkan; bila belum tersedia, minta foto uji/persetujuan pengguna. Jangan memakai foto pribadi tanpa izin, mengunggah ke cloud atau memuat SD15.
+Evaluasi satu foto manusia full-body nonpribadi berizin dengan pakaian dan sepatu terlihat. Cari file lokal berizin dahulu; minta persetujuan baru sebelum mengunduh foto tambahan. Jalankan SCHP lokal, periksa kategori/mask dan bagian tertutup, catat false positive/negative tanpa generalisasi atau tuning model berdasarkan satu sampel. Jangan memuat SD15.
 
 ## Handoff rules
 
