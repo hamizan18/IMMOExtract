@@ -84,7 +84,7 @@ Uji kamera fisik **PC Camera** pada Windows/Chrome 158 berhasil: PNG 1280×720 �
 - Polling serial tiap 1 detik setelah respons, timeout request 15 detik. Jika pemeriksaan terputus, **Periksa status** melanjutkan job yang sama tanpa POST baru. Tidak ada retry otomatis; jika POST belum terkonfirmasi, UI memperingatkan bahwa mengirim lagi dapat membuat job baru.
 - Mengganti/menghapus gambar, membuka kamera atau meninggalkan halaman membatalkan request/polling browser dan membersihkan galeri. Job server tidak dibatalkan/dihapus. Hasil kosong/gagal dan kegagalan file preview ditampilkan apa adanya. Setelah job terminal, gunakan **Hapus pilihan** lalu pilih gambar untuk memulai lagi; tidak ada pemulihan job otomatis setelah reload.
 - Manifest dan hasil berada di `storage/jobs/<uuid>/`; jika `UPLOAD_DIR` diubah, direktori jobs default sejajar direktori upload. Jangan jalankan beberapa backend pada storage yang sama. Retensi otomatis (`STORAGE_RETENTION_HOURS`, bawaan 24 jam; sweep tiap `STORAGE_SWEEP_INTERVAL_MINUTES`, bawaan 60 menit) menghapus job kedaluwarsa beserta upload sumber yang tidak lagi direferensikan (D-048); batas panjang antrean belum tersedia.
-- Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend memakai `AI_HEALTH_TIMEOUT_MS` untuk health/ekstraksi (default 3000 ms; gunakan misalnya 30000 untuk inferensi). Stylization mempunyai `AI_STYLIZATION_TIMEOUT_MS` terpisah (default 900000 ms), bukan memakai timeout health.
+- Endpoint ekstraksi sinkron M3 masih di luar antrean job. Startup backend memakai `AI_HEALTH_TIMEOUT_MS` untuk ekstraksi (default 30000 ms; probe `/health` dibatasi maksimal 5000 ms). Stylization mempunyai `AI_STYLIZATION_TIMEOUT_MS` terpisah (default 900000 ms), bukan memakai timeout ekstraksi.
 - Restart backend dan AI service bersama setelah pembaruan kontrak kategori. Job lama tetap dapat dipolling, tetapi tidak ditambahi file kategori secara otomatis. Polling job aktif memakai snapshot yang sudah berhasil disimpan, menghindari konflik pembacaan/penggantian manifest di Windows.
 
 ### Ekspor ZIP melalui browser dan API
@@ -192,8 +192,7 @@ Dengan dependensi, `.venv-test` dan checkpoint SCHP lokal yang sudah tersedia, j
 .\ai-service\.venv-test\Scripts\python.exe -m uvicorn main:app --app-dir ai-service --host 127.0.0.1 --port 8000
 
 # Terminal 2 — Backend (Express.js)
-# Timeout ekstraksi/health; smoke lokal memakai 30000 ms, default backend 3000 ms.
-$env:AI_HEALTH_TIMEOUT_MS = '30000'
+# Timeout ekstraksi default 30000 ms (30 detik).
 npm start --prefix backend
 
 # Terminal 3 — Frontend (Vite)

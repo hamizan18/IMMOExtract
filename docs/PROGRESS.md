@@ -234,6 +234,7 @@
   - Menghapus embel-embel label milestone internal (`(M5)`, `(M6)`, `(M7)`), tampilan UUID mentah (`ID upload: ...`, `ID job: ...`), serta catatan pengembangan di kaki halaman.
   - Menerapkan tata letak dashboard **Minimalist Dark Pro** sesuai pilihan pengguna (`frontend/index.html`, `frontend/src/style.css`, `frontend/src/main.js`, `frontend/src/extraction-workspace.js`): sticky header dengan *live status indicator pills* (`#backend-dot`, `#ai-dot`), panel dua kolom proporsional (5:7 di desktop), area unggah bergaya dropzone berikon SVG minimalis, toolbar ekspor ZIP & Spritesheet berdampingan, *category badge* pada tiap kartu objek, serta kontrol **tab di dalam kartu objek** (`Classic Pixel` vs `AI Stylize`) agar kartu jauh lebih ringkas dan rapi.
   - Verifikasi `npm run build --prefix frontend` (PASS, 508 ms) dan automated headless browser smoke test `node scripts/smoke_browser_m7.mjs` (PASS 100%, termasuk pengujian perpindahan tab `Classic Pixel` ↔ `AI Stylize` dan tangkapan layar desktop 1365×1100 di `scratch/proof_smoke_m7_spritesheet.png`, 0 console error).
+  - Penyelarasan default `AI_HEALTH_TIMEOUT_MS` di `backend/src/server.js` dan `backend/.env.example` dari `3000` menjadi `30000` ms (selaras dengan `app.js` dan `ai-client.js`), setelah diagnosis membuktikan job kamera 1280×720 (`795d73ad-...`) selesai menulis seluruh 8 PNG di FastAPI dalam 3,019 detik namun terputus oleh batas 3.000 ms Express.
 
 ## In progress
 

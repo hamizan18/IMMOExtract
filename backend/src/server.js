@@ -2,7 +2,7 @@ import { createApp } from './app.js';
 
 const port = Number(process.env.PORT || 3000);
 const aiServiceUrl = new URL(process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000');
-const aiTimeoutMs = Number(process.env.AI_HEALTH_TIMEOUT_MS || 3000);
+const aiTimeoutMs = Number(process.env.AI_HEALTH_TIMEOUT_MS || 30000);
 const aiStylizationTimeoutMs = Number(process.env.AI_STYLIZATION_TIMEOUT_MS || 900000);
 const aiStylizationServiceUrl = new URL(process.env.AI_STYLIZATION_SERVICE_URL || aiServiceUrl);
 const storageRetentionHours = process.env.STORAGE_RETENTION_HOURS !== undefined

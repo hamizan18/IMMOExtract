@@ -18,6 +18,7 @@ M7 — hardening pascapenutupan implementasi D-047, retensi otomatis D-048, sert
   - **Tab Kartu Objek (`Classic Pixel` vs `AI Stylize`):** Setiap kartu objek memiliki *category badge*, checkbox pilih singkat, tombol `Unduh PNG asli` & `Koreksi Mask` berdampingan, serta tab switcher `[data-tab-btn="pixelate"]` dan `[data-tab-btn="stylize"]` yang menyembunyikan panel nonaktif sehingga kartu jauh lebih pendek dan rapi.
   - **Pembersihan Label Pengujian:** Menghapus label milestone `(M5)`/`(M6)`/`(M7)`, cetakan UUID mentah (`ID upload`, `ID job`), dan catatan pengembangan di kaki halaman.
 - Memperbarui `scripts/smoke_browser_m7.mjs` dengan pengujian perpindahan tab kartu objek (`11d`) dan viewport desktop `1365×1100`.
+- Menyelaraskan default `AI_HEALTH_TIMEOUT_MS` di `backend/src/server.js` dan `backend/.env.example` dari `3000` ke `30000` ms agar ekstraksi foto kamera 1280×720 (~3,02 detik di CPU) tidak terkena timeout 3 detik ketika backend dijalankan tanpa env manual.
 - Memperbarui seluruh file dokumentasi proyek (`README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`).
 
 ## Modified files / uncommitted changes
