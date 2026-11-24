@@ -300,7 +300,8 @@
 - [x] Arsitektur Job Orchestrator & Polling status untuk ekstraksi asynchronous di M4 (D-021).
 - [x] Integrasi UI pemilihan objek/ZIP (M4), endpoint D-025 dan UI D-026 terverifikasi.
 - [ ] Hak redistribusi checkpoint ATR/dataset sebelum distribusi; MIT kode sudah dibaca, lisensi bobot belum terkonfirmasi (D-014).
-- [ ] Batas performa input dan retensi file sementara setelah benchmark.
+- [ ] Batas performa input setelah benchmark.
+- [x] Retensi file sementara `storage/uploads` dan `storage/jobs` (D-048: Accepted & terimplementasi; sweep dua langkah, default 24 jam / interval 60 menit).
 - [x] Model image-to-image lokal, kebutuhan GPU, dan preset AI stylization (M6, D-031–D-043).
 - [x] Strategi koreksi mask (brush/eraser manual Canvas 2D) dan hasil pengujian (M6, D-044).
 
@@ -837,6 +838,35 @@ vae/config.json
 - **Konsekuensi:**
   - Fase Minimum Viable Product (MVP) proyek IMMOExtract secara resmi telah selesai secara menyeluruh.
   - Proyek berada dalam kondisi stabil, bersih, terdokumentasi lengkap, dan siap digunakan atau dipresentasikan.
+
+## D-048 — Rancangan dan implementasi retensi otomatis `storage/uploads` dan `storage/jobs`
+
+- **Tanggal:** 2026-11-23 (dirancang), 2026-11-24 (disetujui & diimplementasikan).
+- **Status:** Accepted / Verified — diimplementasikan di `backend/src/job-manager.js`, `backend/src/server.js`, `backend/src/app.js`, `backend/.env.example`, `frontend/index.html`, dan `frontend/src/image-input.js`. Suite `backend/test/retention.test.js` (7/7 PASS) dan full backend suite (150/150 PASS).
+- **Dasar:** PROJECT_SPEC §8 Keamanan meminta "pembatasan permintaan dan penghapusan sementara"; D-013/D-021/D-025/D-028 mencatat retensi belum tersedia. Bukan fitur baru di luar spesifikasi.
+- **Fakta source yang mengikat desain (diperiksa 2026-11-23):**
+  - Upload: `storage/uploads/<uuid>/{original.<ext>, manifest.json}` dengan `created_at`; endpoint sinkron M3 menambah `extracted.png`/`mask.png` dan `extracted_at` ke direktori yang sama.
+  - Job: `storage/jobs/<uuid>/{manifest.json, extracted.png, mask.png, objects/, pixelations/, exports/, spritesheets/, stylizations/}`. Manifest job memuat `upload_id`, `created_at`, `updated_at`; PUT koreksi mask memperbarui `updated_at` job. Snapshot turunan memiliki manifest sendiri dengan `created_at` (stylization juga `updated_at`) dan **tidak** memperbarui `updated_at` job.
+  - State aktif hanya di memori proses: `queue`, `active` (job queued/processing atau JOB_STORAGE_FAILED), `activeStylizations`. Satu proses backend memiliki storage (D-021). `initialize()` hanya membaca entri bernama UUID.
+  - Stylization timeout sengaja mempertahankan staging karena model remote tidak dibatalkan (`job-manager.js` processStylization).
+  - Kuas Pulihkan memakai `previewImage` lokal browser, bukan file upload server; menghapus upload setelah ekstraksi tidak memutus editor yang sedang terbuka. State job UI tidak dipulihkan setelah reload.
+  - Crash sebelum publikasi manifest dapat meninggalkan direktori tanpa manifest (job dibuat `mkdir` sebelum `save`; ekspor/pixelation/spritesheet dipublikasikan terakhir).
+- **Keputusan teknis yang diimplementasikan:**
+  1. **Unit retensi = seluruh job** (manifest, objek, mask, dan semua snapshot turunan) plus upload sumbernya. Tidak menghapus snapshot satu per satu agar referensi manifest tidak menggantung.
+  2. **Aktivitas terakhir job** = maksimum `job.updated_at` (serta `job.created_at` bila ada) dan `created_at`/`updated_at` semua manifest snapshot turunan (`pixelations`, `exports`, `spritesheets`, `stylizations`) yang terbaca. Tidak memakai atime filesystem (tidak andal di Windows/NTFS). Upload: maksimum `created_at` dan `extracted_at`.
+  3. **Kedaluwarsa** bila `now - aktivitas terakhir > STORAGE_RETENTION_HOURS`. Default **24 jam** (`STORAGE_RETENTION_HOURS=24`, nilai konfigurasi awal); `0` menonaktifkan sweep. Validasi startup: integer ≥ 0 dan, bila aktif (`> 0`), wajib lebih besar dari `AI_STYLIZATION_TIMEOUT_MS` agar staging stylization yang timeout tidak dihapus selagi model remote mungkin masih menulis.
+  4. **Tidak pernah dihapus** pada sweep: job di `active` atau `queue`; job dengan stylization di `activeStylizations` atau ber-status `queued`/`processing` di disk; job yang sedang dipakai operasi mutasi (POST pixelate/exports/spritesheet/stylization, PUT objek) melalui penghitung `busyJobs` di manager (serta `busyUploads` saat `create(uploadId)`); upload yang direferensikan job yang tidak kedaluwarsa, masih di antrean/aktif, atau dilewati karena error; entri bukan UUID, symlink/junction, atau di luar `realpath(root)`.
+  5. **Mekanisme hapus dua langkah:** cek ulang proteksi dan aktivitas tepat sebelum hapus → `rename(<uuid>, .deleting-<uuid>-<random>)` pada parent yang sama (setelah itu GET menjadi 404 `JOB_NOT_FOUND`/`UPLOAD_NOT_FOUND` yang sudah ada) → pelepasan symlink/junction bersarang (`rmdir`/`unlink` pada reparse point tanpa rekursi ke target luar) lalu `rm` rekursif. Rename gagal (mis. `EPERM` Windows karena handle terbuka) = dilewati, dicatat kodenya, upload sumbernya tetap dipertahankan, dan dicoba pada sweep berikutnya. Sisa `.deleting-*` dibersihkan pada sweep berikutnya.
+  6. **Data rusak/tidak lengkap:** direktori tanpa manifest memakai `mtime` direktori sebagai aktivitas; manifest JSON rusak atau timestamp tidak valid **dilewati dan dicatat** (kode error saja), tidak dihapus dan tidak menjatuhkan server. Timestamp di masa depan dianggap belum kedaluwarsa.
+  7. **Penjadwalan:** dijalankan di dalam `createJobManager` sekali setelah `initialize()` selesai memulihkan job interrupted, dan periodik tiap `STORAGE_SWEEP_INTERVAL_MINUTES` (default 60) memakai timer `unref()`; sweep tidak tumpang tindih (`activeSweep`). Urutan: job kedaluwarsa dahulu, lalu upload yang tidak lagi direferensikan.
+  8. **Log:** jumlah job/upload terhapus/dilewati dan kode error; tanpa path absolut atau isi foto.
+  9. **Testability:** `createApp`/`createJobManager` menerima opsi `retentionMs`, `sweepIntervalMs`, `stylizationTimeoutMs`, dan `now()` injeksi; `manager.sweep()` dan `manager.stopSweep()` tersedia dan terekspos di `app.locals.jobManager`.
+  10. **UI/dokumen:** teks `frontend/index.html` baris 36 dan pesan upload di `frontend/src/image-input.js` menjelaskan retensi otomatis bawaan 24 jam sejak aktivitas terakhir; `README.md` dan `docs/ARCHITECTURE.md` diperbarui.
+- **Bukti pengujian nyata (2026-11-24):**
+  - `node --test backend/test/retention.test.js`: **PASS 7/7** (2,57 s) — validasi konfigurasi (`retentionMs`, `sweepIntervalMs`, batas `stylizationTimeoutMs`), penghapusan job/upload kedaluwarsa & HTTP 404, retensi entry baru/timestamp masa depan/upload `extracted_at`, perpanjangan umur job oleh 4 jenis snapshot turunan (`pixelations`, `exports`, `spritesheets`, `stylizations`), proteksi job aktif/`queued`/`processing`/`busyJobs` dan upload-nya, fallback `mtime` direktori tanpa manifest, skip aman manifest rusak/timestamp invalid tanpa bocor path di log, observasi nyata Windows `EPERM` saat file di dalam job sedang dibuka handle lalu terhapus setelah handle ditutup pada sweep berikutnya, keamanan junction bersarang di dalam job & top-level junction terhadap direktori luar storage, entri non-UUID utuh, pembersihan `.deleting-*`, serta mode nonaktif `retentionMs: 0`.
+  - `npm test --prefix backend`: **PASS 150/150** (67 top-level subtests, 0 fail, 0 skip, 18,86 s).
+  - `npm run build --prefix frontend`: **PASS** (7 modul, 520 ms).
+- **Konsekuensi:** Hasil job dan upload yang tidak memiliki aktivitas selama masa retensi (default 24 jam) dihapus otomatis; pengguna diberi tahu di UI. Batas jumlah antrean/kuota disk dan penghapusan manual per job masih di luar cakupan D-048.
 
 
 

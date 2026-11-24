@@ -13,6 +13,9 @@ export function createApp({
   uploadDir,
   jobDir,
   maxUploadBytes = 10 * 1024 * 1024,
+  retentionMs,
+  sweepIntervalMs,
+  now,
 } = {}) {
   const app = express();
   app.disable('x-powered-by');
@@ -48,7 +51,18 @@ export function createApp({
 
   app.use('/api/uploads', createUploadRouter({ uploadDir, maxUploadBytes }));
   app.use('/api/uploads', createExtractionRouter({ uploadDir, aiClient: client }));
-  app.use('/api/jobs', createJobRouter({ uploadDir, jobDir, maxUploadBytes, aiClient: client }));
+  const jobRouter = createJobRouter({
+    uploadDir,
+    jobDir,
+    maxUploadBytes,
+    aiClient: client,
+    stylizationTimeoutMs: aiStylizationTimeoutMs,
+    retentionMs,
+    sweepIntervalMs,
+    now,
+  });
+  app.locals.jobManager = jobRouter.manager;
+  app.use('/api/jobs', jobRouter);
 
   return app;
 }

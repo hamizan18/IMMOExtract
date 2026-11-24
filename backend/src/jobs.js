@@ -5,6 +5,7 @@ import { createUploadRouter } from './uploads.js';
 export function createJobRouter(options) {
   const router = Router();
   const manager = createJobManager(options);
+  router.manager = manager;
   router.use((_request, response, next) => {
     response.set('Cache-Control', 'no-store, private');
     next();

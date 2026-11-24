@@ -5,6 +5,12 @@ const aiServiceUrl = new URL(process.env.AI_SERVICE_URL || 'http://127.0.0.1:800
 const aiTimeoutMs = Number(process.env.AI_HEALTH_TIMEOUT_MS || 3000);
 const aiStylizationTimeoutMs = Number(process.env.AI_STYLIZATION_TIMEOUT_MS || 900000);
 const aiStylizationServiceUrl = new URL(process.env.AI_STYLIZATION_SERVICE_URL || aiServiceUrl);
+const storageRetentionHours = process.env.STORAGE_RETENTION_HOURS !== undefined
+  && process.env.STORAGE_RETENTION_HOURS !== ''
+  ? Number(process.env.STORAGE_RETENTION_HOURS) : 24;
+const storageSweepIntervalMinutes = process.env.STORAGE_SWEEP_INTERVAL_MINUTES !== undefined
+  && process.env.STORAGE_SWEEP_INTERVAL_MINUTES !== ''
+  ? Number(process.env.STORAGE_SWEEP_INTERVAL_MINUTES) : 60;
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535.');
@@ -22,6 +28,17 @@ if (!Number.isSafeInteger(aiStylizationTimeoutMs)
 if (!['http:', 'https:'].includes(aiStylizationServiceUrl.protocol)) {
   throw new Error('AI_STYLIZATION_SERVICE_URL must use HTTP or HTTPS.');
 }
+if (!Number.isSafeInteger(storageRetentionHours) || storageRetentionHours < 0) {
+  throw new Error('STORAGE_RETENTION_HOURS must be a non-negative integer.');
+}
+const retentionMs = storageRetentionHours * 60 * 60 * 1000;
+if (retentionMs > 0 && retentionMs <= aiStylizationTimeoutMs) {
+  throw new Error('STORAGE_RETENTION_HOURS must exceed AI_STYLIZATION_TIMEOUT_MS when enabled.');
+}
+if (!Number.isSafeInteger(storageSweepIntervalMinutes) || storageSweepIntervalMinutes < 0) {
+  throw new Error('STORAGE_SWEEP_INTERVAL_MINUTES must be a non-negative integer.');
+}
+const sweepIntervalMs = storageSweepIntervalMinutes * 60 * 1000;
 
 const app = createApp({
   aiServiceUrl,
@@ -30,6 +47,8 @@ const app = createApp({
   aiStylizationServiceUrl,
   uploadDir: process.env.UPLOAD_DIR,
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024),
+  retentionMs,
+  sweepIntervalMs,
 });
 
 app.listen(port, '127.0.0.1', () => {

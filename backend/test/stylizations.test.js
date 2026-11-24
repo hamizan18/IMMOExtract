@@ -103,11 +103,12 @@ async function setup(t, client = {}) {
       await mkdir(directory, { recursive: true });
       const png = await sourcePng();
       await writeFile(join(directory, 'extracted.png'), png);
+      const now = new Date().toISOString();
       const manifest = {
         job_id: jobId, upload_id: randomUUID(), status: 'completed', progress: 100,
         objects: [{ id: objectId, category: 'human', file: 'extracted.png', width: 16, height: 12 }],
         extraction: { original_size: [16, 12], categories_present: [], category_pixel_counts: {}, execution_time_seconds: 0 },
-        created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', error: null,
+        created_at: now, updated_at: now, error: null,
       };
       await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest));
       return { jobId, objectId, directory, png, manifest };

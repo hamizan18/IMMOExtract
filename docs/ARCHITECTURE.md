@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Implementasi M1–M7 ditutup D-047. Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; retensi dan pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
+> **Status:** Implementasi M1–M7 ditutup D-047; retensi otomatis `storage/uploads` dan `storage/jobs` telah diimplementasikan dan teruji (D-048). Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -82,7 +82,7 @@ Revisi hanya memperbarui PNG/metadata objek yang dipilih, bukan class map atau P
 
 **Preview vs file:** `#spritesheet-preview-img` berada dalam container `max-h-64 overflow-auto` (256 px pada penerimaan). Wheel native menampilkan baris bawah; batas viewport tidak memotong PNG/atlas unduhan. Penerimaan memeriksa byte native vs endpoint inline dan koordinat setiap frame, bukan hanya screenshot.
 
-**Alur pemrosesan aktual (retensi belum tersedia):**
+**Alur pemrosesan aktual (termasuk retensi otomatis D-048):**
 
 1. `POST /api/jobs`: multipart gambar valid atau JSON `upload_id`; Express membuat job ID acak dan manifest queued privat.
 2. Worker FIFO mengambil pekerjaan dan mengubah status ke processing.
@@ -91,7 +91,7 @@ Revisi hanya memperbarui PNG/metadata objek yang dipilih, bukan class map atau P
 5. Backend memvalidasi hasil, bbox/dimensi, nama/lokasi file dan metadata sebelum mempublikasikan inventaris objek.
 6. Express tandai `completed` atau `failed` dengan error yang aman ditampilkan; UI polling `GET /api/jobs/:id`.
 7. Unduhan `GET`/ZIP memilih file berdasarkan manifest object ID yang sah, **bukan path arbitrer dari client**.
-8. Penghapusan file lama/retensi otomatis belum tersedia; hapus pilihan di browser bukan penghapusan data server.
+8. Sweep retensi otomatis di `createJobManager` (`STORAGE_RETENTION_HOURS` default 24 jam, interval `STORAGE_SWEEP_INTERVAL_MINUTES` default 60 menit) menghapus job yang telah melewati masa retensi sejak aktivitas terakhir (termasuk timestamp snapshot turunan) melalui rename atomik dua langkah (`.deleting-<uuid>-<rand>` → pelepasan reparse point bersarang → `rm`), diikuti upload yang tidak lagi direferensikan job aktif/tersimpan. Hapus pilihan di browser bukan penghapusan data server seketika.
 
 Path filesystem FastAPI hanya untuk caller lokal tepercaya; API internal bukan sandbox filesystem publik. Browser mengakses Express dan hanya mengirim ID objek/job yang terdaftar.
 
@@ -128,7 +128,7 @@ Internal FastAPI: `GET /health` mengembalikan status service, `model_loaded` (SC
 
 **Orchestrator stylization (D-041):** Express memilih source dari manifest objek completed, membuat manifest snapshot queued di `<job>/stylizations/<uuid>/`, lalu menambahkan tugas ke FIFO yang sama dengan ekstraksi. Satu request AI aktif per manager. `AiClient.stylizePath` memakai URL generatif opsional dan timeout khusus default 900000 ms, tanpa fallback/retry. Hanya backend membentuk path; output AI ke `image.tmp.png`, kemudian decode/validasi dimensi/alpha exact/metadata sebelum rename `image.png` dan manifest completed. State aktif memakai snapshot committed di memori untuk menghindari read/rename race Windows; restart mengubah interrupted menjadi failed. Polling/preview/download menghapus path internal dan mewajibkan parent/object/snapshot sesuai serta file canonical regular. Manifest job, original, ZIP/pixelation independen.
 
-**Batas lifecycle:** FIFO tidak unload SCHP/SD15 atau membatalkan inferensi remote saat HTTP timeout. Late writes tetap staging privat; snapshot failed tidak dapat diunduh. Retensi belum ada. Service SD15 opsional dapat dipisahkan lewat `AI_STYLIZATION_SERVICE_URL`, tetapi resource kedua proses tetap harus dikelola; smoke menghentikan SCHP sebelum memulai SD15. Endpoint ekstraksi sinkron M3 tetap di luar FIFO.
+**Batas lifecycle:** FIFO tidak unload SCHP/SD15 atau membatalkan inferensi remote saat HTTP timeout. Late writes tetap staging privat; snapshot failed tidak dapat diunduh. Retensi otomatis aktif wajib melebihi `AI_STYLIZATION_TIMEOUT_MS` agar direktori staging yang timeout tidak dihapus saat model remote masih berjalan (D-048). Service SD15 opsional dapat dipisahkan lewat `AI_STYLIZATION_SERVICE_URL`, tetapi resource kedua proses tetap harus dikelola; smoke menghentikan SCHP sebelum memulai SD15. Endpoint ekstraksi sinkron M3 tetap di luar FIFO.
 
 Pada development, Vite `127.0.0.1:5173` mem-proxy `/api` ke Express `127.0.0.1:3000`; Express memakai FastAPI `127.0.0.1:8000` secara default. Tidak ada static serving storage, akses FastAPI langsung dari browser atau CORS terbuka. Halaman sekarang mencakup upload/kamera, workspace objek, mask editor, kedua mode pixelation/stylization dan ekspor; bukan hanya layar health M1.
 
@@ -184,7 +184,7 @@ Direktori service di atas berisi implementasi, bukan scaffold kosong. `scripts/`
 - Gunakan random ID untuk job dan object; hindari direct static serving dari `storage`.
 - Jangan taruh secret, API token, foto pengguna, mask/hasil, checkpoint, `.venv`, atau `node_modules` di Git.
 - Simpan model checkpoint lokal; unduhan ukuran besar butuh persetujuan pengguna.
-- Validasi ukuran sudah tersedia, tetapi antrean berbatas dan cleanup retensi belum tersedia. Jangan menyamakan batas upload/UUID acak dengan kesiapan deployment publik atau kontrol akses multi-user.
+- Validasi ukuran dan retensi otomatis waktu (`STORAGE_RETENTION_HOURS`, D-048) sudah tersedia, tetapi antrean berbatas/kuota disk dan kontrol akses multi-user belum tersedia. Jangan menyamakan batas upload/UUID acak dengan kesiapan deployment publik.
 - Saat memakai Claude Website, kirim hanya file source yang relevan; jangan upload foto asli pribadi atau secrets.
 
 ## 10. Observability dan pengujian
@@ -205,7 +205,7 @@ Direktori service di atas berisi implementasi, bukan scaffold kosong. `scripts/`
 - Kualitas segmentasi/stylization pada dataset foto nyata, aksesori dan occlusion: dua foto ekstraksi teruji belum memberi penerimaan umum. Alpha exact tidak menjamin kualitas visual; koreksi satu kategori tidak menyinkronkan kategori lain. Impor atlas ke game engine belum diuji.
 - Lisensi distribusi checkpoint/model dan kode proyek sebelum publikasi/redistribusi.
 - Resource SD15: headroom RAM/commit, latensi, konfigurasi di luar smoke dan lifecycle pergantian model.
-- Retensi file, batas antrean/ekspor dan keamanan deployment multi-user; belum menjadi fitur operasional.
+- Batas panjang antrean/kuota disk, penghapusan manual per job, dan keamanan deployment multi-user; belum menjadi fitur operasional (retensi waktu otomatis lokal telah diimplementasikan sesuai D-048).
 - Portabilitas Linux/macOS dan penerimaan kamera mobile; belum terbukti pada bukti Windows lokal.
 
 Catat keputusan setelah diuji ke `docs/DECISIONS.md`.

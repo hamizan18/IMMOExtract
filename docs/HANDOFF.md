@@ -1,44 +1,52 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** sinkronisasi README/ARCHITECTURE dengan bukti penerimaan 2026-11-23 selesai dan belum di-commit. Jangan mengulang penerimaan ekspor atau menulis ulang dokumen; tunggu tinjauan/commit pengguna dan arahan tugas berikut.
+> **Untuk agent berikutnya:** implementasi dan verifikasi retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) telah selesai dan lulus 150/150 tes backend serta build frontend, namun belum di-commit. Jangan memulai fitur baru tanpa arahan pengguna; tunggu tinjauan/commit pengguna.
 
 ## Last agent
 
-Antigravity — melanjutkan sinkronisasi dokumentasi yang terhenti akibat usage limit, 2026-11-23.
+Antigravity — mengimplementasikan dan memverifikasi retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) setelah persetujuan pengguna (2026-11-24).
 
 ## Current milestone / task
 
-M7 — penerimaan lokal pascapenutupan implementasi D-047. Sinkronisasi dokumentasi utama selesai; tidak ada implementasi berjalan.
+M7 — hardening pascapenutupan implementasi D-047 & D-048. Implementasi retensi otomatis D-048 selesai; tidak ada implementasi berjalan.
 
 ## Last completed task
 
-- Git awal: `README.md` dan `docs/ARCHITECTURE.md` modified (draft sesi sebelumnya yang terhenti), index kosong. Draft dipertahankan dan diselesaikan, bukan ditulis ulang.
-- Draft diverifikasi terhadap source dan bukti: preview `max-h-64 overflow-auto` (`frontend/index.html`), Sharp `compressionLevel: 9`, tinggi baris = objek tertinggi, field atlas (`backend/src/spritesheet.js`), kuas 2–60/Undo 20. Angka cocok `scratch/spritesheet-ui-20261123/verification.json` dan `scratch/pixelation-pants-20261123/report.json`.
-- Isi sinkronisasi: koreksi hanya objek tersimpan (bukan class map/kategori lain); decode JPEG browser vs Pillow ≤1 tingkat RGB; pixelation grid32 Pants tidak menyampel alpha parsial; spritesheet alpha/opaque RGB exact tetapi RGB parsial/tersembunyi tidak; preview dapat digulir dan tidak memotong file; tabel bukti memisahkan helper vs UI/API; atribusi foto; batas desktop lokal.
-- Koreksi sesi ini: klaim "format TexturePacker / PixiJS / Phaser standar" (fitur README, dua baris route ARCHITECTURE) → "bergaya TexturePacker; impor engine belum diuji"; baris kosong ganda draft dirapikan.
+- Git awal: `docs/DECISIONS.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md` modified (draft D-048 Proposed + catatan evaluasi foto unggahan pengguna), index kosong. Seluruh perubahan dipertahankan.
+- Pengguna menyetujui rancangan D-048 dengan nilai default `STORAGE_RETENTION_HOURS=24` dan `STORAGE_SWEEP_INTERVAL_MINUTES=60`.
+- Implementasi retensi otomatis di `backend/src/job-manager.js`, `backend/src/server.js`, `backend/src/app.js`, `backend/src/jobs.js`, dan `backend/.env.example`:
+  - Aktivitas terakhir job = maksimum `job.updated_at` (serta `created_at` bila ada) dan timestamp `created_at`/`updated_at` seluruh manifest snapshot turunan (`pixelations`, `exports`, `spritesheets`, `stylizations`). Aktivitas upload = maksimum `created_at` dan `extracted_at`.
+  - Proteksi penuh untuk job di `active`/`queue`, stylization di `activeStylizations`, status `queued`/`processing` di disk, mutasi berjalan (`busyJobs`/`busyUploads`), upload yang direferensikan job aktif/tersimpan/dilewati, entri non-UUID, dan symlink/junction.
+  - Hapus dua langkah atomik: cek ulang tepat sebelum hapus → `rename(<uuid>, .deleting-<uuid>-<rand>)` → pelepasan symlink/junction bersarang (`rmdir`/`unlink` pada reparse point tanpa menyentuh target luar) → `rm` rekursif. Kegagalan rename (seperti `EPERM` Windows karena handle terbuka) dilewati aman, mempertahankan upload sumbernya, dan dicoba kembali pada sweep berikutnya. Sisa `.deleting-*` dibersihkan pada sweep berikutnya.
+  - Direktori tanpa manifest memakai `mtime` direktori; manifest JSON rusak atau timestamp invalid dilewati dan dicatat hanya kode error-nya tanpa membocorkan path atau menjatuhkan server.
+  - Penjadwalan otomatis sekali setelah `initialize()` selesai memulihkan job interrupted, lalu periodik dengan timer `unref()` tanpa tumpang tindih; `manager.sweep()` dan `manager.stopSweep()` tersedia untuk pengujian langsung.
+- Pembaruan teks pemberitahuan retensi di `frontend/index.html` dan `frontend/src/image-input.js`, penyesuaian timestamp fixture `env.seed()` di `backend/test/stylizations.test.js` ke waktu saat ini, serta pembuatan suite tes `backend/test/retention.test.js`.
+- Sinkronisasi `docs/DECISIONS.md` (status D-048 Accepted/Verified), `README.md`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md`.
 
 ## Modified files / uncommitted changes
 
-- `README.md`, `docs/ARCHITECTURE.md` — draft sesi terhenti + koreksi sesi ini.
-- `docs/PROGRESS.md`, `docs/HANDOFF.md` — pembaruan status tugas ini.
-- Source/test/dependensi/DECISIONS/konfigurasi tidak berubah. Script cek statis disimpan di brain scratch agent, bukan repo. Tanpa staging/commit.
+- `backend/.env.example`, `backend/src/server.js`, `backend/src/app.js`, `backend/src/jobs.js`, `backend/src/job-manager.js` — konfigurasi dan implementasi sweep retensi otomatis D-048.
+- `backend/test/retention.test.js` (untracked/baru), `backend/test/stylizations.test.js` — unit/integration test retensi D-048 dan pembaruan timestamp fixture seed.
+- `frontend/index.html`, `frontend/src/image-input.js` — pemberitahuan masa retensi otomatis bawaan 24 jam di UI.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — dokumentasi D-048.
+- Tanpa staging/commit otomatis.
 
 ## Tests / checks performed
 
-- **PASS inspeksi:** `git status`, `git diff`, `git diff --cached --stat`.
-- **PASS verifikasi klaim:** `Select-String` source + baca JSON bukti scratch; dua klaim format atlas berlebih ditemukan dan dikoreksi.
-- **PASS:** `node --test backend/test/pixelation.test.js backend/test/spritesheet.test.js` — 11/11.
-- **PASS cek statis docs:** fence seimbang (README 12, ARCHITECTURE 6), tujuh tautan lokal README ada, referensi `scripts/smoke.mjs`/`scripts/smoke_browser_m7.mjs` ada, tanpa baris kosong ganda.
-- **NOT RUN:** build frontend, suite backend penuh, suite Python, browser/SCHP/SD15, kamera/mobile — hanya dokumentasi berubah.
+- **PASS inspeksi:** `git status --short --branch`, `git diff --stat`, `git diff --cached --stat`.
+- **PASS:** `node --test backend/test/retention.test.js` — 7/7 tests PASS (2,57 s), mencakup seluruh 14 skenario wajib D-048 termasuk observasi nyata Windows `EPERM` pada file yang sedang dibuka handle.
+- **PASS:** `npm test --prefix backend` — 150/150 tests PASS (67 top-level subtests, 0 fail, 0 skip, 18,86 s).
+- **PASS:** `npm run build --prefix frontend` — Vite build PASS (7 modul, 520 ms).
+- **NOT RUN:** suite Python `ai-service`, browser headless CDP, inferensi live SCHP/SD15 — tidak ada perubahan pada layanan Python AI.
 
 ## Current errors / limitations
 
 - Tidak ada error pada sesi ini.
-- Batas existing: kualitas segmentasi umum belum diterima (dua foto, tanpa ground truth); RGB compositing spritesheet tidak selalu exact; impor atlas ke game engine belum diuji; resource SD15, retensi/batas antrean/lifecycle model, mobile/deployment publik dan lisensi redistribusi model belum ditutup.
+- Batas terbuka yang tersisa: batas panjang antrean job/kuota disk, endpoint penghapusan manual per job (`DELETE /api/jobs/:id`), pergantian lifecycle model SCHP/SD15 otomatis, kualitas segmentasi umum pada foto beragam/occlusion, impor atlas ke game engine, portabilitas Linux/macOS, kamera mobile, dan konfirmasi lisensi redistribusi checkpoint model.
 
 ## Next action (only one)
 
-Pengguna meninjau diff empat dokumen lalu memutuskan commit; sesudahnya pengguna memilih satu batas terbuka sebagai tugas berikut (kandidat: rancangan retensi `storage/jobs`, perlu keputusan baru di DECISIONS). Agent tidak memulai tanpa arahan.
+Pengguna meninjau perubahan implementasi D-048 dan dokumentasi lalu memutuskan commit; setelah itu pengguna memilih satu batas terbuka berikutnya bila ingin melanjutkan hardening tambahan (misalnya batas panjang antrean job atau endpoint hapus manual `DELETE /api/jobs/:id`). Agent tidak memulai tanpa arahan.
 
 ## Handoff rules
 

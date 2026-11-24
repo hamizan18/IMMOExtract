@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -8,6 +8,16 @@ import { pixelatePng } from './pixelation.js';
 import { packSpritesheet, SpritesheetError } from './spritesheet.js';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const derivativeGroups = ['pixelations', 'exports', 'spritesheets', 'stylizations'];
+const defaultRetentionMs = 24 * 60 * 60 * 1000;
+const defaultSweepIntervalMs = 60 * 60 * 1000;
+
+function parseTimestamp(value) {
+  if (typeof value !== 'string' || !isoTimestamp.test(value)) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
+}
 const atrLabels = [
   'Background', 'Hat', 'Hair', 'Sunglasses', 'Upper-clothes', 'Skirt', 'Pants',
   'Dress', 'Belt', 'Left-shoe', 'Right-shoe', 'Face', 'Left-leg', 'Right-leg',
@@ -142,14 +152,473 @@ async function stylizationPixels(filePath) {
   return image.raw().toBuffer({ resolveWithObject: true });
 }
 
-export function createJobManager({ uploadDir, jobDir, aiClient }) {
+export function createJobManager({
+  uploadDir,
+  jobDir,
+  aiClient,
+  retentionMs = defaultRetentionMs,
+  sweepIntervalMs = defaultSweepIntervalMs,
+  stylizationTimeoutMs = aiClient?.stylizationTimeoutMs ?? 900000,
+  now = Date.now,
+} = {}) {
+  if (!Number.isSafeInteger(retentionMs) || retentionMs < 0) {
+    throw new Error('retentionMs must be a non-negative integer.');
+  }
+  if (retentionMs > 0 && Number.isFinite(stylizationTimeoutMs) && retentionMs <= stylizationTimeoutMs) {
+    throw new Error('retentionMs must exceed stylizationTimeoutMs when enabled.');
+  }
+  if (!Number.isSafeInteger(sweepIntervalMs) || sweepIntervalMs < 0) {
+    throw new Error('sweepIntervalMs must be a non-negative integer.');
+  }
+  if (typeof now !== 'function') {
+    throw new Error('now must be a function.');
+  }
+
   const uploads = resolve(uploadDir || fileURLToPath(new URL('../../storage/uploads/', import.meta.url)));
   const root = resolve(jobDir || join(dirname(uploads), 'jobs'));
   const queue = [];
   const active = new Map();
   const activeStylizations = new Map();
+  const busyJobs = new Map();
+  const busyUploads = new Map();
   let running = false;
   let ready;
+  let activeSweep = null;
+  let sweepTimer = null;
+
+  function isoNow() {
+    return new Date(now()).toISOString();
+  }
+
+  function enterBusy(map, id) {
+    map.set(id, (map.get(id) || 0) + 1);
+  }
+
+  function leaveBusy(map, id) {
+    const next = (map.get(id) || 0) - 1;
+    if (next <= 0) map.delete(id);
+    else map.set(id, next);
+  }
+
+  function isJobProtectedInMemory(jobId) {
+    if (active.has(jobId) || busyJobs.has(jobId)) return true;
+    for (const work of queue) {
+      if (work.job?.job_id === jobId || work.stylization?.job_id === jobId) return true;
+    }
+    for (const snapshot of activeStylizations.values()) {
+      if (snapshot.job_id === jobId) return true;
+    }
+    return false;
+  }
+
+  function isUploadProtectedInMemory(uploadId) {
+    if (busyUploads.has(uploadId)) return true;
+    for (const job of active.values()) {
+      if (typeof job.upload_id === 'string' && job.upload_id.toLowerCase() === uploadId) return true;
+    }
+    for (const work of queue) {
+      const uid = work.job?.upload_id;
+      if (typeof uid === 'string' && uid.toLowerCase() === uploadId) return true;
+    }
+    return false;
+  }
+
+  async function detachNestedLinks(directory) {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      const childPath = join(directory, entry.name);
+      let childStat;
+      try {
+        childStat = await lstat(childPath);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
+      if (childStat.isSymbolicLink()) {
+        await rmdir(childPath).catch(() => unlink(childPath));
+        continue;
+      }
+      if (childStat.isDirectory()) {
+        const resolved = await realpath(childPath).catch(() => null);
+        if (resolved !== childPath) {
+          await rmdir(childPath).catch(() => unlink(childPath));
+          continue;
+        }
+        await detachNestedLinks(childPath);
+      }
+    }
+  }
+
+  async function safeRemoveDirectory(deletingPath) {
+    let topStat;
+    try {
+      topStat = await lstat(deletingPath);
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+    if (topStat.isSymbolicLink() || await realpath(deletingPath).catch(() => null) !== deletingPath) {
+      await rmdir(deletingPath).catch(() => unlink(deletingPath));
+      return;
+    }
+    if (topStat.isDirectory()) {
+      await detachNestedLinks(deletingPath);
+    }
+    await rm(deletingPath, { recursive: true, force: true });
+  }
+
+  async function cleanupDeletingEntries(parentCanonical) {
+    let entries;
+    try {
+      entries = await readdir(parentCanonical, { withFileTypes: true });
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!entry.name.startsWith('.deleting-')) continue;
+      try {
+        await safeRemoveDirectory(join(parentCanonical, entry.name));
+      } catch (error) {
+        console.warn('Retention sweep deferred .deleting cleanup:', error.code || 'CLEANUP_FAILED');
+      }
+    }
+  }
+
+  async function inspectJobActivity(jobDirectory, jobId) {
+    const manifestPath = join(jobDirectory, 'manifest.json');
+    let manifestStat;
+    try {
+      manifestStat = await lstat(manifestPath);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        const dirStat = await stat(jobDirectory);
+        return { ok: true, lastActivityMs: dirStat.mtimeMs, uploadId: null, activeOnDisk: false };
+      }
+      return { ok: false, code: error.code || 'JOB_MANIFEST_STAT_FAILED', uploadId: null };
+    }
+    if (manifestStat.isSymbolicLink() || !manifestStat.isFile()
+        || await realpath(manifestPath).catch(() => null) !== manifestPath) {
+      return { ok: false, code: 'CORRUPT_JOB_MANIFEST', uploadId: null };
+    }
+    let job;
+    try {
+      job = JSON.parse(await readFile(manifestPath, 'utf8'));
+    } catch {
+      return { ok: false, code: 'CORRUPT_JOB_MANIFEST', uploadId: null };
+    }
+    const uploadId = typeof job?.upload_id === 'string' && uuid.test(job.upload_id)
+      ? job.upload_id.toLowerCase() : null;
+    if (!job || typeof job !== 'object' || Array.isArray(job) || job.job_id !== jobId) {
+      return { ok: false, code: 'CORRUPT_JOB_MANIFEST', uploadId };
+    }
+    if (['queued', 'processing'].includes(job.status)) {
+      return { ok: true, lastActivityMs: Infinity, uploadId, activeOnDisk: true };
+    }
+    if (!['completed', 'failed'].includes(job.status)) {
+      return { ok: false, code: 'CORRUPT_JOB_MANIFEST', uploadId };
+    }
+    const updatedMs = parseTimestamp(job.updated_at);
+    const createdMs = job.created_at !== undefined ? parseTimestamp(job.created_at) : updatedMs;
+    if (updatedMs === null || createdMs === null) {
+      return { ok: false, code: 'INVALID_JOB_TIMESTAMP', uploadId };
+    }
+    let lastActivityMs = Math.max(updatedMs, createdMs);
+
+    for (const group of derivativeGroups) {
+      const groupDirectory = join(jobDirectory, group);
+      let groupStat;
+      try {
+        groupStat = await lstat(groupDirectory);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        return { ok: false, code: error.code || 'DERIVATIVE_STAT_FAILED', uploadId };
+      }
+      if (groupStat.isSymbolicLink() || !groupStat.isDirectory()
+          || await realpath(groupDirectory).catch(() => null) !== groupDirectory) {
+        continue;
+      }
+      let entries;
+      try {
+        entries = await readdir(groupDirectory, { withFileTypes: true });
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        return { ok: false, code: error.code || 'DERIVATIVE_READDIR_FAILED', uploadId };
+      }
+      for (const entry of entries) {
+        if (!uuid.test(entry.name)) continue;
+        const snapshotId = entry.name.toLowerCase();
+        const snapshotDirectory = join(groupDirectory, entry.name);
+        let snapshotStat;
+        try {
+          snapshotStat = await lstat(snapshotDirectory);
+        } catch (error) {
+          if (error.code === 'ENOENT') continue;
+          return { ok: false, code: error.code || 'DERIVATIVE_STAT_FAILED', uploadId };
+        }
+        if (snapshotStat.isSymbolicLink() || !snapshotStat.isDirectory()
+            || await realpath(snapshotDirectory).catch(() => null) !== snapshotDirectory) {
+          continue;
+        }
+        const snapshotManifestPath = join(snapshotDirectory, 'manifest.json');
+        let snapshotManifestStat;
+        try {
+          snapshotManifestStat = await lstat(snapshotManifestPath);
+        } catch (error) {
+          if (error.code === 'ENOENT') {
+            const snapDirStat = await stat(snapshotDirectory);
+            lastActivityMs = Math.max(lastActivityMs, snapDirStat.mtimeMs);
+            continue;
+          }
+          return { ok: false, code: error.code || 'DERIVATIVE_MANIFEST_STAT_FAILED', uploadId };
+        }
+        if (snapshotManifestStat.isSymbolicLink() || !snapshotManifestStat.isFile()
+            || await realpath(snapshotManifestPath).catch(() => null) !== snapshotManifestPath) {
+          return { ok: false, code: 'CORRUPT_DERIVATIVE_MANIFEST', uploadId };
+        }
+        let snapshot;
+        try {
+          snapshot = JSON.parse(await readFile(snapshotManifestPath, 'utf8'));
+        } catch {
+          return { ok: false, code: 'CORRUPT_DERIVATIVE_MANIFEST', uploadId };
+        }
+        if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)
+            || snapshot.job_id !== jobId) {
+          return { ok: false, code: 'CORRUPT_DERIVATIVE_MANIFEST', uploadId };
+        }
+        const idField = group === 'pixelations' ? 'pixelation_id'
+          : group === 'exports' ? 'export_id'
+          : group === 'spritesheets' ? 'spritesheet_id' : 'stylization_id';
+        if (typeof snapshot[idField] !== 'string' || snapshot[idField].toLowerCase() !== snapshotId) {
+          return { ok: false, code: 'CORRUPT_DERIVATIVE_MANIFEST', uploadId };
+        }
+        if (group === 'stylizations' && ['queued', 'processing'].includes(snapshot.status)) {
+          return { ok: true, lastActivityMs: Infinity, uploadId, activeOnDisk: true };
+        }
+        const snapCreatedMs = parseTimestamp(snapshot.created_at);
+        const snapUpdatedMs = snapshot.updated_at !== undefined
+          ? parseTimestamp(snapshot.updated_at) : snapCreatedMs;
+        if (snapCreatedMs === null || snapUpdatedMs === null) {
+          return { ok: false, code: 'INVALID_DERIVATIVE_TIMESTAMP', uploadId };
+        }
+        lastActivityMs = Math.max(lastActivityMs, snapCreatedMs, snapUpdatedMs);
+      }
+    }
+
+    return { ok: true, lastActivityMs, uploadId, activeOnDisk: false };
+  }
+
+  async function inspectUploadActivity(uploadDirectory, uploadId) {
+    const manifestPath = join(uploadDirectory, 'manifest.json');
+    let manifestStat;
+    try {
+      manifestStat = await lstat(manifestPath);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        const dirStat = await stat(uploadDirectory);
+        return { ok: true, lastActivityMs: dirStat.mtimeMs };
+      }
+      return { ok: false, code: error.code || 'UPLOAD_MANIFEST_STAT_FAILED' };
+    }
+    if (manifestStat.isSymbolicLink() || !manifestStat.isFile()
+        || await realpath(manifestPath).catch(() => null) !== manifestPath) {
+      return { ok: false, code: 'CORRUPT_UPLOAD_MANIFEST' };
+    }
+    let manifest;
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    } catch {
+      return { ok: false, code: 'CORRUPT_UPLOAD_MANIFEST' };
+    }
+    if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)
+        || manifest.upload_id !== uploadId) {
+      return { ok: false, code: 'CORRUPT_UPLOAD_MANIFEST' };
+    }
+    const createdMs = parseTimestamp(manifest.created_at);
+    const extractedMs = manifest.extracted_at !== undefined
+      ? parseTimestamp(manifest.extracted_at) : createdMs;
+    if (createdMs === null || extractedMs === null) {
+      return { ok: false, code: 'INVALID_UPLOAD_TIMESTAMP' };
+    }
+    return { ok: true, lastActivityMs: Math.max(createdMs, extractedMs) };
+  }
+
+  async function executeSweep() {
+    if (retentionMs === 0) {
+      return { enabled: false, deletedJobs: 0, skippedJobs: 0, deletedUploads: 0, skippedUploads: 0 };
+    }
+    await mkdir(root, { recursive: true, mode: 0o700 });
+    const canonicalRoot = await realpath(root);
+    let deletedJobs = 0;
+    let skippedJobs = 0;
+    let deletedUploads = 0;
+    let skippedUploads = 0;
+
+    const retainedUploads = new Set(busyUploads.keys());
+    for (const job of active.values()) {
+      if (typeof job.upload_id === 'string' && uuid.test(job.upload_id)) {
+        retainedUploads.add(job.upload_id.toLowerCase());
+      }
+    }
+    for (const work of queue) {
+      const uid = work.job?.upload_id;
+      if (typeof uid === 'string' && uuid.test(uid)) {
+        retainedUploads.add(uid.toLowerCase());
+      }
+    }
+
+    await cleanupDeletingEntries(canonicalRoot);
+
+    for (const entry of await readdir(canonicalRoot, { withFileTypes: true })) {
+      if (entry.name.startsWith('.deleting-')) continue;
+      if (!uuid.test(entry.name)) continue;
+      const jobId = entry.name.toLowerCase();
+      const entryPath = join(canonicalRoot, entry.name);
+      let entryStat;
+      try {
+        entryStat = await lstat(entryPath);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        console.warn('Retention sweep skipped job:', error.code || 'JOB_STAT_FAILED');
+        skippedJobs++;
+        continue;
+      }
+      if (entryStat.isSymbolicLink() || !entryStat.isDirectory()
+          || await realpath(entryPath).catch(() => null) !== entryPath) {
+        console.warn('Retention sweep skipped job:', 'SYMLINK_OR_JUNCTION');
+        skippedJobs++;
+        continue;
+      }
+      const info = await inspectJobActivity(entryPath, jobId);
+      if (!info.ok) {
+        if (info.uploadId) retainedUploads.add(info.uploadId);
+        console.warn('Retention sweep skipped job:', info.code);
+        skippedJobs++;
+        continue;
+      }
+      if (info.activeOnDisk || isJobProtectedInMemory(jobId)
+          || now() - info.lastActivityMs <= retentionMs) {
+        if (info.uploadId) retainedUploads.add(info.uploadId);
+        continue;
+      }
+      // Step 1 of two-step delete: re-verify activity immediately before atomic rename.
+      const recheck = await inspectJobActivity(entryPath, jobId);
+      if (!recheck.ok) {
+        if (recheck.uploadId) retainedUploads.add(recheck.uploadId);
+        console.warn('Retention sweep skipped job:', recheck.code);
+        skippedJobs++;
+        continue;
+      }
+      if (recheck.activeOnDisk || isJobProtectedInMemory(jobId)
+          || now() - recheck.lastActivityMs <= retentionMs) {
+        if (recheck.uploadId) retainedUploads.add(recheck.uploadId);
+        continue;
+      }
+      const deletingPath = join(canonicalRoot, `.deleting-${jobId}-${randomUUID().slice(0, 8)}`);
+      try {
+        await rename(entryPath, deletingPath);
+      } catch (error) {
+        if (recheck.uploadId) retainedUploads.add(recheck.uploadId);
+        console.warn('Retention sweep skipped job:', error.code || 'RENAME_FAILED');
+        skippedJobs++;
+        continue;
+      }
+      try {
+        await safeRemoveDirectory(deletingPath);
+      } catch (error) {
+        console.warn('Retention sweep deferred job removal:', error.code || 'REMOVE_FAILED');
+      }
+      deletedJobs++;
+    }
+
+    let canonicalUploads = null;
+    try {
+      canonicalUploads = await realpath(uploads);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+
+    if (canonicalUploads) {
+      await cleanupDeletingEntries(canonicalUploads);
+
+      for (const entry of await readdir(canonicalUploads, { withFileTypes: true })) {
+        if (entry.name.startsWith('.deleting-')) continue;
+        if (!uuid.test(entry.name)) continue;
+        const uploadId = entry.name.toLowerCase();
+        const entryPath = join(canonicalUploads, entry.name);
+        let entryStat;
+        try {
+          entryStat = await lstat(entryPath);
+        } catch (error) {
+          if (error.code === 'ENOENT') continue;
+          console.warn('Retention sweep skipped upload:', error.code || 'UPLOAD_STAT_FAILED');
+          skippedUploads++;
+          continue;
+        }
+        if (entryStat.isSymbolicLink() || !entryStat.isDirectory()
+            || await realpath(entryPath).catch(() => null) !== entryPath) {
+          console.warn('Retention sweep skipped upload:', 'SYMLINK_OR_JUNCTION');
+          skippedUploads++;
+          continue;
+        }
+        if (retainedUploads.has(uploadId) || isUploadProtectedInMemory(uploadId)) continue;
+        const info = await inspectUploadActivity(entryPath, uploadId);
+        if (!info.ok) {
+          console.warn('Retention sweep skipped upload:', info.code);
+          skippedUploads++;
+          continue;
+        }
+        if (now() - info.lastActivityMs <= retentionMs) continue;
+        // Re-check reference and activity right before rename.
+        if (retainedUploads.has(uploadId) || isUploadProtectedInMemory(uploadId)) continue;
+        const recheck = await inspectUploadActivity(entryPath, uploadId);
+        if (!recheck.ok) {
+          console.warn('Retention sweep skipped upload:', recheck.code);
+          skippedUploads++;
+          continue;
+        }
+        if (retainedUploads.has(uploadId) || isUploadProtectedInMemory(uploadId)
+            || now() - recheck.lastActivityMs <= retentionMs) {
+          continue;
+        }
+        const deletingPath = join(canonicalUploads, `.deleting-${uploadId}-${randomUUID().slice(0, 8)}`);
+        try {
+          await rename(entryPath, deletingPath);
+        } catch (error) {
+          console.warn('Retention sweep skipped upload:', error.code || 'RENAME_FAILED');
+          skippedUploads++;
+          continue;
+        }
+        try {
+          await safeRemoveDirectory(deletingPath);
+        } catch (error) {
+          console.warn('Retention sweep deferred upload removal:', error.code || 'REMOVE_FAILED');
+        }
+        deletedUploads++;
+      }
+    }
+
+    if (deletedJobs > 0 || skippedJobs > 0 || deletedUploads > 0 || skippedUploads > 0) {
+      console.info(
+        `Retention sweep completed: deletedJobs=${deletedJobs} skippedJobs=${skippedJobs} deletedUploads=${deletedUploads} skippedUploads=${skippedUploads}`,
+      );
+    }
+    return { enabled: true, deletedJobs, skippedJobs, deletedUploads, skippedUploads };
+  }
+
+  function runSweep() {
+    if (activeSweep) return activeSweep;
+    activeSweep = executeSweep().finally(() => {
+      activeSweep = null;
+    });
+    return activeSweep;
+  }
 
   async function save(job) {
     const directory = join(root, job.job_id);
@@ -183,7 +652,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     const directory = join(await realpath(root), jobId, 'stylizations');
     let entries;
     try {
-      if (await realpath(directory) !== directory) throw new Error('Invalid stylization directory');
+      if (await realpath(directory) !== directory) return;
       entries = await readdir(directory, { withFileTypes: true });
     } catch (error) {
       if (error.code === 'ENOENT') return;
@@ -197,17 +666,19 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         snapshot = JSON.parse(await readFile(manifest, 'utf8'));
       } catch (error) {
         if (error.code === 'ENOENT') continue;
-        throw error;
+        // Leave corrupt or redirected entries on disk; sweep skips/logs them and direct GET rejects them.
+        continue;
       }
-      if (snapshot.job_id !== jobId || snapshot.stylization_id !== entry.name) {
-        throw new Error('Invalid stored stylization ID');
+      if (!snapshot || typeof snapshot !== 'object'
+          || snapshot.job_id !== jobId || snapshot.stylization_id !== entry.name) {
+        continue;
       }
       if (['queued', 'processing'].includes(snapshot.status)) {
         snapshot.status = 'failed';
         snapshot.error = {
           code: 'STYLIZATION_INTERRUPTED', message: 'Backend berhenti sebelum stylization selesai. Buat permintaan baru.',
         };
-        snapshot.updated_at = new Date().toISOString();
+        snapshot.updated_at = isoNow();
         await saveStylization(snapshot);
       }
     }
@@ -218,7 +689,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     try {
       snapshot.status = 'processing';
       snapshot.progress = 10;
-      snapshot.updated_at = new Date().toISOString();
+      snapshot.updated_at = isoNow();
       await saveStylization(snapshot);
       // Resolve again when dequeued: a source can disappear while waiting.
       const { filePath } = await manager.getObject(snapshot.job_id, snapshot.object_id);
@@ -253,7 +724,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       };
       // A timeout does not cancel the remote model: retain its private staging directory.
     }
-    snapshot.updated_at = new Date().toISOString();
+    snapshot.updated_at = isoNow();
     try {
       await saveStylization(snapshot);
       activeStylizations.delete(key);
@@ -268,27 +739,50 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
     }
   }
 
+  function startSweepSchedule() {
+    if (retentionMs > 0 && sweepIntervalMs > 0 && !sweepTimer) {
+      sweepTimer = setInterval(() => {
+        if (!activeSweep) {
+          void runSweep().catch(error => {
+            console.error('Retention sweep failed:', error.code || error.name);
+          });
+        }
+      }, sweepIntervalMs);
+      sweepTimer.unref();
+    }
+  }
+
   function initialize() {
     // One backend process owns this directory. Interrupted work is never silently retried.
     ready ??= (async () => {
       await mkdir(root, { recursive: true, mode: 0o700 });
-      for (const entry of await readdir(root, { withFileTypes: true })) {
-        if (!entry.isDirectory() || !uuid.test(entry.name)) continue;
+      const canonicalRoot = await realpath(root);
+      for (const entry of await readdir(canonicalRoot, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.isSymbolicLink() || !uuid.test(entry.name)) continue;
+        const jobDirectory = join(canonicalRoot, entry.name);
+        if (await realpath(jobDirectory).catch(() => null) !== jobDirectory) continue;
         let job;
         try {
-          job = JSON.parse(await readFile(join(root, entry.name, 'manifest.json'), 'utf8'));
+          const manifestPath = join(jobDirectory, 'manifest.json');
+          const manifestStat = await lstat(manifestPath);
+          if (manifestStat.isSymbolicLink() || !manifestStat.isFile()) continue;
+          job = JSON.parse(await readFile(manifestPath, 'utf8'));
         } catch (error) {
           if (error.code === 'ENOENT') continue;
-          throw error;
+          continue;
         }
-        if (job.job_id !== entry.name) throw new Error('Invalid stored job ID');
+        if (!job || typeof job !== 'object' || job.job_id !== entry.name) continue;
         if (['queued', 'processing'].includes(job.status)) {
           job.status = 'failed';
           job.error = { code: 'JOB_INTERRUPTED', message: 'Backend berhenti sebelum job selesai. Buat job baru untuk mencoba lagi.' };
-          job.updated_at = new Date().toISOString();
+          job.updated_at = isoNow();
           await save(job);
         }
         await recoverStylizations(entry.name);
+      }
+      if (retentionMs > 0) {
+        await runSweep();
+        startSweepSchedule();
       }
     })();
     return ready;
@@ -308,7 +802,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         try {
           job.status = 'processing';
           job.progress = 10;
-          job.updated_at = new Date().toISOString();
+          job.updated_at = isoNow();
           await save(job);
           const directory = join(root, job.job_id);
           const outputPath = join(directory, 'extracted.png');
@@ -355,7 +849,7 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
           job.objects = [];
           job.error = { code: 'EXTRACTION_FAILED', message: 'Ekstraksi gagal. Periksa layanan AI dan storage server.' };
         }
-        job.updated_at = new Date().toISOString();
+        job.updated_at = isoNow();
         try {
           await save(job);
           active.delete(job.job_id);
@@ -374,38 +868,53 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
   }
 
   const manager = {
+    async sweep() {
+      startSweepSchedule();
+      return runSweep();
+    },
+    stopSweep() {
+      if (sweepTimer) {
+        clearInterval(sweepTimer);
+        sweepTimer = null;
+      }
+    },
     async create(uploadId) {
       const id = validateId(uploadId, 'UPLOAD');
-      await initialize();
-      const directory = join(uploads, id);
-      let manifest;
+      enterBusy(busyUploads, id);
       try {
-        manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
-      } catch (error) {
-        if (error.code === 'ENOENT') throw new JobError(404, 'UPLOAD_NOT_FOUND', 'Upload tidak ditemukan.');
-        throw error;
+        await initialize();
+        const directory = join(uploads, id);
+        let manifest;
+        try {
+          manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'));
+        } catch (error) {
+          if (error.code === 'ENOENT') throw new JobError(404, 'UPLOAD_NOT_FOUND', 'Upload tidak ditemukan.');
+          throw error;
+        }
+        if (manifest.upload_id !== id || !/^original\.(png|jpg|webp)$/.test(manifest.file)) {
+          throw new Error('Invalid upload manifest');
+        }
+        const imagePath = join(directory, manifest.file);
+        try {
+          if (!(await stat(imagePath)).isFile()) throw new Error('Input is not a file');
+        } catch (error) {
+          if (error.code === 'ENOENT') throw new JobError(404, 'INPUT_NOT_FOUND', 'Gambar input tidak ditemukan.');
+          throw error;
+        }
+        const timestamp = isoNow();
+        const job = {
+          job_id: randomUUID(), upload_id: id, status: 'queued', progress: 0,
+          created_at: timestamp, updated_at: timestamp, objects: [], error: null,
+        };
+        await mkdir(join(root, job.job_id), { mode: 0o700 });
+        await save(job);
+        active.set(job.job_id, { ...job });
+        queue.push({ job, imagePath });
+        setImmediate(() => { void drain(); });
+        return { ...job };
+      } finally {
+        leaveBusy(busyUploads, id);
       }
-      if (manifest.upload_id !== id || !/^original\.(png|jpg|webp)$/.test(manifest.file)) {
-        throw new Error('Invalid upload manifest');
-      }
-      const imagePath = join(directory, manifest.file);
-      try {
-        if (!(await stat(imagePath)).isFile()) throw new Error('Input is not a file');
-      } catch (error) {
-        if (error.code === 'ENOENT') throw new JobError(404, 'INPUT_NOT_FOUND', 'Gambar input tidak ditemukan.');
-        throw error;
-      }
-      const now = new Date().toISOString();
-      const job = {
-        job_id: randomUUID(), upload_id: id, status: 'queued', progress: 0,
-        created_at: now, updated_at: now, objects: [], error: null,
-      };
-      await mkdir(join(root, job.job_id), { mode: 0o700 });
-      await save(job);
-      active.set(job.job_id, { ...job });
-      queue.push({ job, imagePath });
-      setImmediate(() => { void drain(); });
-      return { ...job };
     },
     async get(jobId) {
       const id = validateId(jobId, 'JOB');
@@ -456,83 +965,94 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
         throw new JobError(400, 'INVALID_PNG_INPUT', 'Kirim file PNG biner yang valid.');
       }
-      const job = await this.get(id);
-      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
-      if (job.status !== 'completed') {
-        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hanya job yang selesai yang dapat dikoreksi.');
-      }
-      const object = job.objects.find(obj => obj.id === objectKey);
-      if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
-      const { filePath } = await this.getObject(id, objectKey);
-
-      let metadata;
+      enterBusy(busyJobs, id);
       try {
-        const image = sharp(buffer, { limitInputPixels: 24_000_000, failOn: 'warning' });
-        metadata = await image.metadata();
-      } catch {
-        throw new JobError(400, 'INVALID_PNG_IMAGE', 'File harus berupa PNG yang valid.');
-      }
+        const job = await this.get(id);
+        if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+        if (job.status !== 'completed') {
+          throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hanya job yang selesai yang dapat dikoreksi.');
+        }
+        const object = job.objects.find(obj => obj.id === objectKey);
+        if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
+        const { filePath } = await this.getObject(id, objectKey);
 
-      if (metadata.format !== 'png' || metadata.channels !== 4 || !metadata.hasAlpha) {
-        throw new JobError(400, 'INVALID_PNG_FORMAT', 'PNG harus memiliki saluran warna RGBA dengan transparansi alpha.');
-      }
-      if (metadata.width !== object.width || metadata.height !== object.height) {
-        throw new JobError(400, 'INVALID_PNG_DIMENSIONS', `Dimensi gambar harus sama persis dengan objek asli (${object.width} × ${object.height} piksel).`);
-      }
+        let metadata;
+        try {
+          const image = sharp(buffer, { limitInputPixels: 24_000_000, failOn: 'warning' });
+          metadata = await image.metadata();
+        } catch {
+          throw new JobError(400, 'INVALID_PNG_IMAGE', 'File harus berupa PNG yang valid.');
+        }
 
-      const { data, info } = await sharp(buffer, { limitInputPixels: 24_000_000 }).raw().toBuffer({ resolveWithObject: true });
-      if (info.width !== object.width || info.height !== object.height || info.channels !== 4) {
-        throw new JobError(400, 'INVALID_PNG_PIXELS', 'Data piksel PNG tidak valid.');
+        if (metadata.format !== 'png' || metadata.channels !== 4 || !metadata.hasAlpha) {
+          throw new JobError(400, 'INVALID_PNG_FORMAT', 'PNG harus memiliki saluran warna RGBA dengan transparansi alpha.');
+        }
+        if (metadata.width !== object.width || metadata.height !== object.height) {
+          throw new JobError(400, 'INVALID_PNG_DIMENSIONS', `Dimensi gambar harus sama persis dengan objek asli (${object.width} × ${object.height} piksel).`);
+        }
+
+        const { data, info } = await sharp(buffer, { limitInputPixels: 24_000_000 }).raw().toBuffer({ resolveWithObject: true });
+        if (info.width !== object.width || info.height !== object.height || info.channels !== 4) {
+          throw new JobError(400, 'INVALID_PNG_PIXELS', 'Data piksel PNG tidak valid.');
+        }
+
+        let opaquePixels = 0;
+        for (let offset = 3; offset < data.length; offset += 4) {
+          if (data[offset] > 0) opaquePixels++;
+        }
+
+        const directory = dirname(filePath);
+        const tempPath = join(directory, `${basename(filePath)}.tmp`);
+        await writeFile(tempPath, buffer, { mode: 0o600 });
+        await rename(tempPath, filePath);
+
+        const timestamp = isoNow();
+        object.updated_at = timestamp;
+        if (typeof object.pixel_count === 'number') {
+          object.pixel_count = opaquePixels;
+        }
+        job.updated_at = timestamp;
+        await save(job);
+
+        return {
+          id: object.id,
+          category: object.category,
+          width: object.width,
+          height: object.height,
+          pixel_count: object.pixel_count,
+          updated_at: object.updated_at,
+        };
+      } finally {
+        leaveBusy(busyJobs, id);
       }
-
-      let opaquePixels = 0;
-      for (let offset = 3; offset < data.length; offset += 4) {
-        if (data[offset] > 0) opaquePixels++;
-      }
-
-      const directory = dirname(filePath);
-      const tempPath = join(directory, `${basename(filePath)}.tmp`);
-      await writeFile(tempPath, buffer, { mode: 0o600 });
-      await rename(tempPath, filePath);
-
-      object.updated_at = new Date().toISOString();
-      if (typeof object.pixel_count === 'number') {
-        object.pixel_count = opaquePixels;
-      }
-      job.updated_at = new Date().toISOString();
-      await save(job);
-
-      return {
-        id: object.id,
-        category: object.category,
-        width: object.width,
-        height: object.height,
-        pixel_count: object.pixel_count,
-        updated_at: object.updated_at,
-      };
     },
     async createStylization(jobId, input) {
       const id = validateId(jobId, 'JOB');
       const parameters = stylizationParameters(input);
       const objectId = validateId(input.object_id, 'OBJECT');
-      await this.getObject(id, objectId);
-      const jobDirectory = join(await realpath(root), id);
-      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
-      const resultsDirectory = join(jobDirectory, 'stylizations');
-      await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
-      if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid stylization directory');
-      const key = randomUUID();
-      await mkdir(join(resultsDirectory, key), { mode: 0o700 });
-      const now = new Date().toISOString();
-      const snapshot = {
-        stylization_id: key, job_id: id, object_id: objectId,
-        status: 'queued', progress: 0, parameters, created_at: now, updated_at: now, error: null,
-      };
-      await saveStylization(snapshot);
-      activeStylizations.set(key, { ...snapshot });
-      queue.push({ stylization: snapshot });
-      setImmediate(() => { void drain(); });
-      return { ...snapshot };
+      enterBusy(busyJobs, id);
+      try {
+        await this.getObject(id, objectId);
+        const jobDirectory = join(await realpath(root), id);
+        if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+        const resultsDirectory = join(jobDirectory, 'stylizations');
+        await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
+        if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid stylization directory');
+        const key = randomUUID();
+        await mkdir(join(resultsDirectory, key), { mode: 0o700 });
+        const timestamp = isoNow();
+        const snapshot = {
+          stylization_id: key, job_id: id, object_id: objectId,
+          status: 'queued', progress: 0, parameters, created_at: timestamp, updated_at: timestamp, error: null,
+        };
+        await saveStylization(snapshot);
+        activeStylizations.set(key, { ...snapshot });
+        queue.push({ stylization: snapshot });
+        setImmediate(() => { void drain(); });
+        return { ...snapshot };
+      } finally {
+        leaveBusy(busyJobs, id);
+      }
     },
     async getStylization(jobId, stylizationId) {
       const id = validateId(jobId, 'JOB');
@@ -610,33 +1130,38 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
       }
       const palette = input.palette ?? 'original';
       const objectId = validateId(input.object_id, 'OBJECT');
-      const { filePath } = await this.getObject(id, objectId);
-      const png = await pixelatePng(await readFile(filePath), input.size, palette);
-      const { width, height } = await sharp(png).metadata();
-      const jobDirectory = join(await realpath(root), id);
-      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
-      const resultsDirectory = join(jobDirectory, 'pixelations');
-      await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
-      if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid pixelation directory');
-      const pixelationId = randomUUID();
-      const directory = join(resultsDirectory, pixelationId);
-      await mkdir(directory, { mode: 0o700 });
+      enterBusy(busyJobs, id);
       try {
-        await writeFile(join(directory, 'image.tmp'), png, { flag: 'wx', mode: 0o600 });
-        await rename(join(directory, 'image.tmp'), join(directory, 'image.png'));
-        const manifest = {
-          pixelation_id: pixelationId, job_id: id, object_id: objectId, status: 'completed',
-          size: input.size, palette, width, height, created_at: new Date().toISOString(),
-        };
-        await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
-          flag: 'wx', mode: 0o600,
-        });
-        // Publish last; the terminal job and its original PNG/ZIP files stay untouched.
-        await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
-        return manifest;
-      } catch (error) {
-        await rm(directory, { recursive: true, force: true });
-        throw error;
+        const { filePath } = await this.getObject(id, objectId);
+        const png = await pixelatePng(await readFile(filePath), input.size, palette);
+        const { width, height } = await sharp(png).metadata();
+        const jobDirectory = join(await realpath(root), id);
+        if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+        const resultsDirectory = join(jobDirectory, 'pixelations');
+        await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
+        if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid pixelation directory');
+        const pixelationId = randomUUID();
+        const directory = join(resultsDirectory, pixelationId);
+        await mkdir(directory, { mode: 0o700 });
+        try {
+          await writeFile(join(directory, 'image.tmp'), png, { flag: 'wx', mode: 0o600 });
+          await rename(join(directory, 'image.tmp'), join(directory, 'image.png'));
+          const manifest = {
+            pixelation_id: pixelationId, job_id: id, object_id: objectId, status: 'completed',
+            size: input.size, palette, width, height, created_at: isoNow(),
+          };
+          await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
+            flag: 'wx', mode: 0o600,
+          });
+          // Publish last; the terminal job and its original PNG/ZIP files stay untouched.
+          await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+          return manifest;
+        } catch (error) {
+          await rm(directory, { recursive: true, force: true });
+          throw error;
+        }
+      } finally {
+        leaveBusy(busyJobs, id);
       }
     },
     async getPixelation(jobId, pixelationId) {
@@ -682,49 +1207,54 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
           || !(selection.all === true || (Array.isArray(selection.object_ids) && selection.object_ids.length > 0))) {
         throw new JobError(400, 'INVALID_EXPORT_INPUT', 'Kirim hanya all: true atau object_ids yang tidak kosong.');
       }
-      const job = await this.get(id);
-      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
-      if (job.status !== 'completed') {
-        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
-      }
-      const objectIds = (selection.all === true ? job.objects.map(object => object.id) : selection.object_ids)
-        .map(objectId => validateId(objectId, 'OBJECT'));
-      if (!objectIds.length) throw new JobError(409, 'EXPORT_EMPTY', 'Tidak ada objek untuk diekspor.');
-      if (new Set(objectIds).size !== objectIds.length) {
-        throw new JobError(400, 'DUPLICATE_OBJECT_ID', 'Setiap objek hanya boleh dipilih satu kali.');
-      }
-      const files = [];
-      for (const objectId of objectIds) files.push(await this.getObject(id, objectId));
-      const jobDirectory = join(await realpath(root), id);
-      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
-      const exportsDirectory = join(jobDirectory, 'exports');
-      await mkdir(exportsDirectory, { recursive: true, mode: 0o700 });
-      if (await realpath(exportsDirectory) !== exportsDirectory) throw new Error('Invalid export directory');
-      const exportId = randomUUID();
-      const directory = join(exportsDirectory, exportId);
-      await mkdir(directory, { mode: 0o700 });
+      enterBusy(busyJobs, id);
       try {
-        const { size, sha256 } = await writeZip(files, join(directory, 'archive.tmp'));
-        await rename(join(directory, 'archive.tmp'), join(directory, 'archive.zip'));
-        const manifest = {
-          export_id: exportId,
-          job_id: id,
-          status: 'completed',
-          object_ids: objectIds,
-          files_count: objectIds.length,
-          archive_size: size,
-          sha256,
-          created_at: new Date().toISOString(),
-        };
-        await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
-          flag: 'wx', mode: 0o600,
-        });
-        // Publish only after ZIP completion, without rewriting the job manifest.
-        await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
-        return manifest;
-      } catch (error) {
-        await rm(directory, { recursive: true, force: true });
-        throw error;
+        const job = await this.get(id);
+        if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+        if (job.status !== 'completed') {
+          throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
+        }
+        const objectIds = (selection.all === true ? job.objects.map(object => object.id) : selection.object_ids)
+          .map(objectId => validateId(objectId, 'OBJECT'));
+        if (!objectIds.length) throw new JobError(409, 'EXPORT_EMPTY', 'Tidak ada objek untuk diekspor.');
+        if (new Set(objectIds).size !== objectIds.length) {
+          throw new JobError(400, 'DUPLICATE_OBJECT_ID', 'Setiap objek hanya boleh dipilih satu kali.');
+        }
+        const files = [];
+        for (const objectId of objectIds) files.push(await this.getObject(id, objectId));
+        const jobDirectory = join(await realpath(root), id);
+        if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+        const exportsDirectory = join(jobDirectory, 'exports');
+        await mkdir(exportsDirectory, { recursive: true, mode: 0o700 });
+        if (await realpath(exportsDirectory) !== exportsDirectory) throw new Error('Invalid export directory');
+        const exportId = randomUUID();
+        const directory = join(exportsDirectory, exportId);
+        await mkdir(directory, { mode: 0o700 });
+        try {
+          const { size, sha256 } = await writeZip(files, join(directory, 'archive.tmp'));
+          await rename(join(directory, 'archive.tmp'), join(directory, 'archive.zip'));
+          const manifest = {
+            export_id: exportId,
+            job_id: id,
+            status: 'completed',
+            object_ids: objectIds,
+            files_count: objectIds.length,
+            archive_size: size,
+            sha256,
+            created_at: isoNow(),
+          };
+          await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', {
+            flag: 'wx', mode: 0o600,
+          });
+          // Publish only after ZIP completion, without rewriting the job manifest.
+          await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+          return manifest;
+        } catch (error) {
+          await rm(directory, { recursive: true, force: true });
+          throw error;
+        }
+      } finally {
+        leaveBusy(busyJobs, id);
       }
     },
     async getExportManifest(jobId, exportId) {
@@ -811,79 +1341,84 @@ export function createJobManager({ uploadDir, jobDir, aiClient }) {
         throw new JobError(400, 'INVALID_SPRITESHEET_INPUT', 'Kirim all: true atau object_ids yang tidak kosong.');
       }
 
-      const job = await this.get(id);
-      if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
-      if (job.status !== 'completed') {
-        throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
-      }
-
-      const objectIds = (input.all === true ? job.objects.map(object => object.id) : input.object_ids)
-        .map(objectId => validateId(objectId, 'OBJECT'));
-      if (!objectIds.length) throw new JobError(409, 'SPRITESHEET_EMPTY', 'Tidak ada objek untuk dibuat spritesheet.');
-      if (new Set(objectIds).size !== objectIds.length) {
-        throw new JobError(400, 'DUPLICATE_OBJECT_ID', 'Setiap objek hanya boleh dipilih satu kali.');
-      }
-
-      const items = [];
-      for (const objectId of objectIds) {
-        const object = job.objects.find(obj => obj.id === objectId);
-        if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
-        const { filePath } = await this.getObject(id, objectId);
-        items.push({
-          id: object.id,
-          category: object.category,
-          width: object.width,
-          height: object.height,
-          filePath,
-        });
-      }
-
-      let packResult;
+      enterBusy(busyJobs, id);
       try {
-        packResult = await packSpritesheet(items, { padding: input.padding, columns: input.columns });
-      } catch (err) {
-        if (err instanceof SpritesheetError) {
-          throw new JobError(err.status, err.code, err.message);
+        const job = await this.get(id);
+        if (job.job_id !== id || !Array.isArray(job.objects)) throw new Error('Invalid job manifest');
+        if (job.status !== 'completed') {
+          throw new JobError(409, 'JOB_NOT_COMPLETED', 'Hasil hanya tersedia setelah job selesai.');
         }
-        throw err;
-      }
 
-      const jobDirectory = join(await realpath(root), id);
-      if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
-      const spritesheetsDirectory = join(jobDirectory, 'spritesheets');
-      await mkdir(spritesheetsDirectory, { recursive: true, mode: 0o700 });
-      if (await realpath(spritesheetsDirectory) !== spritesheetsDirectory) throw new Error('Invalid spritesheet directory');
+        const objectIds = (input.all === true ? job.objects.map(object => object.id) : input.object_ids)
+          .map(objectId => validateId(objectId, 'OBJECT'));
+        if (!objectIds.length) throw new JobError(409, 'SPRITESHEET_EMPTY', 'Tidak ada objek untuk dibuat spritesheet.');
+        if (new Set(objectIds).size !== objectIds.length) {
+          throw new JobError(400, 'DUPLICATE_OBJECT_ID', 'Setiap objek hanya boleh dipilih satu kali.');
+        }
 
-      const spritesheetId = randomUUID();
-      const directory = join(spritesheetsDirectory, spritesheetId);
-      await mkdir(directory, { mode: 0o700 });
+        const items = [];
+        for (const objectId of objectIds) {
+          const object = job.objects.find(obj => obj.id === objectId);
+          if (!object) throw new JobError(404, 'OBJECT_NOT_FOUND', 'Objek tidak ditemukan pada job ini.');
+          const { filePath } = await this.getObject(id, objectId);
+          items.push({
+            id: object.id,
+            category: object.category,
+            width: object.width,
+            height: object.height,
+            filePath,
+          });
+        }
 
-      try {
-        await writeFile(join(directory, 'spritesheet.tmp'), packResult.pngBuffer, { flag: 'wx', mode: 0o600 });
-        await rename(join(directory, 'spritesheet.tmp'), join(directory, 'spritesheet.png'));
+        let packResult;
+        try {
+          packResult = await packSpritesheet(items, { padding: input.padding, columns: input.columns });
+        } catch (err) {
+          if (err instanceof SpritesheetError) {
+            throw new JobError(err.status, err.code, err.message);
+          }
+          throw err;
+        }
 
-        await writeFile(join(directory, 'atlas.tmp'), JSON.stringify(packResult.atlas, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
-        await rename(join(directory, 'atlas.tmp'), join(directory, 'atlas.json'));
+        const jobDirectory = join(await realpath(root), id);
+        if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
+        const spritesheetsDirectory = join(jobDirectory, 'spritesheets');
+        await mkdir(spritesheetsDirectory, { recursive: true, mode: 0o700 });
+        if (await realpath(spritesheetsDirectory) !== spritesheetsDirectory) throw new Error('Invalid spritesheet directory');
 
-        const manifest = {
-          spritesheet_id: spritesheetId,
-          job_id: id,
-          status: 'completed',
-          object_ids: objectIds,
-          width: packResult.width,
-          height: packResult.height,
-          padding: packResult.padding,
-          columns: packResult.columns,
-          created_at: new Date().toISOString(),
-        };
+        const spritesheetId = randomUUID();
+        const directory = join(spritesheetsDirectory, spritesheetId);
+        await mkdir(directory, { mode: 0o700 });
 
-        await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
-        await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+        try {
+          await writeFile(join(directory, 'spritesheet.tmp'), packResult.pngBuffer, { flag: 'wx', mode: 0o600 });
+          await rename(join(directory, 'spritesheet.tmp'), join(directory, 'spritesheet.png'));
 
-        return manifest;
-      } catch (error) {
-        await rm(directory, { recursive: true, force: true });
-        throw error;
+          await writeFile(join(directory, 'atlas.tmp'), JSON.stringify(packResult.atlas, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+          await rename(join(directory, 'atlas.tmp'), join(directory, 'atlas.json'));
+
+          const manifest = {
+            spritesheet_id: spritesheetId,
+            job_id: id,
+            status: 'completed',
+            object_ids: objectIds,
+            width: packResult.width,
+            height: packResult.height,
+            padding: packResult.padding,
+            columns: packResult.columns,
+            created_at: isoNow(),
+          };
+
+          await writeFile(join(directory, 'manifest.tmp'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+          await rename(join(directory, 'manifest.tmp'), join(directory, 'manifest.json'));
+
+          return manifest;
+        } catch (error) {
+          await rm(directory, { recursive: true, force: true });
+          throw error;
+        }
+      } finally {
+        leaveBusy(busyJobs, id);
       }
     },
     async getSpritesheet(jobId, spritesheetId) {

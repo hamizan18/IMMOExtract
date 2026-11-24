@@ -67,7 +67,7 @@ async function uploadImage(file, type, current) {
     if (body?.status !== 'uploaded' || typeof body.upload_id !== 'string' || !body.upload_id) {
       throw new Error('Invalid upload response');
     }
-    status.textContent = `Upload berhasil. ID upload: ${body.upload_id}. Gambar tersimpan di server lokal; tekan Ekstrak objek untuk memulai.`;
+    status.textContent = `Upload berhasil. ID upload: ${body.upload_id}. Gambar tersimpan sementara di server lokal (retensi bawaan 24 jam sejak aktivitas terakhir); tekan Ekstrak objek untuk memulai.`;
     setUploadedImage(body.upload_id);
   } catch {
     if (current !== selection || controller.signal.aborted) return;
