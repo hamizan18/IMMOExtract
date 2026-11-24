@@ -12,6 +12,7 @@ const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{
 const derivativeGroups = ['pixelations', 'exports', 'spritesheets', 'stylizations'];
 const defaultRetentionMs = 24 * 60 * 60 * 1000;
 const defaultSweepIntervalMs = 60 * 60 * 1000;
+const defaultMaxQueueLength = 10;
 
 function parseTimestamp(value) {
   if (typeof value !== 'string' || !isoTimestamp.test(value)) return null;
@@ -159,6 +160,7 @@ export function createJobManager({
   retentionMs = defaultRetentionMs,
   sweepIntervalMs = defaultSweepIntervalMs,
   stylizationTimeoutMs = aiClient?.stylizationTimeoutMs ?? 900000,
+  maxQueueLength = defaultMaxQueueLength,
   now = Date.now,
 } = {}) {
   if (!Number.isSafeInteger(retentionMs) || retentionMs < 0) {
@@ -169,6 +171,9 @@ export function createJobManager({
   }
   if (!Number.isSafeInteger(sweepIntervalMs) || sweepIntervalMs < 0) {
     throw new Error('sweepIntervalMs must be a non-negative integer.');
+  }
+  if (!Number.isSafeInteger(maxQueueLength) || maxQueueLength < 1) {
+    throw new Error('maxQueueLength must be a positive integer.');
   }
   if (typeof now !== 'function') {
     throw new Error('now must be a function.');
@@ -188,6 +193,20 @@ export function createJobManager({
 
   function isoNow() {
     return new Date(now()).toISOString();
+  }
+
+  function waitingQueueCount() {
+    return running ? queue.length : Math.max(0, queue.length - 1);
+  }
+
+  function assertQueueCapacity() {
+    if (waitingQueueCount() >= maxQueueLength) {
+      throw new JobError(
+        429,
+        'QUEUE_FULL',
+        'Antrean pemrosesan penuh. Tunggu hingga tugas aktif selesai lalu coba lagi.',
+      );
+    }
   }
 
   function enterBusy(map, id) {
@@ -901,19 +920,42 @@ export function createJobManager({
           if (error.code === 'ENOENT') throw new JobError(404, 'INPUT_NOT_FOUND', 'Gambar input tidak ditemukan.');
           throw error;
         }
+        assertQueueCapacity();
         const timestamp = isoNow();
         const job = {
           job_id: randomUUID(), upload_id: id, status: 'queued', progress: 0,
           created_at: timestamp, updated_at: timestamp, objects: [], error: null,
         };
-        await mkdir(join(root, job.job_id), { mode: 0o700 });
-        await save(job);
+        const jobDirectory = join(root, job.job_id);
+        await mkdir(jobDirectory, { mode: 0o700 });
+        try {
+          assertQueueCapacity();
+          await save(job);
+        } catch (error) {
+          await rm(jobDirectory, { recursive: true, force: true });
+          throw error;
+        }
         active.set(job.job_id, { ...job });
         queue.push({ job, imagePath });
         setImmediate(() => { void drain(); });
         return { ...job };
       } finally {
         leaveBusy(busyUploads, id);
+      }
+    },
+    async discardUpload(uploadId) {
+      const id = validateId(uploadId, 'UPLOAD');
+      if (isUploadProtectedInMemory(id)) return;
+      try {
+        const canonicalUploads = await realpath(uploads);
+        const target = join(canonicalUploads, id);
+        if (await realpath(target).catch(() => null) === target) {
+          await safeRemoveDirectory(target);
+        }
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          console.warn('Transient upload cleanup skipped:', error.code || 'CLEANUP_FAILED');
+        }
       }
     },
     async get(jobId) {
@@ -1033,19 +1075,27 @@ export function createJobManager({
       enterBusy(busyJobs, id);
       try {
         await this.getObject(id, objectId);
+        assertQueueCapacity();
         const jobDirectory = join(await realpath(root), id);
         if (await realpath(jobDirectory) !== jobDirectory) throw new Error('Invalid job directory');
         const resultsDirectory = join(jobDirectory, 'stylizations');
         await mkdir(resultsDirectory, { recursive: true, mode: 0o700 });
         if (await realpath(resultsDirectory) !== resultsDirectory) throw new Error('Invalid stylization directory');
         const key = randomUUID();
-        await mkdir(join(resultsDirectory, key), { mode: 0o700 });
+        const snapshotDirectory = join(resultsDirectory, key);
+        await mkdir(snapshotDirectory, { mode: 0o700 });
         const timestamp = isoNow();
         const snapshot = {
           stylization_id: key, job_id: id, object_id: objectId,
           status: 'queued', progress: 0, parameters, created_at: timestamp, updated_at: timestamp, error: null,
         };
-        await saveStylization(snapshot);
+        try {
+          assertQueueCapacity();
+          await saveStylization(snapshot);
+        } catch (error) {
+          await rm(snapshotDirectory, { recursive: true, force: true });
+          throw error;
+        }
         activeStylizations.set(key, { ...snapshot });
         queue.push({ stylization: snapshot });
         setImmediate(() => { void drain(); });

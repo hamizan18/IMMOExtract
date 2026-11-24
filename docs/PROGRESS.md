@@ -4,11 +4,11 @@
 
 ## Ringkasan
 
-- **Current milestone:** M7 — hardening pascapenutupan implementasi D-047, retensi otomatis D-048, serta desain UI Minimalist Dark Pro & tab kartu objek D-049.
-- **Current task:** Perombakan UI Minimalist Dark Pro dengan tab kartu objek (`Classic Pixel` vs `AI Stylize`) dan pembersihan label presentasi (D-049) selesai; menunggu tinjauan/commit pengguna.
-- **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor, UI generatif, retensi otomatis storage (D-048: default 24 jam, interval sweep 60 menit) dan dashboard Minimalist Dark Pro bertab (D-049) tersedia. Startup SD15 tetap terpisah/opsional; antrean berbatas dan pergantian lifecycle model otomatis belum diimplementasikan. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
-- **Last runtime verification:** 2026-11-24 — `npm run build --prefix frontend` (PASS, 508 ms) dan `node scripts/smoke_browser_m7.mjs` (PASS 100%, 15 pemeriksaan CDP browser headless termasuk interaksi tab kartu objek `Classic Pixel` ↔ `AI Stylize`, 0 console error); `node --test backend/test/retention.test.js` (7/7 PASS) dan `npm test --prefix backend` (150/150 PASS).
-- **Last documentation check:** 2026-11-24 — `docs/DECISIONS.md` (D-048 & D-049 Accepted/Verified), `README.md`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md` diselaraskan dengan seluruh pembaruan kode di workspace.
+- **Current milestone:** M7 — hardening pascapenutupan implementasi D-047, retensi otomatis D-048, desain UI Minimalist Dark Pro & tab kartu objek D-049, serta batas panjang antrean FIFO D-050.
+- **Current task:** Implementasi dan verifikasi batas panjang antrean FIFO (`MAX_QUEUE_LENGTH`, HTTP 429 `QUEUE_FULL`, D-050) selesai; menunggu tinjauan/commit pengguna.
+- **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor, UI generatif, retensi otomatis storage (D-048: default 24 jam, interval sweep 60 menit), dashboard Minimalist Dark Pro bertab (D-049), dan batas antrean FIFO (D-050: default 10 tugas menunggu) tersedia. Startup SD15 tetap terpisah/opsional; pergantian lifecycle model otomatis belum diimplementasikan. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
+- **Last runtime verification:** 2026-11-24 — `node --test backend/test/retention.test.js` (8/8 PASS, 3,45 s, termasuk verifikasi HTTP 429 `QUEUE_FULL` pada ekstraksi JSON/multipart dan stylization serta pemulihan antrean setelah drain), `npm test --prefix backend` (151/151 PASS, 68 subtests, 21,69 s), dan `npm run build --prefix frontend` (PASS, 509 ms).
+- **Last documentation check:** 2026-11-24 — `docs/DECISIONS.md` (D-048, D-049, & D-050 Accepted/Verified), `README.md`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md` diselaraskan dengan seluruh pembaruan kode di workspace.
 
 ## Milestone
 
@@ -235,10 +235,14 @@
   - Menerapkan tata letak dashboard **Minimalist Dark Pro** sesuai pilihan pengguna (`frontend/index.html`, `frontend/src/style.css`, `frontend/src/main.js`, `frontend/src/extraction-workspace.js`): sticky header dengan *live status indicator pills* (`#backend-dot`, `#ai-dot`), panel dua kolom proporsional (5:7 di desktop), area unggah bergaya dropzone berikon SVG minimalis, toolbar ekspor ZIP & Spritesheet berdampingan, *category badge* pada tiap kartu objek, serta kontrol **tab di dalam kartu objek** (`Classic Pixel` vs `AI Stylize`) agar kartu jauh lebih ringkas dan rapi.
   - Verifikasi `npm run build --prefix frontend` (PASS, 508 ms) dan automated headless browser smoke test `node scripts/smoke_browser_m7.mjs` (PASS 100%, termasuk pengujian perpindahan tab `Classic Pixel` ↔ `AI Stylize` dan tangkapan layar desktop 1365×1100 di `scratch/proof_smoke_m7_spritesheet.png`, 0 console error).
   - Penyelarasan default `AI_HEALTH_TIMEOUT_MS` di `backend/src/server.js` dan `backend/.env.example` dari `3000` menjadi `30000` ms (selaras dengan `app.js` dan `ai-client.js`), setelah diagnosis membuktikan job kamera 1280×720 (`795d73ad-...`) selesai menulis seluruh 8 PNG di FastAPI dalam 3,019 detik namun terputus oleh batas 3.000 ms Express.
+- Implementasi batas panjang antrean FIFO (`MAX_QUEUE_LENGTH`, HTTP 429 `QUEUE_FULL`, 2026-11-24, D-050):
+  - Menambahkan opsi `maxQueueLength` pada `createJobManager` dan `createApp` (default `10`, konfigurasi `MAX_QUEUE_LENGTH` di `backend/src/server.js` dan `backend/.env.example`, wajib integer `>= 1`).
+  - Menolak permintaan ekstraksi (`POST /api/jobs`) dan AI stylization (`POST /api/jobs/:id/stylize`) dengan `JobError(429, 'QUEUE_FULL', ...)` saat jumlah tugas menunggu di belakang worker aktif mencapai `maxQueueLength`, tanpa meninggalkan direktori job/stylization yatim. Permintaan `POST /api/jobs` JSON mempertahankan upload yang sudah ada agar bisa dicoba kembali, sedangkan `POST /api/jobs` multipart otomatis membersihkan upload transien melalui `manager.discardUpload(uploadId)`.
+  - Verifikasi `node --test backend/test/retention.test.js` (8/8 PASS, 3,45 s), `npm test --prefix backend` (151/151 PASS, 21,69 s), dan `npm run build --prefix frontend` (PASS, 509 ms).
 
 ## In progress
 
-- Tidak ada implementasi berjalan. Perubahan implementasi D-048 dan dokumentasi belum di-commit dan menunggu tinjauan pengguna; kualitas kategori umum tetap belum diterima.
+- Tidak ada implementasi berjalan. Perubahan implementasi D-050 dan dokumentasi belum di-commit dan menunggu tinjauan pengguna; kualitas kategori umum tetap belum diterima.
 
 ## Blockers / risks
 
@@ -255,7 +259,7 @@
 - Kamera fisik desktop PC Camera sudah diuji. Kamera mobile fisik dan perpindahan tab non-headless belum diuji. Hidden-state sebelumnya diuji lewat injeksi; navigasi `pagehide` diuji nyata pada tugas kamera sintetis.
 - Upload yang sudah diterima tetap tersimpan sementara; pembatalan request bukan rollback dan hapus preview bukan hapus server seketika. Retensi otomatis waktu (`STORAGE_RETENTION_HOURS`, default 24 jam) kini membersihkan job kedaluwarsa dan upload tak tereferensi (D-048); batasan ini ditampilkan di UI.
 - Browser dengan beberapa kamera dapat memilih kamera virtual secara default. Pengujian fisik memilih PC Camera lewat pengaturan Chrome; aplikasi belum mempunyai pemilih perangkat dan tidak menjanjikan kamera fisik tertentu.
-- Job manager mengasumsikan satu proses backend pemilik storage; mendukung retensi waktu otomatis (D-048), tetapi belum mendukung multi-process atau antrean berbatas. Endpoint ekstraksi sinkron M3 tetap di luar antrean `/api/jobs`.
+- Job manager mengasumsikan satu proses backend pemilik storage; mendukung retensi waktu otomatis (D-048) dan batas panjang antrean FIFO (`MAX_QUEUE_LENGTH`, D-050), tetapi belum mendukung multi-process atau kuota kapasitas disk. Endpoint ekstraksi sinkron M3 tetap di luar antrean `/api/jobs`.
 - Timeout health/ekstraksi lama masih AI_HEALTH_TIMEOUT_MS (default 3000 ms; smoke 30000). Generatif kini AI_STYLIZATION_TIMEOUT_MS terpisah (default 900000 ms), dengan URL SD15 opsional. Antrean tidak unload model atau membatalkan inferensi remote; dua service resident tetap berisiko. Guard commit menghentikan smoke D-041 meski gerbang awal 3/8 GiB lolos.
 - Kategori ≤50 piksel tidak diekspor sebagai file; tetap berada dalam foreground manusia. Ambang ini bukan confidence model. Kualitas pada foto pribadi/occlusion nyata belum diuji pada sesi kategori.
 - `test_api.py` memunculkan StarletteDeprecationWarning mengenai integrasi httpx TestClient; 7 tes tetap PASS. Tidak mengganti dependensi pada tugas ini.
@@ -269,7 +273,7 @@
 
 ## Next task — satu tugas saja
 
-Pengguna meninjau perubahan implementasi retensi otomatis D-048 beserta dokumentasi dan memutuskan commit; sesudahnya pengguna memilih satu batas terbuka berikutnya bila diperlukan (misalnya batas panjang antrean job `MAX_QUEUE_LENGTH` atau endpoint penghapusan manual `DELETE /api/jobs/:id`). Agent tidak memulainya tanpa arahan.
+Pengguna meninjau perubahan implementasi batas panjang antrean FIFO (D-050) beserta dokumentasi dan memutuskan commit; sesudahnya pengguna memilih satu batas terbuka berikutnya bila diperlukan (misalnya endpoint penghapusan manual `DELETE /api/jobs/:id` atau verifikasi E2E terdokumentasi menggunakan gambar uji ideal `scratch/gambar_uji_ideal.jpg`). Agent tidak memulainya tanpa arahan.
 
 ## Inventaris kesiapan M3 — 2026-11-16
 
@@ -596,7 +600,8 @@ Pengguna meninjau perubahan implementasi retensi otomatis D-048 beserta dokument
 | 2026-11-24 | `npm run build --prefix frontend` | PASS | Vite 8.3.8 membangun bundle produksi (7 modul, 520 ms) dengan teks pemberitahuan retensi baru |
 | 2026-11-24 | Pembersihan UI presentasi: `npm run build --prefix frontend` + `node scripts/smoke_browser_m7.mjs` | PASS | Build 477 ms; seluruh 14 tahapan CDP browser headless (health, upload, ekstraksi, spritesheet All/Selected, unduh PNG/Atlas, koreksi mask Penghapus/Pulihkan/Undo/Save, reset) PASS 100%, 0 console error |
 | 2026-11-24 | Desain Minimalist Dark Pro & Tab Kartu Objek (D-049): `npm run build --prefix frontend` + `node scripts/smoke_browser_m7.mjs` | PASS | Build 508 ms; seluruh 15 tahapan CDP browser headless (termasuk pengujian tab `Classic Pixel` ↔ `AI Stylize` dan screenshot desktop 1365×1100 `scratch/proof_smoke_m7_spritesheet.png`) PASS 100%, 0 console error |
-| 2026-11-24 | Suite Python AI service, inferensi live SCHP/SD15 | NOT RUN | Perubahan terbatas pada retensi storage Express dan perombakan tampilan UI frontend |
+| 2026-11-24 | Batas panjang antrean FIFO (`MAX_QUEUE_LENGTH`, D-050): `node --test backend/test/retention.test.js` + `npm test --prefix backend` + `npm run build --prefix frontend` | PASS | `retention.test.js` 8/8 PASS (3,45 s); full backend suite 151/151 PASS (68 subtests, 21,69 s); Vite build PASS (509 ms) |
+| 2026-11-24 | Suite Python AI service, inferensi live SCHP/SD15 | NOT RUN | Perubahan terbatas pada batas antrean Express dan dokumentasi |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

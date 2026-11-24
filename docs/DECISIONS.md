@@ -882,5 +882,22 @@ vae/config.json
   - `npm run build --prefix frontend`: **PASS** (7 modul, 508 ms).
   - `node scripts/smoke_browser_m7.mjs`: **PASS 100%** (15 pemeriksaan termasuk verifikasi perpindahan tab `Classic Pixel` ↔ `AI Stylize`, `aria-selected`, visibilitas panel `[data-tab-panel]`, ekstraksi, spritesheet, koreksi mask Penghapus/Pulihkan/Undo/Save, reset, dan tangkapan layar desktop 1365×1100 di `scratch/proof_smoke_m7_spritesheet.png`, 0 console error).
 
+## D-050 — Batas Panjang Antrean FIFO (`MAX_QUEUE_LENGTH`, HTTP 429 `QUEUE_FULL`)
+
+- **Tanggal:** 2026-11-24.
+- **Status:** Accepted / Verified.
+- **Dasar:** `docs/PROJECT_SPEC.md` §8 Keamanan ("pembatasan permintaan dan penghapusan sementara").
+- **Keputusan Teknis:**
+  1. **Konfigurasi Batas Antrean:** Menambahkan opsi `maxQueueLength` pada `createJobManager` dan `createApp` (default **10**, dapat diatur melalui `MAX_QUEUE_LENGTH` di `backend/src/server.js` dan `backend/.env.example`). Validasi startup mewajibkan integer positif (`>= 1`).
+  2. **Perhitungan Tugas Menunggu (`waitingQueueCount`):** Karena satu FIFO melayani ekstraksi (`POST /api/jobs`) dan AI stylization (`POST /api/jobs/:id/stylize`), jumlah tugas yang menunggu di belakang worker aktif dihitung sebagai `running ? queue.length : Math.max(0, queue.length - 1)`. Ini menjamin determinisme baik saat request dikirim berurutan melalui HTTP maupun bersamaan dalam satu tick sebelum `setImmediate(drain)` dieksekusi.
+  3. **Penolakan Defensif Tanpa Artefak Yatim (`HTTP 429 QUEUE_FULL`):**
+     - Bila `waitingQueueCount() >= maxQueueLength`, `create(uploadId)` dan `createStylization(jobId, input)` menolak permintaan dengan `JobError(429, 'QUEUE_FULL', 'Antrean pemrosesan penuh. Tunggu hingga tugas aktif selesai lalu coba lagi.')` sebelum mempublikasikan manifest atau menambahkan item ke `queue`.
+     - Jika penolakan 429 terjadi pada `POST /api/jobs` berbasis JSON `{ upload_id }`, direktori upload yang sudah ada tetap dipertahankan agar pengguna dapat mencoba kembali setelah antrean berkurang.
+     - Jika penolakan 429 terjadi pada `POST /api/jobs` berbasis `multipart/form-data` langsung, upload transien baru tersebut otomatis dibersihkan melalui `manager.discardUpload(uploadId)` agar tidak meninggalkan upload yatim di disk.
+- **Bukti Pengujian Nyata (2026-11-24):**
+  - `node --test backend/test/retention.test.js`: **PASS 8/8** (3,45 s) — memverifikasi validasi parameter `maxQueueLength`, penerimaan tugas hingga batas antrean, penolakan HTTP 429 `QUEUE_FULL` pada ekstraksi JSON (upload tetap utuh), ekstraksi multipart (upload transien dibersihkan), dan stylization (tidak ada folder stylization yatim), serta penerimaan kembali HTTP 202 setelah antrean selesai diproses (`drain`).
+  - `npm test --prefix backend`: **PASS 151/151** (68 top-level subtests, 0 fail, 0 skip, 21,69 s).
+  - `npm run build --prefix frontend`: **PASS** (7 modul, 509 ms).
+
 
 

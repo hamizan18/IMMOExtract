@@ -20,11 +20,14 @@ export function createJobRouter(options) {
     }
   }
 
-  async function submit(uploadId, response) {
+  async function submit(uploadId, response, transientUpload = false) {
     try {
       const job = await manager.create(uploadId);
       response.location(`/api/jobs/${job.job_id}`).status(202).json(job);
     } catch (error) {
+      if (transientUpload) {
+        await manager.discardUpload(uploadId);
+      }
       fail(error, response);
     }
   }
@@ -132,7 +135,7 @@ export function createJobRouter(options) {
     const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : 500;
     response.status(status).json({ error: { code: 'INVALID_JOB_REQUEST', message: 'Permintaan job tidak dapat diproses.' } });
   });
-  router.use(createUploadRouter({ ...options, onUploaded: submit }));
+  router.use(createUploadRouter({ ...options, onUploaded: (id, response) => submit(id, response, true) }));
 
   router.get('/:id', async (request, response) => {
     try {

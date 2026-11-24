@@ -15,6 +15,7 @@ export function createApp({
   maxUploadBytes = 10 * 1024 * 1024,
   retentionMs,
   sweepIntervalMs,
+  maxQueueLength,
   now,
 } = {}) {
   const app = express();
@@ -59,6 +60,7 @@ export function createApp({
     stylizationTimeoutMs: aiStylizationTimeoutMs,
     retentionMs,
     sweepIntervalMs,
+    maxQueueLength,
     now,
   });
   app.locals.jobManager = jobRouter.manager;

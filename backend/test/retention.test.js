@@ -85,6 +85,12 @@ test('configuration validation enforces safe integer retentionMs, sweepIntervalM
     () => createJobManager({ now: 'not-a-fn' }),
     /now must be a function/,
   );
+  for (const badQueue of [0, -1, 1.5, NaN, '10', null]) {
+    assert.throws(
+      () => createJobManager({ maxQueueLength: badQueue }),
+      /maxQueueLength must be a positive integer/,
+    );
+  }
   // retentionMs: 0 is allowed even when stylizationTimeoutMs > 0 (disables sweep).
   const disabled = createJobManager({ retentionMs: 0, stylizationTimeoutMs: 900000 });
   disabled.stopSweep();
@@ -558,3 +564,143 @@ test('nested junctions inside an expired job, top-level junctions, non-UUID entr
   assert.equal(existsSync(join(jobDir, 'README.txt')), true);
   assert.equal(existsSync(join(uploadDir, '.gitkeep')), true);
 });
+
+test('maxQueueLength rejects excess extraction and stylization requests with HTTP 429 QUEUE_FULL without leaving orphan artifacts, then accepts again after drain', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'immo-queue-bound-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const uploadDir = join(root, 'uploads');
+  const jobDir = join(root, 'jobs');
+
+  let releaseFirst;
+  const firstGate = new Promise(resolve => { releaseFirst = resolve; });
+
+  const app = createApp({
+    uploadDir,
+    jobDir,
+    maxQueueLength: 2,
+    retentionMs: 0,
+    sweepIntervalMs: 0,
+    aiClient: {
+      async health() { return { status: 'ok', service: 'ai-service', model_loaded: true }; },
+      async extractPath({ imagePath, outputPath, saveMaskPath }) {
+        await firstGate;
+        await sharp(imagePath).ensureAlpha().png().toFile(outputPath);
+        await sharp({ create: { width: 8, height: 8, channels: 3, background: 'white' } }).png().toFile(saveMaskPath);
+        return {
+          status: 'success', original_size: [8, 8], categories_present: [],
+          category_pixel_counts: {}, objects: [], execution_time_seconds: 0,
+        };
+      },
+      async stylizePath({ imagePath, outputPath, parameters }) {
+        await sharp(imagePath).ensureAlpha().png().toFile(outputPath);
+        return {
+          status: 'success', original_size: [8, 8],
+          target_size: [parameters.target_size, parameters.target_size],
+          prompt: 'p', negative_prompt: 'n', steps_executed: 1,
+          strength: parameters.strength, guidance_scale: parameters.guidance_scale,
+          seed: parameters.seed, nsfw_detected: false, execution_time_seconds: 0.1,
+        };
+      },
+    },
+  });
+
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  // Seed a completed job for stylization queue limit testing, plus 4 uploads for extraction jobs
+  const completedJobId = randomUUID();
+  const { objectId: completedObjectId } = await seedJob(jobDir, completedJobId);
+  const uploadIds = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  for (const id of uploadIds) {
+    await seedUpload(uploadDir, id);
+  }
+
+  // 1. Submit Job 1 (becomes active/processing in drain)
+  const res1 = await fetch(`${base}/api/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ upload_id: uploadIds[0] }),
+  });
+  assert.equal(res1.status, 202);
+  const job1 = await res1.json();
+
+  // 2. Submit Job 2 (waiting queue count = 1 of 2)
+  const res2 = await fetch(`${base}/api/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ upload_id: uploadIds[1] }),
+  });
+  assert.equal(res2.status, 202);
+  const job2 = await res2.json();
+
+  // 3. Submit Stylization 1 on completedJobId (shared FIFO: waiting queue count = 2 of 2)
+  const res3 = await fetch(`${base}/api/jobs/${completedJobId}/stylize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object_id: completedObjectId }),
+  });
+  assert.equal(res3.status, 202);
+  const sty1 = await res3.json();
+
+  // 4. Queue is now at capacity (2 waiting behind active job1).
+  // Submitting another extraction via JSON upload_id must return HTTP 429 QUEUE_FULL and preserve the existing upload.
+  const jobsBeforeReject = (await readdir(jobDir)).sort();
+  const res4 = await fetch(`${base}/api/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ upload_id: uploadIds[2] }),
+  });
+  assert.equal(res4.status, 429);
+  const err4 = await res4.json();
+  assert.equal(err4.error.code, 'QUEUE_FULL');
+  assert.equal(existsSync(join(uploadDir, uploadIds[2])), true, 'Pre-existing upload must be preserved on 429');
+  assert.deepEqual((await readdir(jobDir)).sort(), jobsBeforeReject, 'No orphan job directory on 429');
+
+  // 5. Submitting via multipart POST /api/jobs when queue is full must return 429 and discard the transient upload.
+  const uploadsBeforeMultipart = (await readdir(uploadDir)).sort();
+  const pngBuffer = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'green' } }).png().toBuffer();
+  const form = new FormData();
+  form.append('image', new Blob([pngBuffer], { type: 'image/png' }), 'transient.png');
+  const resMultipart = await fetch(`${base}/api/jobs`, { method: 'POST', body: form });
+  assert.equal(resMultipart.status, 429);
+  assert.equal((await resMultipart.json()).error.code, 'QUEUE_FULL');
+  assert.deepEqual((await readdir(uploadDir)).sort(), uploadsBeforeMultipart, 'Transient multipart upload must be cleaned up on 429');
+
+  // 6. Submitting another stylization when queue is full must return 429 without creating an orphan stylization folder.
+  const stylizationsDir = join(jobDir, completedJobId, 'stylizations');
+  const styBeforeReject = (await readdir(stylizationsDir)).sort();
+  const resStyReject = await fetch(`${base}/api/jobs/${completedJobId}/stylize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ object_id: completedObjectId }),
+  });
+  assert.equal(resStyReject.status, 429);
+  assert.equal((await resStyReject.json()).error.code, 'QUEUE_FULL');
+  assert.deepEqual((await readdir(stylizationsDir)).sort(), styBeforeReject, 'No orphan stylization directory on 429');
+
+  // 7. Release gate so queue drains, then verify uploadIds[2] is accepted (HTTP 202) and completes.
+  releaseFirst();
+  for (let i = 0; i < 200; i++) {
+    const j1 = await (await fetch(`${base}/api/jobs/${job1.job_id}`)).json();
+    const j2 = await (await fetch(`${base}/api/jobs/${job2.job_id}`)).json();
+    const s1 = await (await fetch(`${base}/api/jobs/${completedJobId}/stylizations/${sty1.stylization_id}`)).json();
+    if (j1.status === 'completed' && j2.status === 'completed' && s1.status === 'completed') break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+
+  const resAfterDrain = await fetch(`${base}/api/jobs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ upload_id: uploadIds[2] }),
+  });
+  assert.equal(resAfterDrain.status, 202);
+  const jobAfterDrain = await resAfterDrain.json();
+  for (let i = 0; i < 100; i++) {
+    const polled = await (await fetch(`${base}/api/jobs/${jobAfterDrain.job_id}`)).json();
+    if (polled.status === 'completed') break;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+});
+

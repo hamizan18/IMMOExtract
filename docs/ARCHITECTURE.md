@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Implementasi M1–M7 ditutup D-047; retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) serta perombakan UI **Minimalist Dark Pro** dengan tab kartu objek (D-049) telah diimplementasikan dan teruji. Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
+> **Status:** Implementasi M1–M7 ditutup D-047; retensi otomatis `storage/uploads` dan `storage/jobs` (D-048), perombakan UI **Minimalist Dark Pro** dengan tab kartu objek (D-049), serta batas panjang antrean FIFO `MAX_QUEUE_LENGTH` (D-050) telah diimplementasikan dan teruji. Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -184,7 +184,7 @@ Direktori service di atas berisi implementasi, bukan scaffold kosong. `scripts/`
 - Gunakan random ID untuk job dan object; hindari direct static serving dari `storage`.
 - Jangan taruh secret, API token, foto pengguna, mask/hasil, checkpoint, `.venv`, atau `node_modules` di Git.
 - Simpan model checkpoint lokal; unduhan ukuran besar butuh persetujuan pengguna.
-- Validasi ukuran dan retensi otomatis waktu (`STORAGE_RETENTION_HOURS`, D-048) sudah tersedia, tetapi antrean berbatas/kuota disk dan kontrol akses multi-user belum tersedia. Jangan menyamakan batas upload/UUID acak dengan kesiapan deployment publik.
+- Validasi ukuran, retensi otomatis waktu (`STORAGE_RETENTION_HOURS`, D-048), dan batas panjang antrean FIFO (`MAX_QUEUE_LENGTH`, D-050) sudah tersedia, tetapi kuota kapasitas disk dan kontrol akses multi-user belum tersedia. Jangan menyamakan batas upload/UUID acak dengan kesiapan deployment publik.
 - Saat memakai Claude Website, kirim hanya file source yang relevan; jangan upload foto asli pribadi atau secrets.
 
 ## 10. Observability dan pengujian
@@ -205,7 +205,7 @@ Direktori service di atas berisi implementasi, bukan scaffold kosong. `scripts/`
 - Kualitas segmentasi/stylization pada dataset foto nyata, aksesori dan occlusion: dua foto ekstraksi teruji belum memberi penerimaan umum. Alpha exact tidak menjamin kualitas visual; koreksi satu kategori tidak menyinkronkan kategori lain. Impor atlas ke game engine belum diuji.
 - Lisensi distribusi checkpoint/model dan kode proyek sebelum publikasi/redistribusi.
 - Resource SD15: headroom RAM/commit, latensi, konfigurasi di luar smoke dan lifecycle pergantian model.
-- Batas panjang antrean/kuota disk, penghapusan manual per job, dan keamanan deployment multi-user; belum menjadi fitur operasional (retensi waktu otomatis lokal telah diimplementasikan sesuai D-048).
+- Batas kuota kapasitas disk, penghapusan manual per job, dan keamanan deployment multi-user; belum menjadi fitur operasional (retensi waktu otomatis lokal D-048 dan batas antrean FIFO D-050 telah diimplementasikan).
 - Portabilitas Linux/macOS dan penerimaan kamera mobile; belum terbukti pada bukti Windows lokal.
 
 Catat keputusan setelah diuji ke `docs/DECISIONS.md`.

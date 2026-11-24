@@ -11,6 +11,9 @@ const storageRetentionHours = process.env.STORAGE_RETENTION_HOURS !== undefined
 const storageSweepIntervalMinutes = process.env.STORAGE_SWEEP_INTERVAL_MINUTES !== undefined
   && process.env.STORAGE_SWEEP_INTERVAL_MINUTES !== ''
   ? Number(process.env.STORAGE_SWEEP_INTERVAL_MINUTES) : 60;
+const maxQueueLength = process.env.MAX_QUEUE_LENGTH !== undefined
+  && process.env.MAX_QUEUE_LENGTH !== ''
+  ? Number(process.env.MAX_QUEUE_LENGTH) : 10;
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535.');
@@ -39,6 +42,9 @@ if (!Number.isSafeInteger(storageSweepIntervalMinutes) || storageSweepIntervalMi
   throw new Error('STORAGE_SWEEP_INTERVAL_MINUTES must be a non-negative integer.');
 }
 const sweepIntervalMs = storageSweepIntervalMinutes * 60 * 1000;
+if (!Number.isSafeInteger(maxQueueLength) || maxQueueLength < 1) {
+  throw new Error('MAX_QUEUE_LENGTH must be a positive integer.');
+}
 
 const app = createApp({
   aiServiceUrl,
@@ -49,6 +55,7 @@ const app = createApp({
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024),
   retentionMs,
   sweepIntervalMs,
+  maxQueueLength,
 });
 
 app.listen(port, '127.0.0.1', () => {
