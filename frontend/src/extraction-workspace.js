@@ -158,6 +158,32 @@ function renderObjects(objects) {
       openMaskEditor(object, label, image, download);
     });
 
+    const tabPixelBtn = card.querySelector('[data-tab-btn="pixelate"]');
+    const tabStylizeBtn = card.querySelector('[data-tab-btn="stylize"]');
+    const tabPixelPanel = card.querySelector('[data-tab-panel="pixelate"]');
+    const tabStylizePanel = card.querySelector('[data-tab-panel="stylize"]');
+
+    const activateCardTab = (mode) => {
+      const isPixel = mode === 'pixelate';
+      if (tabPixelPanel) tabPixelPanel.hidden = !isPixel;
+      if (tabStylizePanel) tabStylizePanel.hidden = isPixel;
+      if (tabPixelBtn) {
+        tabPixelBtn.setAttribute('aria-selected', isPixel ? 'true' : 'false');
+        tabPixelBtn.className = isPixel
+          ? 'rounded-md bg-[#171738] px-2 py-1 text-[11px] font-semibold text-[#00F5D4] shadow-xs transition-colors focus-visible:outline-2 focus-visible:outline-[#00F5D4]'
+          : 'rounded-md px-2 py-1 text-[11px] font-semibold text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]';
+      }
+      if (tabStylizeBtn) {
+        tabStylizeBtn.setAttribute('aria-selected', !isPixel ? 'true' : 'false');
+        tabStylizeBtn.className = !isPixel
+          ? 'rounded-md bg-[#171738] px-2 py-1 text-[11px] font-semibold text-[#F72585] shadow-xs transition-colors focus-visible:outline-2 focus-visible:outline-[#00F5D4]'
+          : 'rounded-md px-2 py-1 text-[11px] font-semibold text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]';
+      }
+    };
+
+    tabPixelBtn?.addEventListener('click', () => activateCardTab('pixelate'));
+    tabStylizeBtn?.addEventListener('click', () => activateCardTab('stylize'));
+
     const sizeSelect = card.querySelector('[data-pixel-size]');
     const paletteSelect = card.querySelector('[data-pixel-palette]');
     sizeSelect.setAttribute('aria-label', `Ukuran pixelation: ${label}`);
@@ -172,6 +198,7 @@ function renderObjects(objects) {
 
     const currentJobId = jobId;
     pixelateButton.addEventListener('click', async () => {
+      activateCardTab('pixelate');
       const selectedSize = Number(sizeSelect.value);
       const selectedPalette = paletteSelect.value;
       const paletteLabel = selectedPalette === 'retro16' ? 'Retro 16 warna' : 'Warna asli';
@@ -255,6 +282,7 @@ function renderObjects(objects) {
     stylizeButton.setAttribute('aria-label', `Stylize AI: ${label}`);
 
     stylizeButton.addEventListener('click', async () => {
+      activateCardTab('stylize');
       const selectedPreset = stylizePreset.value;
       const selectedSize = Number(stylizeSize.value);
       if (!['pixel-art', 'retro-rpg', 'game-boy'].includes(selectedPreset)
@@ -405,8 +433,8 @@ function renderObjects(objects) {
 function applyJob(job, operation) {
   if (controller !== operation || operation.signal.aborted) return;
   if (job.job_id !== jobId) throw new Error('ID status job tidak sesuai.');
-  details.textContent = `ID job: ${jobId} — ${job.status}`;
-  details.hidden = false;
+  details.textContent = '';
+  details.hidden = true;
   if (job.status === 'queued' || job.status === 'processing') {
     showStatus(job.status === 'queued'
       ? 'Dalam antrean. Menunggu worker AI lokal…'

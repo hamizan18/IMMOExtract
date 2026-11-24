@@ -868,5 +868,18 @@ vae/config.json
   - `npm run build --prefix frontend`: **PASS** (7 modul, 520 ms).
 - **Konsekuensi:** Hasil job dan upload yang tidak memiliki aktivitas selama masa retensi (default 24 jam) dihapus otomatis; pengguna diberi tahu di UI. Batas jumlah antrean/kuota disk dan penghapusan manual per job masih di luar cakupan D-048.
 
+## D-049 — Perombakan UI Minimalist Dark Pro, Tab Kartu Objek, dan Pembersihan Label Presentasi
+
+- **Tanggal:** 2026-11-24.
+- **Status:** Accepted / Verified (keputusan pengguna).
+- **Keputusan:**
+  1. **Gaya Visual Minimalist Dark Pro:** Mengadopsi tata letak dashboard gelap modern yang bersih berbasis palet D-008 (`#171738` background, `#4B2A7B` panel bertingkat, `#A23EAE` badge kategori/ikon sekunder, `#F72585` aksen AI Stylization, dan `#00F5D4` aksi utama/indikator aktif) dengan tipografi kontras, ikon SVG minimalis 1.5–2px, dan bilah header sticky yang memuat indikator status layanan live (`#backend-dot`, `#ai-dot`).
+  2. **Tab Mode Pixel Art di Dalam Kartu Objek:** Mengganti susunan vertikal bertumpuk antara Classic Pixelation dan AI Stylization di tiap kartu objek dengan kontrol tab ringkas (`role="tablist"`, `[data-tab-btn="pixelate"]` untuk **Classic Pixel** dan `[data-tab-btn="stylize"]` untuk **AI Stylize**) sehingga tinggi kartu jauh lebih pendek dan fokus pada satu mode konversi dalam satu waktu. Klik pada tombol aksi `Pixelate` atau `Stylize (AI)` juga otomatis mengaktifkan tab terkait.
+  3. **Pembersihan Label Pengujian/Milestone:** Menghapus seluruh embel-embel kode milestone internal (`(M5)`, `(M6)`, `(M7)`), cetakan UUID mentah (`ID upload`, `ID job`), dan catatan pengembangan di kaki halaman agar antarmuka siap dipresentasikan.
+- **Alasan:** Pengguna memilih opsi **Minimalist Dark Pro** dan **Tab di dalam kartu objek** agar tampilan aplikasi tidak polos, nyaman dilihat dalam waktu lama, dan tidak berantakan oleh label milestone internal saat presentasi.
+- **Bukti pengujian nyata (2026-11-24):**
+  - `npm run build --prefix frontend`: **PASS** (7 modul, 508 ms).
+  - `node scripts/smoke_browser_m7.mjs`: **PASS 100%** (15 pemeriksaan termasuk verifikasi perpindahan tab `Classic Pixel` ↔ `AI Stylize`, `aria-selected`, visibilitas panel `[data-tab-panel]`, ekstraksi, spritesheet, koreksi mask Penghapus/Pulihkan/Undo/Save, reset, dan tangkapan layar desktop 1365×1100 di `scratch/proof_smoke_m7_spritesheet.png`, 0 console error).
+
 
 

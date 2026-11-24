@@ -269,6 +269,7 @@ async function main() {
 
     browserProcess = spawn(browserBin, [
       '--headless=new',
+      '--window-size=1365,1100',
       '--remote-debugging-port=0',
       '--no-first-run',
       '--no-default-browser-check',
@@ -638,8 +639,59 @@ async function main() {
     assert.deepEqual(pngPixel(restoredCategory, 50, 95), categoryOriginal);
     console.log('   PASS: Restore click/drag, source RGBA, bounds, Undo, repeated alpha, bbox and saved PNG.');
 
+    // 11d. Test Object Card Tabs (Classic Pixel vs AI Stylize)
+    console.log('11d. Testing object card tabs (Classic Pixel vs AI Stylize)...');
+    const tabStateInitial = await pageCdp.evaluate(() => {
+      const card = document.querySelector('#object-gallery li');
+      return {
+        pixelHidden: card.querySelector('[data-tab-panel="pixelate"]')?.hidden,
+        stylizeHidden: card.querySelector('[data-tab-panel="stylize"]')?.hidden,
+        pixelSelected: card.querySelector('[data-tab-btn="pixelate"]')?.getAttribute('aria-selected'),
+        stylizeSelected: card.querySelector('[data-tab-btn="stylize"]')?.getAttribute('aria-selected'),
+      };
+    });
+    assert.deepEqual(tabStateInitial, {
+      pixelHidden: false,
+      stylizeHidden: true,
+      pixelSelected: 'true',
+      stylizeSelected: 'false',
+    });
+
+    await pageCdp.evaluate(() => {
+      document.querySelector('#object-gallery li [data-tab-btn="stylize"]').click();
+    });
+    const tabStateStylize = await pageCdp.evaluate(() => {
+      const card = document.querySelector('#object-gallery li');
+      return {
+        pixelHidden: card.querySelector('[data-tab-panel="pixelate"]')?.hidden,
+        stylizeHidden: card.querySelector('[data-tab-panel="stylize"]')?.hidden,
+        pixelSelected: card.querySelector('[data-tab-btn="pixelate"]')?.getAttribute('aria-selected'),
+        stylizeSelected: card.querySelector('[data-tab-btn="stylize"]')?.getAttribute('aria-selected'),
+      };
+    });
+    assert.deepEqual(tabStateStylize, {
+      pixelHidden: true,
+      stylizeHidden: false,
+      pixelSelected: 'false',
+      stylizeSelected: 'true',
+    });
+
+    // Switch second card to Classic Pixel and keep first card on AI Stylize for visual proof
+    await pageCdp.evaluate(() => {
+      const cards = document.querySelectorAll('#object-gallery li');
+      cards[0]?.querySelector('[data-tab-btn="pixelate"]')?.click();
+      cards[1]?.querySelector('[data-tab-btn="stylize"]')?.click();
+    });
+    console.log('   PASS: Object card tab switching between Classic Pixel and AI Stylize.');
+
     // 12. Screenshot proof
     console.log('12. Capturing proof screenshot...');
+    await pageCdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 1365,
+      height: 1100,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
     const screenshot = await pageCdp.send('Page.captureScreenshot', { format: 'png' });
     const proofPath = resolve('scratch/proof_smoke_m7_spritesheet.png');
     await mkdir(resolve('scratch'), { recursive: true });

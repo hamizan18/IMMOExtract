@@ -3,180 +3,332 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>IMMOExtract — Ekstraksi Objek</title>
+    <title>IMMOExtract — Extract. Transform. Create.</title>
   </head>
-  <body class="min-h-screen bg-[#171738] text-slate-100">
-    <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <p class="text-sm font-semibold tracking-widest text-[#00F5D4]">Extract. Transform. Create.</p>
-      <h1 class="mt-3 text-4xl font-bold">IMMOExtract</h1>
-      <p class="mt-4 text-slate-300">Pilih satu gambar atau ambil foto untuk preview. Setelah preview siap, gambar otomatis dikirim ke server lokal untuk validasi dan penyimpanan; tanpa layanan AI cloud.</p>
-      <div class="mt-8 grid items-start gap-6 lg:grid-cols-2">
-      <section class="min-w-0 rounded-xl border border-white/20 bg-[#4B2A7B]/40 p-5 sm:p-6" aria-labelledby="input-title">
-        <h2 id="input-title" class="text-xl font-semibold">Preview gambar</h2>
-        <label for="image-input" class="mt-5 block font-semibold">Pilih gambar</label>
-        <p id="image-help" class="mt-2 text-sm text-slate-300">JPG, PNG, atau WebP; maksimal 10 MiB, sisi 8192 piksel, dan 24 megapiksel. Server memvalidasi ulang gambar; gambar animasi ditolak.</p>
-        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="image-help image-status" class="mt-4 block w-full min-w-0 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-[#00F5D4] file:px-4 file:py-2 file:font-semibold file:text-[#171738] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]" />
-        <div class="mt-6 border-t border-white/20 pt-5" aria-labelledby="camera-title">
-          <h3 id="camera-title" class="font-semibold">Ambil foto</h3>
-          <p class="mt-2 text-sm text-slate-300">Kamera memerlukan izin browser dan HTTPS atau localhost. Mikrofon tidak digunakan.</p>
-          <div class="mt-4 flex flex-wrap gap-3">
-            <button id="start-camera" type="button" class="rounded-lg bg-[#00F5D4] px-4 py-2 font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Buka kamera</button>
-            <button id="capture-photo" type="button" disabled class="rounded-lg border border-white/40 px-4 py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Ambil foto</button>
-            <button id="stop-camera" type="button" disabled class="rounded-lg border border-white/40 px-4 py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Tutup kamera</button>
+  <body class="min-h-screen bg-[#171738] text-slate-100 selection:bg-[#00F5D4] selection:text-[#171738]">
+    <!-- Top Navigation / Studio Header -->
+    <header class="border-b border-white/10 bg-[#171738]/95 sticky top-0 z-30 backdrop-blur-sm">
+      <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
+        <div class="flex items-center gap-3.5">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#00F5D4]/30 bg-[#4B2A7B]/50 text-[#00F5D4]">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            </svg>
           </div>
-          <p id="camera-status" role="status" aria-live="polite" class="mt-3 text-sm text-slate-300">Kamera belum dibuka.</p>
-          <video id="camera-video" hidden autoplay muted playsinline aria-label="Tampilan kamera langsung" class="mx-auto mt-4 max-h-96 max-w-full rounded-lg"></video>
+          <div>
+            <div class="flex items-center gap-2.5">
+              <h1 class="text-xl font-bold tracking-tight text-white sm:text-2xl">IMMOExtract</h1>
+              <span class="rounded-full border border-[#A23EAE]/50 bg-[#4B2A7B]/60 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-[#00F5D4]">Local AI Studio</span>
+            </div>
+            <p class="text-xs font-medium tracking-wider text-slate-400">Extract. Transform. Create.</p>
+          </div>
         </div>
-        <p id="image-status" role="status" aria-live="polite" class="mt-4 break-words text-sm text-slate-300">Belum ada gambar dipilih.</p>
-        <figure id="image-preview" hidden class="mt-4">
-          <img id="preview-image" alt="Preview gambar yang dipilih" class="mx-auto max-h-96 max-w-full rounded-lg object-contain" />
-          <figcaption id="image-details" class="mt-3 break-all text-sm text-slate-300"></figcaption>
-        </figure>
-        <button id="clear-image" type="button" disabled class="mt-5 rounded-lg border border-white/40 px-4 py-2 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Hapus pilihan</button>
-        <p class="mt-3 text-sm text-slate-300">Hapus atau ganti pilihan membersihkan preview/hasil dan menghentikan request di browser. Job/ekspor yang sudah diterima server tetap berjalan; file server tidak langsung dihapus dan dibersihkan otomatis setelah masa retensi (bawaan 24 jam sejak aktivitas terakhir).</p>
-      </section>
-      <section class="min-w-0 rounded-xl border border-white/20 bg-[#4B2A7B]/40 p-5 sm:p-6" aria-labelledby="extraction-title">
-        <h2 id="extraction-title" class="text-xl font-semibold">Ekstraksi objek</h2>
-        <p class="mt-2 text-sm text-slate-300">Setelah upload berhasil, jalankan parsing SCHP lokal untuk satu orang utama. Unduh PNG asli tanpa konversi pixel art.</p>
-        <button id="extract-objects" type="button" disabled class="mt-5 rounded-lg bg-[#00F5D4] px-4 py-2 font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Ekstrak objek</button>
-        <p id="job-status" role="status" aria-live="polite" class="mt-4 break-words text-sm text-slate-300">Pilih gambar dan tunggu upload berhasil.</p>
-        <p id="job-details" hidden class="mt-2 break-all text-xs text-slate-300"></p>
-        <progress id="job-progress" hidden aria-label="Pemrosesan ekstraksi" class="mt-3 w-full accent-[#00F5D4]"></progress>
-        <h3 class="mt-6 font-semibold">Objek hasil ekstraksi</h3>
-        <p class="mt-2 text-sm text-slate-300">Pola kotak-kotak menunjukkan transparansi, bukan bagian PNG. Label model adalah kategori semantik, bukan jaminan pemisahan tiap instance. Bagian tertutup tidak direkonstruksi.</p>
-        <fieldset class="mt-4 rounded-lg border border-white/20 p-3" aria-describedby="zip-help selection-count">
-          <legend class="px-1 font-semibold">Unduh ZIP asli</legend>
-          <p id="zip-help" class="text-sm text-slate-300">Centang objek pada kartu untuk unduhan pilihan. Unduh Semua mencakup manusia dan seluruh kategori, tanpa pixelation.</p>
-          <p id="selection-count" role="status" class="mt-2 text-sm text-slate-300">0 dari 0 objek dipilih.</p>
-          <div class="mt-3 flex flex-wrap gap-3">
-            <button id="export-selected" type="button" disabled class="rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Unduh Pilihan</button>
-            <button id="export-all" type="button" disabled class="rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Unduh Semua</button>
+
+        <!-- Compact Service Status Bar -->
+        <section aria-labelledby="services-title" class="flex flex-wrap items-center gap-2.5">
+          <h2 id="services-title" class="sr-only">Status Layanan Lokal</h2>
+          <dl class="flex flex-wrap items-center gap-2 text-xs" aria-live="polite" aria-atomic="true">
+            <div class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#4B2A7B]/30 px-2.5 py-1.5">
+              <span id="backend-dot" class="h-2 w-2 rounded-full bg-slate-400" aria-hidden="true"></span>
+              <dt class="font-medium text-slate-300">Backend:</dt>
+              <dd id="backend-status" class="font-semibold text-white">Belum diperiksa.</dd>
+            </div>
+            <div class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#4B2A7B]/30 px-2.5 py-1.5">
+              <span id="ai-dot" class="h-2 w-2 rounded-full bg-slate-400" aria-hidden="true"></span>
+              <dt class="font-medium text-slate-300">AI Lokal:</dt>
+              <dd id="ai-status" class="font-semibold text-white">Belum diperiksa.</dd>
+            </div>
+          </dl>
+          <button id="check-status" type="button" class="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-[#4B2A7B]/40 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:border-[#00F5D4]/60 hover:text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-50">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16h5v5" />
+            </svg>
+            Periksa ulang
+          </button>
+        </section>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <!-- Intro Banner -->
+      <div class="mb-6 rounded-xl border border-white/10 bg-[#4B2A7B]/25 px-4 py-3.5 sm:px-5">
+        <p class="text-sm leading-relaxed text-slate-300">
+          Ekstrak objek manusia, pakaian, dan aksesori menjadi aset <span class="font-semibold text-white">PNG transparan</span>, rapikan siluet dengan <span class="font-semibold text-white">Koreksi Mask</span>, lalu ubah menjadi aset game melalui <span class="font-semibold text-[#00F5D4]">Classic Pixelation</span>, <span class="font-semibold text-[#F72585]">AI Stylization</span>, atau <span class="font-semibold text-white">Spritesheet Statis</span>.
+        </p>
+      </div>
+
+      <div class="grid items-start gap-6 lg:grid-cols-12">
+        <!-- Left Column: Input & Preview (5 cols on lg) -->
+        <section class="min-w-0 rounded-2xl border border-white/15 bg-[#4B2A7B]/30 p-5 sm:p-6 lg:col-span-5" aria-labelledby="input-title">
+          <div class="flex items-center justify-between border-b border-white/10 pb-3.5">
+            <div class="flex items-center gap-2.5">
+              <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00F5D4]/15 text-xs font-bold text-[#00F5D4]">1</span>
+              <h2 id="input-title" class="text-base font-semibold tracking-tight text-white">Input &amp; Preview Gambar</h2>
+            </div>
+            <span class="text-xs font-medium text-slate-400">JPG · PNG · WebP</span>
           </div>
-          <p id="export-status" role="status" aria-live="polite" class="mt-3 break-words text-sm text-slate-300"></p>
-          <a id="export-download" hidden class="mt-3 inline-block rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh ulang ZIP siap</a>
-        </fieldset>
-        <fieldset class="mt-4 rounded-lg border border-white/20 p-3" aria-describedby="spritesheet-help">
-          <legend class="px-1 font-semibold">Ekspor Spritesheet Statis (M7)</legend>
-          <p id="spritesheet-help" class="text-sm text-slate-300">Gabungkan objek yang dipilih atau seluruh objek menjadi satu lembar spritesheet PNG transparan dan metadata JSON atlas.</p>
-          <div class="mt-3 flex flex-wrap items-center gap-3">
-            <label class="flex items-center gap-2 text-sm text-slate-200">
-              Padding:
-              <input id="spritesheet-padding" type="number" min="0" max="64" value="4" class="w-16 rounded border border-white/30 bg-[#171738] px-2 py-1 text-sm text-white focus-visible:outline-[#00F5D4]" />
-              px
+
+          <!-- File Picker Card -->
+          <div class="mt-4 rounded-xl border border-dashed border-white/20 bg-[#171738]/60 p-4 transition-colors hover:border-[#00F5D4]/50">
+            <label for="image-input" class="flex cursor-pointer items-center gap-2 text-sm font-semibold text-white">
+              <svg class="h-4 w-4 text-[#00F5D4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Pilih gambar dari perangkat
             </label>
-            <label class="flex items-center gap-2 text-sm text-slate-200">
-              Kolom:
-              <input id="spritesheet-columns" type="number" min="1" max="16" placeholder="Auto" class="w-16 rounded border border-white/30 bg-[#171738] px-2 py-1 text-sm text-white focus-visible:outline-[#00F5D4]" />
-            </label>
-            <button id="spritesheet-selected" type="button" disabled class="rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Spritesheet Pilihan</button>
-            <button id="spritesheet-all" type="button" disabled class="rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Spritesheet Semua</button>
+            <p id="image-help" class="mt-1 text-xs text-slate-400">Maksimal 10 MiB, resolusi hingga 8192 px per sisi (24 MP).</p>
+            <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="image-help image-status" class="mt-3 block w-full min-w-0 text-xs text-slate-300 file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-[#00F5D4] file:px-3.5 file:py-2 file:text-xs file:font-semibold file:text-[#171738] file:transition-opacity hover:file:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]" />
           </div>
-          <p id="spritesheet-status" role="status" aria-live="polite" class="mt-3 break-words text-sm text-slate-300"></p>
-          <div id="spritesheet-result" hidden class="mt-3 rounded-lg border border-white/20 p-3">
-            <div class="transparency-grid max-h-64 overflow-auto rounded-lg">
+
+          <!-- Camera Capture Card -->
+          <div class="mt-4 rounded-xl border border-white/10 bg-[#171738]/45 p-4" aria-labelledby="camera-title">
+            <div class="flex items-center justify-between">
+              <h3 id="camera-title" class="flex items-center gap-2 text-sm font-semibold text-white">
+                <svg class="h-4 w-4 text-[#A23EAE]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                  <circle cx="12" cy="13" r="3" />
+                </svg>
+                Kamera Perangkat
+              </h3>
+              <span class="text-[11px] text-slate-400">Tanpa mikrofon</span>
+            </div>
+            <p class="mt-1 text-xs text-slate-400">Ambil foto langsung melalui webcam atau kamera perangkat.</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button id="start-camera" type="button" class="rounded-lg bg-[#00F5D4] px-3 py-1.5 text-xs font-semibold text-[#171738] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Buka kamera</button>
+              <button id="capture-photo" type="button" disabled class="rounded-lg border border-white/25 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Ambil foto</button>
+              <button id="stop-camera" type="button" disabled class="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-white/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Tutup kamera</button>
+            </div>
+            <p id="camera-status" role="status" aria-live="polite" class="mt-2.5 text-xs text-slate-400">Kamera belum dibuka.</p>
+            <video id="camera-video" hidden autoplay muted playsinline aria-label="Tampilan kamera langsung" class="mx-auto mt-3 max-h-80 w-full rounded-lg border border-white/10 bg-black object-contain"></video>
+          </div>
+
+          <!-- Upload Status & Preview Image -->
+          <div class="mt-4 rounded-xl border border-white/10 bg-[#171738]/60 p-3.5">
+            <div class="flex items-center justify-between gap-2">
+              <p id="image-status" role="status" aria-live="polite" class="break-words text-xs font-medium text-slate-300">Belum ada gambar dipilih.</p>
+              <button id="clear-image" type="button" disabled class="shrink-0 rounded-lg border border-white/20 px-2.5 py-1 text-xs font-semibold text-slate-300 transition-colors hover:border-rose-400/60 hover:text-rose-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Hapus pilihan</button>
+            </div>
+            <figure id="image-preview" hidden class="mt-3 border-t border-white/10 pt-3">
+              <div class="overflow-hidden rounded-lg border border-white/10 bg-[#12122b] p-2">
+                <img id="preview-image" alt="Preview gambar yang dipilih" class="mx-auto max-h-80 max-w-full rounded object-contain" />
+              </div>
+              <figcaption id="image-details" class="mt-2 break-all text-center font-mono text-[11px] text-slate-400"></figcaption>
+            </figure>
+          </div>
+
+          <p class="mt-3 text-[11px] text-slate-400">File sementara di server dibersihkan otomatis setelah masa retensi 24 jam.</p>
+        </section>
+
+        <!-- Right Column: Extraction Workspace & Object Gallery (7 cols on lg) -->
+        <section class="min-w-0 rounded-2xl border border-white/15 bg-[#4B2A7B]/30 p-5 sm:p-6 lg:col-span-7" aria-labelledby="extraction-title">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3.5">
+            <div class="flex items-center gap-2.5">
+              <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00F5D4]/15 text-xs font-bold text-[#00F5D4]">2</span>
+              <div>
+                <h2 id="extraction-title" class="text-base font-semibold tracking-tight text-white">Ekstraksi Objek &amp; Pixel Art Studio</h2>
+                <p class="text-xs text-slate-400">Parsing subjek utama beserta kategori pakaian dan aksesori.</p>
+              </div>
+            </div>
+            <button id="extract-objects" type="button" disabled class="inline-flex items-center gap-2 rounded-xl bg-[#00F5D4] px-4 py-2 text-sm font-semibold text-[#171738] shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              Ekstrak objek
+            </button>
+          </div>
+
+          <!-- Job Status Banner -->
+          <div class="mt-4 rounded-xl border border-white/10 bg-[#171738]/60 px-3.5 py-2.5">
+            <p id="job-status" role="status" aria-live="polite" class="break-words text-xs font-medium text-slate-300">Pilih gambar dan tunggu upload berhasil.</p>
+            <p id="job-details" hidden class="mt-1 break-all text-xs text-slate-400"></p>
+            <progress id="job-progress" hidden aria-label="Pemrosesan ekstraksi" class="mt-2 h-1.5 w-full overflow-hidden rounded-full accent-[#00F5D4]"></progress>
+          </div>
+
+          <!-- Export Toolbar: ZIP & Spritesheet side by side on md+ -->
+          <div class="mt-4 grid gap-3 md:grid-cols-2">
+            <!-- ZIP Export Box -->
+            <fieldset class="rounded-xl border border-white/10 bg-[#171738]/45 p-3.5" aria-describedby="zip-help selection-count">
+              <legend class="px-1.5 text-xs font-semibold uppercase tracking-wider text-[#00F5D4]">Unduh Arsip ZIP</legend>
+              <p id="zip-help" class="text-xs text-slate-400">Unduh PNG asli pilihan atau semua objek sekaligus.</p>
+              <div class="mt-2.5 flex items-center justify-between gap-2">
+                <p id="selection-count" role="status" class="font-mono text-xs font-medium text-slate-300">0 dari 0 objek dipilih.</p>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-2">
+                <button id="export-selected" type="button" disabled class="rounded-lg border border-[#00F5D4]/60 bg-[#00F5D4]/10 px-3 py-1.5 text-xs font-semibold text-[#00F5D4] transition-colors hover:bg-[#00F5D4]/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Unduh Pilihan</button>
+                <button id="export-all" type="button" disabled class="rounded-lg border border-white/25 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-[#00F5D4] hover:text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Unduh Semua</button>
+              </div>
+              <p id="export-status" role="status" aria-live="polite" class="mt-2 break-words text-xs text-slate-300"></p>
+              <a id="export-download" hidden class="mt-2 inline-block rounded-lg border border-[#00F5D4] px-2.5 py-1 text-xs font-semibold text-[#00F5D4] hover:bg-[#00F5D4]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh ulang ZIP siap</a>
+            </fieldset>
+
+            <!-- Spritesheet Export Box -->
+            <fieldset class="rounded-xl border border-white/10 bg-[#171738]/45 p-3.5" aria-describedby="spritesheet-help">
+              <legend class="px-1.5 text-xs font-semibold uppercase tracking-wider text-[#00F5D4]">Ekspor Spritesheet Statis</legend>
+              <p id="spritesheet-help" class="text-xs text-slate-400">Gabungkan objek ke lembar PNG &amp; Atlas JSON.</p>
+              <div class="mt-2.5 flex flex-wrap items-center gap-2.5">
+                <label class="flex items-center gap-1.5 text-xs text-slate-300">
+                  Padding:
+                  <input id="spritesheet-padding" type="number" min="0" max="64" value="4" class="w-14 rounded-md border border-white/20 bg-[#171738] px-2 py-1 text-xs text-white focus-visible:outline-[#00F5D4]" />
+                  px
+                </label>
+                <label class="flex items-center gap-1.5 text-xs text-slate-300">
+                  Kolom:
+                  <input id="spritesheet-columns" type="number" min="1" max="16" placeholder="Auto" class="w-14 rounded-md border border-white/20 bg-[#171738] px-2 py-1 text-xs text-white focus-visible:outline-[#00F5D4]" />
+                </label>
+              </div>
+              <div class="mt-2.5 flex flex-wrap gap-2">
+                <button id="spritesheet-selected" type="button" disabled class="rounded-lg border border-[#00F5D4]/60 bg-[#00F5D4]/10 px-3 py-1.5 text-xs font-semibold text-[#00F5D4] transition-colors hover:bg-[#00F5D4]/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Spritesheet Pilihan</button>
+                <button id="spritesheet-all" type="button" disabled class="rounded-lg border border-white/25 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:border-[#00F5D4] hover:text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Spritesheet Semua</button>
+              </div>
+              <p id="spritesheet-status" role="status" aria-live="polite" class="mt-2 break-words text-xs text-slate-300"></p>
+            </fieldset>
+          </div>
+
+          <!-- Spritesheet Preview Result (Full width when active) -->
+          <div id="spritesheet-result" hidden class="mt-3 rounded-xl border border-[#00F5D4]/30 bg-[#171738]/70 p-3.5">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-2">
+              <span class="text-xs font-semibold text-[#00F5D4]">Preview Spritesheet</span>
+              <p id="spritesheet-info" class="font-mono text-xs text-slate-300"></p>
+            </div>
+            <div class="transparency-grid max-h-64 overflow-auto rounded-lg border border-white/10 p-2">
               <img id="spritesheet-preview-img" alt="Preview Spritesheet" class="mx-auto object-contain" />
             </div>
-            <p id="spritesheet-info" class="mt-2 text-xs text-slate-300"></p>
             <div class="mt-3 flex flex-wrap gap-2">
-              <a id="spritesheet-download-png" class="inline-block rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh PNG Spritesheet</a>
-              <a id="spritesheet-download-atlas" class="inline-block rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh Atlas JSON</a>
+              <a id="spritesheet-download-png" class="inline-block rounded-lg border border-[#00F5D4] bg-[#00F5D4]/10 px-3 py-1.5 text-xs font-semibold text-[#00F5D4] hover:bg-[#00F5D4]/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh PNG Spritesheet</a>
+              <a id="spritesheet-download-atlas" class="inline-block rounded-lg border border-white/25 px-3 py-1.5 text-xs font-semibold text-white hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh Atlas JSON</a>
             </div>
           </div>
-        </fieldset>
-        <ul id="object-gallery" aria-label="Objek hasil ekstraksi" class="mt-4 grid gap-4 sm:grid-cols-2"></ul>
-      </section>
+
+          <!-- Object Gallery Section -->
+          <div class="mt-6 flex items-center justify-between border-b border-white/10 pb-2.5">
+            <h3 class="text-sm font-semibold text-white">Galeri Objek</h3>
+            <span class="text-xs text-slate-400">Latar kotak-kotak = area transparan</span>
+          </div>
+          <ul id="object-gallery" aria-label="Objek hasil ekstraksi" class="mt-4 grid gap-4 sm:grid-cols-2"></ul>
+        </section>
       </div>
+
+      <!-- Object Card Template (Minimalist Dark Pro + Tabbed Studio) -->
       <template id="object-card">
-        <li class="min-w-0 rounded-lg border border-white/20 p-3">
-          <div class="transparency-grid rounded-lg">
-            <img class="h-48 w-full object-contain" />
-          </div>
-          <h4 class="mt-3 break-words font-semibold"></h4>
-          <label class="mt-2 flex min-h-11 items-center gap-2 text-sm">
-            <input data-select-object type="checkbox" class="h-5 w-5 shrink-0 accent-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]" />
-            Pilih untuk ZIP
-          </label>
-          <p data-dimensions class="mt-1 text-sm text-slate-300"></p>
-          <p data-preview-error hidden class="mt-2 text-sm text-rose-200">Preview tidak dapat dimuat. File mungkin tidak tersedia atau server tidak terhubung.</p>
-          <div class="mt-3 flex flex-wrap items-center gap-2">
-            <a data-download-original class="inline-block rounded-lg border border-[#00F5D4] px-3 py-2 text-sm font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4]">Unduh PNG asli</a>
-            <button data-edit-mask-button type="button" class="rounded-lg border border-white/30 px-3 py-2 text-sm font-semibold text-white hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Koreksi Mask</button>
-          </div>
-          <div class="mt-4 border-t border-white/20 pt-3">
-            <h5 class="text-xs font-semibold uppercase tracking-wider text-[#00F5D4]">Classic Pixelation (M5)</h5>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <label class="text-xs text-slate-300">Ukuran:
-              <select data-pixel-size class="rounded border border-white/30 bg-[#171738] px-2 py-1 text-xs font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
-                <option value="16">16 px</option>
-                <option value="32" selected>32 px</option>
-                <option value="64">64 px</option>
-                <option value="128">128 px</option>
-              </select>
+        <li class="flex min-w-0 flex-col justify-between rounded-xl border border-white/15 bg-[#171738]/65 p-3.5 transition-colors hover:border-white/25">
+          <div>
+            <!-- Card Top Bar: Category Badge & ZIP Checkbox -->
+            <div class="flex items-center justify-between gap-2">
+              <h4 class="truncate rounded-md border border-[#A23EAE]/40 bg-[#4B2A7B]/50 px-2.5 py-0.5 text-xs font-semibold text-white"></h4>
+              <label class="flex cursor-pointer items-center gap-1.5 text-xs text-slate-300 select-none">
+                <input data-select-object type="checkbox" class="h-4 w-4 shrink-0 rounded accent-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]" />
+                <span>Pilih</span>
               </label>
-              <label class="text-xs text-slate-300">Palet:
-                <select data-pixel-palette class="rounded border border-white/30 bg-[#171738] px-2 py-1 text-xs font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
-                  <option value="original" selected>Warna asli</option>
-                  <option value="retro16">Retro 16 warna</option>
-                </select>
-              </label>
-              <button data-pixelate-button type="button" class="rounded bg-[#00F5D4] px-3 py-1 text-xs font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-50">Pixelate</button>
             </div>
-            <p class="mt-2 text-xs text-slate-300">Retro membatasi RGB yang terlihat ke 16 warna tetap, tanpa dithering. Alpha dan RGB transparan tetap terjaga.</p>
-            <p data-pixelate-status role="status" aria-live="polite" class="mt-2 break-words text-xs text-slate-300"></p>
-            <div data-pixelate-result hidden class="mt-3 rounded-lg border border-white/10 bg-[#171738]/50 p-2">
-              <div class="transparency-grid rounded-lg">
-                <img data-pixelate-image class="pixelated-render mx-auto h-36 w-full object-contain" />
+
+            <!-- Transparent Object Preview -->
+            <div class="transparency-grid mt-2.5 overflow-hidden rounded-lg border border-white/10 p-2">
+              <img class="h-40 w-full object-contain" />
+            </div>
+
+            <div class="mt-2 flex items-center justify-between gap-2">
+              <p data-dimensions class="font-mono text-[11px] text-slate-400"></p>
+            </div>
+            <p data-preview-error hidden class="mt-1.5 text-xs text-rose-200">Preview tidak dapat dimuat. File mungkin tidak tersedia atau server tidak terhubung.</p>
+
+            <!-- Primary Object Actions -->
+            <div class="mt-2.5 grid grid-cols-2 gap-2">
+              <a data-download-original class="inline-flex items-center justify-center rounded-lg border border-[#00F5D4]/60 bg-[#00F5D4]/10 px-2.5 py-1.5 text-center text-xs font-semibold text-[#00F5D4] transition-colors hover:bg-[#00F5D4]/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh PNG asli</a>
+              <button data-edit-mask-button type="button" class="inline-flex items-center justify-center rounded-lg border border-white/20 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:border-[#00F5D4] hover:text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Koreksi Mask</button>
+            </div>
+          </div>
+
+          <!-- Compact Tabbed Pixel Art Studio -->
+          <div class="mt-3.5 border-t border-white/10 pt-3">
+            <!-- Tab Buttons -->
+            <div class="grid grid-cols-2 gap-1 rounded-lg bg-[#4B2A7B]/35 p-1" role="tablist" aria-label="Mode Pixel Art">
+              <button data-tab-btn="pixelate" type="button" role="tab" aria-selected="true" class="rounded-md bg-[#171738] px-2 py-1 text-[11px] font-semibold text-[#00F5D4] shadow-xs transition-colors focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
+                Classic Pixel
+              </button>
+              <button data-tab-btn="stylize" type="button" role="tab" aria-selected="false" class="rounded-md px-2 py-1 text-[11px] font-semibold text-slate-300 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
+                AI Stylize
+              </button>
+            </div>
+
+            <!-- Tab Panel 1: Classic Pixelation -->
+            <div data-tab-panel="pixelate" class="mt-2.5">
+              <h5 class="sr-only">Classic Pixelation</h5>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <label class="text-[11px] text-slate-300">Grid:
+                  <select data-pixel-size class="ml-0.5 rounded border border-white/20 bg-[#171738] px-1.5 py-1 text-[11px] font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
+                    <option value="16">16 px</option>
+                    <option value="32" selected>32 px</option>
+                    <option value="64">64 px</option>
+                    <option value="128">128 px</option>
+                  </select>
+                </label>
+                <label class="text-[11px] text-slate-300">Palet:
+                  <select data-pixel-palette class="ml-0.5 rounded border border-white/20 bg-[#171738] px-1.5 py-1 text-[11px] font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
+                    <option value="original" selected>Warna asli</option>
+                    <option value="retro16">Retro 16 warna</option>
+                  </select>
+                </label>
+                <button data-pixelate-button type="button" class="ml-auto rounded-md bg-[#00F5D4] px-2.5 py-1 text-[11px] font-semibold text-[#171738] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Pixelate</button>
               </div>
-              <p data-pixelate-dimensions class="mt-1.5 text-xs text-slate-300"></p>
-              <p data-pixelate-error hidden class="mt-1 text-xs text-rose-200">Preview pixelation gagal dimuat.</p>
-              <a data-pixelate-download class="mt-2 inline-block rounded border border-[#00F5D4] px-2.5 py-1 text-xs font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh PNG pixelated</a>
-            </div>
-          </div>
-          <div class="mt-4 border-t border-white/20 pt-3">
-            <h5 class="text-xs font-semibold uppercase tracking-wider text-[#00F5D4]">AI Pixel Art Stylization (M6)</h5>
-            <div class="mt-2 flex flex-wrap items-center gap-2">
-              <label class="text-xs text-slate-300">Preset:
-                <select data-stylize-preset class="rounded border border-white/30 bg-[#171738] px-2 py-1 text-xs font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
-                  <option value="pixel-art" selected>Pixel Art (Default)</option>
-                  <option value="retro-rpg">Retro RPG</option>
-                  <option value="game-boy">Game Boy</option>
-                </select>
-              </label>
-              <label class="text-xs text-slate-300">Ukuran:
-                <select data-stylize-size class="rounded border border-white/30 bg-[#171738] px-2 py-1 text-xs font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
-                  <option value="128">128 px</option>
-                  <option value="256" selected>256 px</option>
-                </select>
-              </label>
-              <button data-stylize-button type="button" class="rounded bg-[#00F5D4] px-3 py-1 text-xs font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-50">Stylize (AI)</button>
-            </div>
-            <p class="mt-2 text-xs text-slate-300">Generasi AI lokal berbasis SD15 + custom pipeline. Proses CPU lokal membutuhkan waktu ±1 menit per objek.</p>
-            <p data-stylize-status role="status" aria-live="polite" class="mt-2 break-words text-xs text-slate-300"></p>
-            <div data-stylize-result hidden class="mt-3 rounded-lg border border-white/10 bg-[#171738]/50 p-2">
-              <div class="transparency-grid rounded-lg">
-                <img data-stylize-image class="pixelated-render mx-auto h-36 w-full object-contain" />
+              <p data-pixelate-status role="status" aria-live="polite" class="mt-1.5 break-words text-[11px] text-slate-400"></p>
+              <div data-pixelate-result hidden class="mt-2 rounded-lg border border-white/10 bg-[#12122b]/80 p-2">
+                <div class="transparency-grid rounded-md border border-white/5 p-1.5">
+                  <img data-pixelate-image class="pixelated-render mx-auto h-32 w-full object-contain" />
+                </div>
+                <p data-pixelate-dimensions class="mt-1.5 font-mono text-[11px] text-slate-300"></p>
+                <p data-pixelate-error hidden class="mt-1 text-[11px] text-rose-200">Preview pixelation gagal dimuat.</p>
+                <a data-pixelate-download class="mt-2 inline-block rounded-md border border-[#00F5D4]/70 px-2.5 py-1 text-[11px] font-semibold text-[#00F5D4] hover:bg-[#00F5D4]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh PNG pixelated</a>
               </div>
-              <p data-stylize-info class="mt-1.5 text-xs text-slate-300"></p>
-              <p data-stylize-error hidden class="mt-1 text-xs text-rose-200">Preview AI stylization gagal dimuat.</p>
-              <a data-stylize-download class="mt-2 inline-block rounded border border-[#00F5D4] px-2.5 py-1 text-xs font-semibold text-[#00F5D4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh PNG Stylized</a>
+            </div>
+
+            <!-- Tab Panel 2: AI Pixel Art Stylization -->
+            <div data-tab-panel="stylize" hidden class="mt-2.5">
+              <h5 class="sr-only">AI Pixel Art Stylization</h5>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <label class="text-[11px] text-slate-300">Gaya:
+                  <select data-stylize-preset class="ml-0.5 rounded border border-white/20 bg-[#171738] px-1.5 py-1 text-[11px] font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
+                    <option value="pixel-art" selected>Pixel Art</option>
+                    <option value="retro-rpg">Retro RPG</option>
+                    <option value="game-boy">Game Boy</option>
+                  </select>
+                </label>
+                <label class="text-[11px] text-slate-300">Res:
+                  <select data-stylize-size class="ml-0.5 rounded border border-white/20 bg-[#171738] px-1.5 py-1 text-[11px] font-medium text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">
+                    <option value="128">128 px</option>
+                    <option value="256" selected>256 px</option>
+                  </select>
+                </label>
+                <button data-stylize-button type="button" class="ml-auto rounded-md bg-[#F72585] px-2.5 py-1 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Stylize (AI)</button>
+              </div>
+              <p data-stylize-status role="status" aria-live="polite" class="mt-1.5 break-words text-[11px] text-slate-400"></p>
+              <div data-stylize-result hidden class="mt-2 rounded-lg border border-white/10 bg-[#12122b]/80 p-2">
+                <div class="transparency-grid rounded-md border border-white/5 p-1.5">
+                  <img data-stylize-image class="pixelated-render mx-auto h-32 w-full object-contain" />
+                </div>
+                <p data-stylize-info class="mt-1.5 font-mono text-[11px] text-slate-300"></p>
+                <p data-stylize-error hidden class="mt-1 text-[11px] text-rose-200">Preview AI stylization gagal dimuat.</p>
+                <a data-stylize-download class="mt-2 inline-block rounded-md border border-[#F72585]/80 px-2.5 py-1 text-[11px] font-semibold text-[#F72585] hover:bg-[#F72585]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00F5D4]">Unduh PNG Stylized</a>
+              </div>
             </div>
           </div>
         </li>
       </template>
-      <section class="mt-8 rounded-xl border border-white/20 bg-[#4B2A7B]/40 p-6" aria-labelledby="services-title">
-        <h2 id="services-title" class="text-xl font-semibold">Status layanan</h2>
-        <dl class="mt-5 space-y-4" aria-live="polite" aria-atomic="true">
-          <div><dt class="font-semibold">Backend Express</dt><dd id="backend-status" class="mt-1 text-slate-300">Belum diperiksa.</dd></div>
-          <div><dt class="font-semibold">FastAPI melalui Express</dt><dd id="ai-status" class="mt-1 text-slate-300">Belum diperiksa.</dd></div>
-        </dl>
-        <button id="check-status" type="button" class="mt-6 rounded-lg bg-[#00F5D4] px-4 py-2 font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#00F5D4] disabled:opacity-50">Periksa ulang</button>
-      </section>
+
+      <!-- Mask Correction Modal Dialog -->
       <dialog id="mask-editor-dialog" class="fixed inset-0 z-50 m-auto max-h-[90vh] max-w-2xl overflow-y-auto rounded-2xl border border-white/20 bg-[#171738] p-6 text-slate-100 shadow-2xl backdrop:bg-black/80">
         <div class="flex items-center justify-between border-b border-white/10 pb-3">
-          <h3 id="mask-editor-title" class="text-lg font-bold text-[#00F5D4]">Koreksi Mask Objek</h3>
-          <button id="mask-editor-close" type="button" aria-label="Tutup editor mask" class="rounded p-1 text-slate-400 hover:text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">&times;</button>
+          <h3 id="mask-editor-title" class="text-base font-bold text-[#00F5D4]">Koreksi Mask Objek</h3>
+          <button id="mask-editor-close" type="button" aria-label="Tutup editor mask" class="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">&times;</button>
         </div>
-        <div class="mt-4 flex flex-wrap items-center gap-4">
+        <div class="mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-white/10 bg-[#4B2A7B]/25 p-3">
           <fieldset class="flex items-center gap-3">
             <legend class="sr-only">Alat kuas</legend>
             <label class="flex cursor-pointer items-center gap-1.5 text-xs font-medium">
@@ -193,19 +345,20 @@
             <input id="mask-brush-size" type="range" min="2" max="60" value="15" class="h-1.5 w-24 accent-[#00F5D4]" />
             <span id="mask-brush-size-val" class="w-10 text-xs font-mono text-slate-300">15 px</span>
           </div>
-          <button id="mask-undo" type="button" disabled class="rounded border border-white/30 px-2.5 py-1 text-xs font-semibold hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Undo</button>
-          <button id="mask-reset" type="button" class="rounded border border-white/30 px-2.5 py-1 text-xs font-semibold hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-[#00F5D4]">Reset</button>
+          <div class="ml-auto flex items-center gap-2">
+            <button id="mask-undo" type="button" disabled class="rounded-lg border border-white/25 px-2.5 py-1 text-xs font-semibold hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-[#00F5D4] disabled:opacity-40">Undo</button>
+            <button id="mask-reset" type="button" class="rounded-lg border border-white/25 px-2.5 py-1 text-xs font-semibold hover:border-[#00F5D4] focus-visible:outline-2 focus-visible:outline-[#00F5D4]">Reset</button>
+          </div>
         </div>
         <div class="transparency-grid mt-4 flex min-h-[250px] items-center justify-center overflow-auto rounded-xl border border-white/10 p-3">
           <canvas id="mask-editor-canvas" class="max-h-[50vh] max-w-full cursor-crosshair rounded object-contain"></canvas>
         </div>
         <p id="mask-editor-status" role="status" aria-live="polite" class="mt-3 text-xs text-slate-300"></p>
         <div class="mt-4 flex justify-end gap-3 border-t border-white/10 pt-4">
-          <button id="mask-editor-cancel" type="button" class="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold hover:border-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">Batal</button>
-          <button id="mask-editor-save" type="button" class="rounded-lg bg-[#00F5D4] px-4 py-2 text-sm font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-[#00F5D4] disabled:opacity-50">Simpan Koreksi</button>
+          <button id="mask-editor-cancel" type="button" class="rounded-lg border border-white/25 px-4 py-2 text-xs font-semibold hover:border-white focus-visible:outline-2 focus-visible:outline-[#00F5D4]">Batal</button>
+          <button id="mask-editor-save" type="button" class="rounded-lg bg-[#00F5D4] px-4 py-2 text-xs font-semibold text-[#171738] focus-visible:outline-2 focus-visible:outline-[#00F5D4] disabled:opacity-50">Simpan Koreksi</button>
         </div>
       </dialog>
-      <p class="mt-6 text-sm text-slate-300">Ekstraksi dimulai hanya setelah menekan Ekstrak objek. Koreksi Mask, Classic Pixelation (M5), AI Pixel Art Stylization (M6), dan Ekspor Spritesheet Statis (M7) tersedia.</p>
     </main>
     <script type="module" src="/src/main.js"></script>
   </body>

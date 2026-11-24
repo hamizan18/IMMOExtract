@@ -1,15 +1,38 @@
 @import "tailwindcss";
 
+@layer base {
+  body {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
 .transparency-grid {
-  background-color: #171738;
+  background-color: #12122b;
   background-image: conic-gradient(
-    rgb(255 255 255 / 12%) 25%, transparent 0 50%,
-    rgb(255 255 255 / 12%) 0 75%, transparent 0
+    rgb(255 255 255 / 9%) 25%, transparent 0 50%,
+    rgb(255 255 255 / 9%) 0 75%, transparent 0
   );
-  background-size: 20px 20px;
+  background-size: 16px 16px;
 }
 
 .pixelated-render {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+}
+
+/* Minimalist custom scrollbar for preview containers */
+.transparency-grid::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.transparency-grid::-webkit-scrollbar-track {
+  background: rgb(23 23 56 / 60%);
+}
+.transparency-grid::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 20%);
+  border-radius: 9999px;
+}
+.transparency-grid::-webkit-scrollbar-thumb:hover {
+  background: rgb(0 245 212 / 60%);
 }

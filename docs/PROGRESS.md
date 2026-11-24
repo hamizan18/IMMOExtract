@@ -4,11 +4,11 @@
 
 ## Ringkasan
 
-- **Current milestone:** M7 — hardening pascapenutupan implementasi D-047 & D-048.
-- **Current task:** Implementasi dan verifikasi retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) selesai; menunggu tinjauan/commit pengguna.
-- **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor, UI generatif dan retensi otomatis storage (D-048: default 24 jam, interval sweep 60 menit) tersedia. Startup SD15 tetap terpisah/opsional; antrean berbatas dan pergantian lifecycle model otomatis belum diimplementasikan. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
-- **Last runtime verification:** 2026-11-24 — `node --test backend/test/retention.test.js` (7/7 PASS, termasuk observasi nyata Windows `EPERM` pada file yang sedang dibuka handle lalu terhapus setelah ditutup pada sweep berikutnya), `npm test --prefix backend` (150/150 PASS dalam 18,86 s), dan `npm run build --prefix frontend` (PASS dalam 520 ms).
-- **Last documentation check:** 2026-11-24 — `docs/DECISIONS.md` (D-048 Accepted/Verified), `README.md`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md` diselaraskan dengan implementasi retensi otomatis.
+- **Current milestone:** M7 — hardening pascapenutupan implementasi D-047, retensi otomatis D-048, serta desain UI Minimalist Dark Pro & tab kartu objek D-049.
+- **Current task:** Perombakan UI Minimalist Dark Pro dengan tab kartu objek (`Classic Pixel` vs `AI Stylize`) dan pembersihan label presentasi (D-049) selesai; menunggu tinjauan/commit pengguna.
+- **Overall status:** Jalur ekstraksi, mask, pixelation, ekspor, UI generatif, retensi otomatis storage (D-048: default 24 jam, interval sweep 60 menit) dan dashboard Minimalist Dark Pro bertab (D-049) tersedia. Startup SD15 tetap terpisah/opsional; antrean berbatas dan pergantian lifecycle model otomatis belum diimplementasikan. Dokumentasi menjelaskan batas tersebut tanpa klaim semua fitur teruji penuh.
+- **Last runtime verification:** 2026-11-24 — `npm run build --prefix frontend` (PASS, 508 ms) dan `node scripts/smoke_browser_m7.mjs` (PASS 100%, 15 pemeriksaan CDP browser headless termasuk interaksi tab kartu objek `Classic Pixel` ↔ `AI Stylize`, 0 console error); `node --test backend/test/retention.test.js` (7/7 PASS) dan `npm test --prefix backend` (150/150 PASS).
+- **Last documentation check:** 2026-11-24 — `docs/DECISIONS.md` (D-048 & D-049 Accepted/Verified), `README.md`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md` diselaraskan dengan seluruh pembaruan kode di workspace.
 
 ## Milestone
 
@@ -230,6 +230,10 @@
 - Implementasi retensi otomatis `storage/uploads` dan `storage/jobs` (2026-11-24, D-048): setelah pengguna menyetujui rancangan D-048 (default `STORAGE_RETENTION_HOURS=24`, `STORAGE_SWEEP_INTERVAL_MINUTES=60`), mekanisme sweep retensi diimplementasikan di `backend/src/job-manager.js`, `backend/src/server.js`, `backend/src/app.js`, `backend/src/jobs.js`, `backend/.env.example`, serta pemberitahuan UI di `frontend/index.html` dan `frontend/src/image-input.js`.
 - Kontrak D-048 yang terverifikasi: aktivitas terakhir job dihitung dari maksimum `job.updated_at` dan timestamp semua snapshot turunan (`pixelations`, `exports`, `spritesheets`, `stylizations`); upload memakai maksimum `created_at` dan `extracted_at`; proteksi penuh untuk job aktif/queued/processing, stylization aktif/queued/processing, mutasi berjalan (`busyJobs`/`busyUploads`), dan upload yang masih direferensikan job aktif/tersimpan/dilewati; hapus dua langkah atomik (`rename` ke `.deleting-<uuid>-<rand>` → pelepasan symlink/junction bersarang tanpa menyentuh target di luar storage → `rm`); observasi nyata Windows `EPERM` saat file di dalam job sedang dibuka handle (dilewati aman lalu terhapus pada sweep berikutnya setelah handle ditutup); fallback `mtime` untuk direktori tanpa manifest; skip aman untuk manifest JSON rusak/timestamp invalid tanpa membocorkan path di log; serta penjadwalan otomatis sekali setelah `initialize()` dan periodik dengan `unref()`.
 - Pengujian D-048: `node --test backend/test/retention.test.js` (7/7 PASS, 2,57 s), `npm test --prefix backend` (150/150 PASS, 18,86 s), dan `npm run build --prefix frontend` (PASS, 520 ms).
+- Pembersihan UI untuk kesiapan presentasi dan perombakan desain **Minimalist Dark Pro** dengan tab kartu objek (2026-11-24, D-049):
+  - Menghapus embel-embel label milestone internal (`(M5)`, `(M6)`, `(M7)`), tampilan UUID mentah (`ID upload: ...`, `ID job: ...`), serta catatan pengembangan di kaki halaman.
+  - Menerapkan tata letak dashboard **Minimalist Dark Pro** sesuai pilihan pengguna (`frontend/index.html`, `frontend/src/style.css`, `frontend/src/main.js`, `frontend/src/extraction-workspace.js`): sticky header dengan *live status indicator pills* (`#backend-dot`, `#ai-dot`), panel dua kolom proporsional (5:7 di desktop), area unggah bergaya dropzone berikon SVG minimalis, toolbar ekspor ZIP & Spritesheet berdampingan, *category badge* pada tiap kartu objek, serta kontrol **tab di dalam kartu objek** (`Classic Pixel` vs `AI Stylize`) agar kartu jauh lebih ringkas dan rapi.
+  - Verifikasi `npm run build --prefix frontend` (PASS, 508 ms) dan automated headless browser smoke test `node scripts/smoke_browser_m7.mjs` (PASS 100%, termasuk pengujian perpindahan tab `Classic Pixel` ↔ `AI Stylize` dan tangkapan layar desktop 1365×1100 di `scratch/proof_smoke_m7_spritesheet.png`, 0 console error).
 
 ## In progress
 
@@ -589,7 +593,9 @@ Pengguna meninjau perubahan implementasi retensi otomatis D-048 beserta dokument
 | 2026-11-24 | `node --test backend/test/retention.test.js` | PASS | 7/7 tests PASS (2,57 s): validasi konfigurasi, hapus job/upload kedaluwarsa & 404, perpanjangan umur via 4 jenis snapshot turunan, proteksi active/queued/processing/busyJobs & upload-nya, fallback mtime tanpa manifest, skip manifest rusak/timestamp invalid tanpa bocor path, observasi nyata Windows `EPERM` handle terbuka lalu terhapus setelah tutup, keamanan junction dalam job & top-level junction, entri non-UUID utuh, pembersihan `.deleting-*`, mode `retentionMs: 0` |
 | 2026-11-24 | `npm test --prefix backend` | PASS | 150/150 tests PASS (67 top-level subtests, 0 fail, 0 skip, 18,86 s); tidak ada regresi backend |
 | 2026-11-24 | `npm run build --prefix frontend` | PASS | Vite 8.3.8 membangun bundle produksi (7 modul, 520 ms) dengan teks pemberitahuan retensi baru |
-| 2026-11-24 | Suite Python AI service, browser headless CDP, inferensi live SCHP/SD15 | NOT RUN | Perubahan terbatas pada retensi storage Express dan teks pemberitahuan UI; tidak mengubah pipeline AI Python |
+| 2026-11-24 | Pembersihan UI presentasi: `npm run build --prefix frontend` + `node scripts/smoke_browser_m7.mjs` | PASS | Build 477 ms; seluruh 14 tahapan CDP browser headless (health, upload, ekstraksi, spritesheet All/Selected, unduh PNG/Atlas, koreksi mask Penghapus/Pulihkan/Undo/Save, reset) PASS 100%, 0 console error |
+| 2026-11-24 | Desain Minimalist Dark Pro & Tab Kartu Objek (D-049): `npm run build --prefix frontend` + `node scripts/smoke_browser_m7.mjs` | PASS | Build 508 ms; seluruh 15 tahapan CDP browser headless (termasuk pengujian tab `Classic Pixel` ↔ `AI Stylize` dan screenshot desktop 1365×1100 `scratch/proof_smoke_m7_spritesheet.png`) PASS 100%, 0 console error |
+| 2026-11-24 | Suite Python AI service, inferensi live SCHP/SD15 | NOT RUN | Perubahan terbatas pada retensi storage Express dan perombakan tampilan UI frontend |
 
 Catatan kamera 2026-11-15: browser bersama mengabaikan argumen fake-device (dilaporkan ke tool); tes dipindah ke Chrome/profil temp terisolasi dengan flag diverifikasi. Browser uji dihentikan; profil/fixture temp dihapus. Tidak mengubah source untuk mengatasi batas harness.
 

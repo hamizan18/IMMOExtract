@@ -1,43 +1,41 @@
 # IMMOExtract — AI Handoff
 
-> **Untuk agent berikutnya:** implementasi dan verifikasi retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) telah selesai dan lulus 150/150 tes backend serta build frontend, namun belum di-commit. Jangan memulai fitur baru tanpa arahan pengguna; tunggu tinjauan/commit pengguna.
+> **Untuk agent berikutnya:** implementasi retensi otomatis D-048 serta perombakan UI **Minimalist Dark Pro** dengan tab di dalam kartu objek (`Classic Pixel` vs `AI Stylize`) dan pembersihan label presentasi (D-049) telah selesai dan diverifikasi (`150/150` backend tests, Vite build, dan automated browser smoke test `smoke_browser_m7.mjs` 15 tahapan PASS). Seluruh dokumentasi proyek (`README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`) telah diperbarui. Belum di-commit; tunggu tinjauan/commit pengguna.
 
 ## Last agent
 
-Antigravity — mengimplementasikan dan memverifikasi retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) setelah persetujuan pengguna (2026-11-24).
+Antigravity — mengimplementasikan desain UI Minimalist Dark Pro dengan tab kartu objek (D-049) dan memperbarui seluruh dokumentasi proyek setelah implementasi retensi otomatis D-048 (2026-11-24).
 
 ## Current milestone / task
 
-M7 — hardening pascapenutupan implementasi D-047 & D-048. Implementasi retensi otomatis D-048 selesai; tidak ada implementasi berjalan.
+M7 — hardening pascapenutupan implementasi D-047, retensi otomatis D-048, serta desain UI Minimalist Dark Pro & tab kartu objek D-049. Seluruh perubahan selesai dan teruji; tidak ada implementasi berjalan.
 
 ## Last completed task
 
-- Git awal: `docs/DECISIONS.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md` modified (draft D-048 Proposed + catatan evaluasi foto unggahan pengguna), index kosong. Seluruh perubahan dipertahankan.
-- Pengguna menyetujui rancangan D-048 dengan nilai default `STORAGE_RETENTION_HOURS=24` dan `STORAGE_SWEEP_INTERVAL_MINUTES=60`.
-- Implementasi retensi otomatis di `backend/src/job-manager.js`, `backend/src/server.js`, `backend/src/app.js`, `backend/src/jobs.js`, dan `backend/.env.example`:
-  - Aktivitas terakhir job = maksimum `job.updated_at` (serta `created_at` bila ada) dan timestamp `created_at`/`updated_at` seluruh manifest snapshot turunan (`pixelations`, `exports`, `spritesheets`, `stylizations`). Aktivitas upload = maksimum `created_at` dan `extracted_at`.
-  - Proteksi penuh untuk job di `active`/`queue`, stylization di `activeStylizations`, status `queued`/`processing` di disk, mutasi berjalan (`busyJobs`/`busyUploads`), upload yang direferensikan job aktif/tersimpan/dilewati, entri non-UUID, dan symlink/junction.
-  - Hapus dua langkah atomik: cek ulang tepat sebelum hapus → `rename(<uuid>, .deleting-<uuid>-<rand>)` → pelepasan symlink/junction bersarang (`rmdir`/`unlink` pada reparse point tanpa menyentuh target luar) → `rm` rekursif. Kegagalan rename (seperti `EPERM` Windows karena handle terbuka) dilewati aman, mempertahankan upload sumbernya, dan dicoba kembali pada sweep berikutnya. Sisa `.deleting-*` dibersihkan pada sweep berikutnya.
-  - Direktori tanpa manifest memakai `mtime` direktori; manifest JSON rusak atau timestamp invalid dilewati dan dicatat hanya kode error-nya tanpa membocorkan path atau menjatuhkan server.
-  - Penjadwalan otomatis sekali setelah `initialize()` selesai memulihkan job interrupted, lalu periodik dengan timer `unref()` tanpa tumpang tindih; `manager.sweep()` dan `manager.stopSweep()` tersedia untuk pengujian langsung.
-- Pembaruan teks pemberitahuan retensi di `frontend/index.html` dan `frontend/src/image-input.js`, penyesuaian timestamp fixture `env.seed()` di `backend/test/stylizations.test.js` ke waktu saat ini, serta pembuatan suite tes `backend/test/retention.test.js`.
-- Sinkronisasi `docs/DECISIONS.md` (status D-048 Accepted/Verified), `README.md`, `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`, dan `docs/HANDOFF.md`.
+- Menerapkan desain UI **Minimalist Dark Pro** dan **Tab di dalam Kartu Objek** sesuai pilihan pengguna (D-049) di `frontend/index.html`, `frontend/src/style.css`, `frontend/src/main.js`, dan `frontend/src/extraction-workspace.js`:
+  - **Sticky Header & Live Status Pills:** Header studio ringkas dengan ikon brand, badge `Local AI Studio`, serta indikator status `Backend` dan `AI Lokal` menggunakan titik status berwarna (`#backend-dot`, `#ai-dot`: cyan `#00F5D4` saat aktif, kuning saat model belum dimuat, merah muda `#F72585` saat terputus).
+  - **Tata Letak Dashboard 2 Kolom (5:7 di Desktop):** Kolom kiri untuk input file bergaya dropzone berikon SVG minimalis, kamera perangkat, dan preview; kolom kanan untuk ekstraksi objek, toolbar berdampingan **Unduh Arsip ZIP** & **Ekspor Spritesheet Statis**, serta **Galeri Objek**.
+  - **Tab Kartu Objek (`Classic Pixel` vs `AI Stylize`):** Setiap kartu objek memiliki *category badge*, checkbox pilih singkat, tombol `Unduh PNG asli` & `Koreksi Mask` berdampingan, serta tab switcher `[data-tab-btn="pixelate"]` dan `[data-tab-btn="stylize"]` yang menyembunyikan panel nonaktif sehingga kartu jauh lebih pendek dan rapi.
+  - **Pembersihan Label Pengujian:** Menghapus label milestone `(M5)`/`(M6)`/`(M7)`, cetakan UUID mentah (`ID upload`, `ID job`), dan catatan pengembangan di kaki halaman.
+- Memperbarui `scripts/smoke_browser_m7.mjs` dengan pengujian perpindahan tab kartu objek (`11d`) dan viewport desktop `1365×1100`.
+- Memperbarui seluruh file dokumentasi proyek (`README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md`).
 
 ## Modified files / uncommitted changes
 
 - `backend/.env.example`, `backend/src/server.js`, `backend/src/app.js`, `backend/src/jobs.js`, `backend/src/job-manager.js` — konfigurasi dan implementasi sweep retensi otomatis D-048.
 - `backend/test/retention.test.js` (untracked/baru), `backend/test/stylizations.test.js` — unit/integration test retensi D-048 dan pembaruan timestamp fixture seed.
-- `frontend/index.html`, `frontend/src/image-input.js` — pemberitahuan masa retensi otomatis bawaan 24 jam di UI.
-- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — dokumentasi D-048.
+- `frontend/index.html`, `frontend/src/style.css`, `frontend/src/image-input.js`, `frontend/src/extraction-workspace.js`, `frontend/src/main.js` — desain UI Minimalist Dark Pro, tab kartu objek, pembersihan label presentasi (D-049), dan pemberitahuan retensi 24 jam (D-048).
+- `scripts/smoke_browser_m7.mjs` — tambahan verifikasi tab kartu objek (`Classic Pixel` ↔ `AI Stylize`) dan viewport desktop 1365×1100.
+- `README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/PROGRESS.md`, `docs/HANDOFF.md` — sinkronisasi dokumentasi untuk D-048 dan D-049.
 - Tanpa staging/commit otomatis.
 
 ## Tests / checks performed
 
-- **PASS inspeksi:** `git status --short --branch`, `git diff --stat`, `git diff --cached --stat`.
-- **PASS:** `node --test backend/test/retention.test.js` — 7/7 tests PASS (2,57 s), mencakup seluruh 14 skenario wajib D-048 termasuk observasi nyata Windows `EPERM` pada file yang sedang dibuka handle.
+- **PASS:** `node --test backend/test/retention.test.js` — 7/7 tests PASS (2,57 s).
 - **PASS:** `npm test --prefix backend` — 150/150 tests PASS (67 top-level subtests, 0 fail, 0 skip, 18,86 s).
-- **PASS:** `npm run build --prefix frontend` — Vite build PASS (7 modul, 520 ms).
-- **NOT RUN:** suite Python `ai-service`, browser headless CDP, inferensi live SCHP/SD15 — tidak ada perubahan pada layanan Python AI.
+- **PASS:** `npm run build --prefix frontend` — Vite build PASS (7 modul, 508 ms).
+- **PASS:** `node scripts/smoke_browser_m7.mjs` — 15 tahapan CDP browser headless (termasuk tab switching kartu objek & screenshot `scratch/proof_smoke_m7_spritesheet.png`) PASS 100%, 0 console error.
+- **NOT RUN:** suite Python `ai-service`, inferensi live SCHP/SD15 — tidak ada perubahan pada layanan Python AI.
 
 ## Current errors / limitations
 
@@ -46,7 +44,7 @@ M7 — hardening pascapenutupan implementasi D-047 & D-048. Implementasi retensi
 
 ## Next action (only one)
 
-Pengguna meninjau perubahan implementasi D-048 dan dokumentasi lalu memutuskan commit; setelah itu pengguna memilih satu batas terbuka berikutnya bila ingin melanjutkan hardening tambahan (misalnya batas panjang antrean job atau endpoint hapus manual `DELETE /api/jobs/:id`). Agent tidak memulai tanpa arahan.
+Pengguna meninjau tampilan UI Minimalist Dark Pro di browser serta seluruh perubahan D-048 & D-049, lalu memutuskan commit. Agent tidak memulai tugas baru tanpa arahan.
 
 ## Handoff rules
 

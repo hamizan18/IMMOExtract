@@ -1,6 +1,6 @@
 # IMMOExtract — Architecture
 
-> **Status:** Implementasi M1–M7 ditutup D-047; retensi otomatis `storage/uploads` dan `storage/jobs` telah diimplementasikan dan teruji (D-048). Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
+> **Status:** Implementasi M1–M7 ditutup D-047; retensi otomatis `storage/uploads` dan `storage/jobs` (D-048) serta perombakan UI **Minimalist Dark Pro** dengan tab kartu objek (D-049) telah diimplementasikan dan teruji. Penerimaan 2026-11-23 mencakup dua foto berizin, koreksi mask→PNG/ZIP, pixelation helper dan spritesheet helper/UI/API; bukan jaminan kualitas segmentasi umum, semua parameter AI atau deployment publik. RGB compositing spritesheet tidak selalu exact; antrean berbatas dan pergantian lifecycle model otomatis belum tersedia. Rincian bukti di `PROGRESS.md`.
 
 ## 1. Arsitektur tingkat tinggi
 
@@ -76,7 +76,7 @@ Preservasi alpha berlaku pada koordinat yang tersampel, bukan seluruh piksel sum
 
 Revisi hanya memperbarui PNG/metadata objek yang dipilih, bukan class map atau PNG kategori lain; bbox tetap. Pants yang dipulihkan tidak otomatis menghapus salah label dari Upper-clothes. Sumber Pulihkan adalah decode foto browser: crop JPEG teruji berbeda maksimum satu tingkat RGB dari Pillow, termasuk opaque. Penerimaan save membandingkan dengan `Canvas.toBlob`; batas dekoder/encoder tidak boleh disamakan dengan mutasi oleh backend.
 
-**UI generatif dan spritesheet aktual:** Kartu objek menyediakan preset/ukuran stylization, POST, polling, preview dan unduhan. Browser mengirim dua langkah nominal, strength 0.5 dan ukuran 128/256; API internal menerima parameter lebih luas, bukan bukti semua konfigurasi diuji. Spritesheet menyusun objek manifest pilihan/semua menjadi PNG bergrid dengan padding/kolom dan atlas JSON; bukan sprite animasi.
+**UI generatif, tab kartu objek, dan spritesheet aktual (D-045/D-049):** Kartu objek memakai desain **Minimalist Dark Pro** dengan kontrol tab (`Classic Pixel` dan `AI Stylize`) agar kedua mode konversi pixel art tidak menumpuk memanjang di dalam kartu. Tab AI Stylize menyediakan preset/ukuran stylization, POST, polling, preview dan unduhan. Browser mengirim dua langkah nominal, strength 0.5 dan ukuran 128/256; API internal menerima parameter lebih luas, bukan bukti semua konfigurasi diuji. Spritesheet menyusun objek manifest pilihan/semua menjadi PNG bergrid dengan padding/kolom dan atlas JSON; bukan sprite animasi.
 
 **Batas komposisi spritesheet (D-045):** Helper Sharp menyusun frame tanpa resize/trim/rotasi; tinggi baris mengikuti objek tertinggi, sehingga ada ruang kosong. PNG lossless tidak menjanjikan RGBA sumber exact selama compositing. Pada Pants revisi + dua sepatu, helper dan ekspor UI/API mempertahankan seluruh alpha termasuk 55 parsial serta RGB opaque; tujuh piksel RGB parsial berubah maksimum satu tingkat, RGB tersembunyi kedua sepatu juga berubah. PNG/ZIP sumber tidak dimutasi. Atlas berisi koordinat/ukuran/kategori frame; impor game engine belum diuji.
 
